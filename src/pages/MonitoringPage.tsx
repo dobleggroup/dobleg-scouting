@@ -595,7 +595,7 @@ export default function MonitoringPage() {
                           : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600'
                       }`}
                     >
-                      {p === 'izquierdo' ? 'Izq' : p === 'derecho' ? 'Der' : 'Ambos'}
+                      {p === 'izquierdo' ? 'Zurdo' : p === 'derecho' ? 'Diestro' : 'Ambos'}
                     </button>
                   ))}
                 </div>

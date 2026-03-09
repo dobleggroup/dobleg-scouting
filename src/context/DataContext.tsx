@@ -429,9 +429,27 @@ function teamsMatch(team1: string, team2: string): boolean {
 function linkMonitoringToMetrics(
   monitoring: MonitoringPlayer[],
   seguimientoMetrics: SeguimientoMetricsPlayer[],
-  internal: EnrichedPlayer[],
+  allPlayersForScoring: EnrichedPlayer[],  // Combined external + internal for consistent scoring
+  internalOnly: EnrichedPlayer[],  // Internal only for comparison averages
   tmMap: Map<string, TransfermarktData>
 ): MonitoringPlayer[] {
+  // Build lookup map for existing players (external + internal) to reuse their scores
+  const existingPlayersByName = new Map<string, EnrichedPlayer>()
+  const existingPlayersByLastName = new Map<string, EnrichedPlayer[]>()
+
+  for (const p of allPlayersForScoring) {
+    const exactKey = normalizeForMatching(p.Jugador)
+    existingPlayersByName.set(exactKey, p)
+
+    const lastName = getLastName(p.Jugador)
+    if (lastName) {
+      if (!existingPlayersByLastName.has(lastName)) {
+        existingPlayersByLastName.set(lastName, [])
+      }
+      existingPlayersByLastName.get(lastName)!.push(p)
+    }
+  }
+
   // Build multiple lookup maps for seguimiento metrics
   const metricsByExactName = new Map<string, SeguimientoMetricsPlayer>()
   const metricsByLastName = new Map<string, SeguimientoMetricsPlayer[]>()
@@ -555,10 +573,52 @@ function linkMonitoringToMetrics(
       return { ...m, hasEnoughData: false }
     }
 
-    // Score the player using seguimiento metrics
+    // FIRST: Check if this player already exists in external/internal data
+    // If so, use their existing score for consistency
+    let existingPlayer: EnrichedPlayer | undefined
+
+    // Try exact name match
+    const exactNameKey = normalizeForMatching(metricsPlayer.Jugador)
+    existingPlayer = existingPlayersByName.get(exactNameKey)
+
+    // Try matching by last name + team
+    if (!existingPlayer) {
+      const lastName = getLastName(metricsPlayer.Jugador)
+      const candidates = existingPlayersByLastName.get(lastName) || []
+      if (candidates.length === 1) {
+        existingPlayer = candidates[0]
+      } else if (candidates.length > 1 && metricsPlayer.Equipo) {
+        existingPlayer = candidates.find(c => teamsMatch(c.Equipo, metricsPlayer.Equipo))
+      }
+    }
+
+    // If player exists in external/internal, use their score directly
+    if (existingPlayer && existingPlayer.ggScore !== null) {
+      const avgInternalScore = getInternalAverageByPosition(internalOnly, m['Posición'])
+      const scoreDiff = existingPlayer.ggScore !== null && avgInternalScore !== null
+        ? Math.round((existingPlayer.ggScore - avgInternalScore) * 10) / 10
+        : null
+
+      return {
+        ...m,
+        ggScore: existingPlayer.ggScore,
+        hasEnoughData: true,
+        metricsPlayer: existingPlayer,
+        opportunityScore: calculateOpportunityScore(existingPlayer.ggScore, existingPlayer.marketValueRaw),
+        marketValueRaw: existingPlayer.marketValueRaw,
+        marketValueFormatted: existingPlayer.marketValueFormatted,
+        monthsRemaining: existingPlayer.monthsRemaining,
+        contractStatus: existingPlayer.contractStatus,
+        avgInternalScore,
+        scoreDiff,
+        Transfermkt: existingPlayer.Transfermkt || m.Transfermkt,
+      }
+    }
+
+    // Player not found in external/internal - calculate score from seguimiento metrics
     const { score, hasEnoughData, enrichedPlayer } = scoreSeguimientoPlayer(
       metricsPlayer,
-      seguimientoMetrics
+      allPlayersForScoring
     )
 
     // Get market value from metrics or Transfermarkt
@@ -608,7 +668,7 @@ function linkMonitoringToMetrics(
     const opportunityScore = calculateOpportunityScore(score, marketValueRaw)
 
     // Calculate internal average and difference
-    const avgInternalScore = getInternalAverageByPosition(internal, m['Posición'])
+    const avgInternalScore = getInternalAverageByPosition(internalOnly, m['Posición'])
     const scoreDiff = score !== null && avgInternalScore !== null
       ? Math.round((score - avgInternalScore) * 10) / 10
       : null
@@ -737,7 +797,7 @@ function hasEnoughMetrics(player: SeguimientoMetricsPlayer): boolean {
 
 function scoreSeguimientoPlayer(
   player: SeguimientoMetricsPlayer,
-  allSeguimientoPlayers: SeguimientoMetricsPlayer[]
+  allPlayersForNormalization: EnrichedPlayer[]  // Use ALL players (external+internal) for consistent scoring
 ): { score: number | null; hasEnoughData: boolean; enrichedPlayer: EnrichedPlayer | null } {
   const hasData = hasEnoughMetrics(player)
 
@@ -753,16 +813,20 @@ function scoreSeguimientoPlayer(
     return { score: null, hasEnoughData: false, enrichedPlayer: null }
   }
 
-  // Get all players in same position with enough data
-  const positionPlayers = allSeguimientoPlayers.filter(p => {
-    const pk = POSITION_MAP[getPlayerPosition(p)] ?? ''
-    return pk === posKey && hasEnoughMetrics(p)
+  // Get all players in same position from the GLOBAL pool (external + internal)
+  // This ensures consistent scoring across ALL sources
+  const positionPlayers = allPlayersForNormalization.filter(p => {
+    const pk = POSITION_MAP[p['Posición']?.trim() ?? ''] ?? POSITION_MAP[p['Posición específica']?.trim() ?? ''] ?? ''
+    return pk === posKey && p.minutesPlayed >= 300
   })
 
-  // Compute min/max for each metric
+  // Compute min/max for each metric from the global pool
   const stats = new Map<string, { min: number; max: number }>()
   for (const { column } of config) {
-    const values = positionPlayers.map(p => getNumericValue(p as Record<string, string>, column))
+    const values = positionPlayers.map(p => {
+      const val = p[column]
+      return typeof val === 'number' ? val : parseFloat(String(val ?? '').replace(',', '.')) || 0
+    })
     const validValues = values.filter(v => v > 0)
     if (validValues.length > 0) {
       stats.set(column, { min: Math.min(...validValues), max: Math.max(...validValues) })
@@ -954,12 +1018,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
           return { ...enriched, jugadorSK: jsk ?? '' }
         })
 
-        // Link monitoring players to seguimiento metrics for ggScore (primary)
-        // This uses the new sheet with Wyscout metrics for monitoring players
+        // Link monitoring players to seguimiento metrics for ggScore
+        // Use combined external + internal for CONSISTENT scoring across all sources
         const monitoring = linkMonitoringToMetrics(
           raw.monitoring,
           raw.seguimientoMetrics,
-          internal,
+          [...external, ...internal],  // All players for scoring normalization
+          internal,  // Internal only for comparison averages
           tmMap
         )
 

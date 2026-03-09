@@ -289,7 +289,11 @@ function PlayerSelector({ positionKey, league, minAge, maxAge, allPlayers, onSel
                       <p className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">{p.Jugador}</p>
                       <p className="text-xs text-apple-gray-500 truncate">
                         {p.Equipo} · {p.Edad} años
-                        {foot && <span className={isPreferredFoot ? ' font-medium text-brand-green' : ''}> · {foot}</span>}
+                        {foot && <span className={isPreferredFoot ? ' font-medium text-brand-green' : ''}> · {
+                          foot.toLowerCase() === 'derecho' || foot.toLowerCase() === 'right' ? 'Diestro' :
+                          foot.toLowerCase() === 'izquierdo' || foot.toLowerCase() === 'left' ? 'Zurdo' :
+                          foot.toLowerCase() === 'ambos' || foot.toLowerCase() === 'both' ? 'Ambos' : foot
+                        }</span>}
                       </p>
                       {specificPos && <p className="text-2xs text-apple-gray-400 truncate">{specificPos}</p>}
                     </div>

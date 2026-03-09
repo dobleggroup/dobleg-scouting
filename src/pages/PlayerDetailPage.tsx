@@ -1,24 +1,24 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { useData } from '@/context/DataContext'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import EmptyState from '@/components/ui/EmptyState'
-import ScoreBar from '@/components/ui/ScoreBar'
 import ContractBadge from '@/components/ui/ContractBadge'
 import PlayerRadarChart from '@/components/charts/PlayerRadarChart'
 import EvolutionChart from '@/components/charts/EvolutionChart'
 import MarketValueChart from '@/components/charts/MarketValueChart'
-import { SpeedometerGroup } from '@/components/charts/Speedometer'
-import { exportPlayerToPdf } from '@/utils/pdfExport'
+import GaugeScore from '@/components/charts/GaugeScore'
+import ExportPDFModal from '@/components/ui/ExportPDFModal'
+import { exportPlayerToPdfFull } from '@/utils/pdfExport'
 import { normalizeName } from '@/utils/scoring'
-import { POSITION_MAP, DISPLAY_POSITION_MAP, DISPLAY_METRICS } from '@/constants/scoring'
+import { POSITION_MAP, DISPLAY_POSITION_MAP, DISPLAY_METRICS, RADAR_METRICS } from '@/constants/scoring'
 import type { EnrichedPlayer, SubjectiveMetric } from '@/types'
 
 // ─── PLAYER COMMENTS SYSTEM ───────────────────────────────────────────────────
 
 interface PlayerComment {
   id: string
-  playerKey: string  // normalized player name + team
+  playerKey: string
   sentiment: 'positive' | 'neutral' | 'negative'
   text: string
   author: string
@@ -60,7 +60,6 @@ function PlayerComments({ player }: CommentsProps) {
 
   const playerKey = getPlayerKey(player)
 
-  // Load comments on mount
   useEffect(() => {
     const all = loadComments()
     setComments(all.filter(c => c.playerKey === playerKey))
@@ -83,10 +82,7 @@ function PlayerComments({ player }: CommentsProps) {
     saveComments(updated)
     setComments(updated.filter(c => c.playerKey === playerKey))
 
-    // Remember author for next time
     localStorage.setItem('comment_author', newAuthor.trim())
-
-    // Reset form
     setNewComment('')
     setNewSentiment('neutral')
     setIsAdding(false)
@@ -106,25 +102,23 @@ function PlayerComments({ player }: CommentsProps) {
   }
 
   return (
-    <div className="card-apple p-6 mt-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
-          Comentarios del Scout ({comments.length})
+          Comentarios ({comments.length})
         </h3>
         {!isAdding && (
           <button
             onClick={() => setIsAdding(true)}
-            className="btn-apple-primary text-sm px-3 py-1.5"
+            className="btn-apple-secondary text-sm px-3 py-1.5"
           >
-            + Agregar comentario
+            + Agregar
           </button>
         )}
       </div>
 
-      {/* Add comment form */}
       {isAdding && (
-        <div className="mb-5 p-4 bg-apple-gray-50 dark:bg-apple-gray-800/50 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700">
-          {/* Sentiment selector */}
+        <div className="p-4 bg-apple-gray-50 dark:bg-apple-gray-800/50 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700">
           <div className="mb-3">
             <label className="block text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mb-2">
               Valoración
@@ -137,7 +131,7 @@ function PlayerComments({ player }: CommentsProps) {
                   className={`flex-1 py-2 px-3 rounded-lg border-2 transition-all text-sm font-medium ${
                     newSentiment === s
                       ? `${sentimentConfig[s].bg} ${sentimentConfig[s].border} ${sentimentConfig[s].text}`
-                      : 'border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-500 dark:text-apple-gray-400 hover:border-apple-gray-300'
+                      : 'border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-500'
                   }`}
                 >
                   <span className="mr-1.5">{sentimentConfig[s].icon}</span>
@@ -147,34 +141,25 @@ function PlayerComments({ player }: CommentsProps) {
             </div>
           </div>
 
-          {/* Comment text */}
           <div className="mb-3">
-            <label className="block text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mb-2">
-              Comentario
-            </label>
             <textarea
               value={newComment}
               onChange={e => setNewComment(e.target.value)}
-              placeholder="Escribe tu observación sobre el jugador..."
-              className="input-apple w-full h-24 resize-none"
+              placeholder="Escribe tu observación..."
+              className="input-apple w-full h-20 resize-none"
             />
           </div>
 
-          {/* Author */}
           <div className="mb-4">
-            <label className="block text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mb-2">
-              Tu nombre
-            </label>
             <input
               type="text"
               value={newAuthor}
               onChange={e => setNewAuthor(e.target.value)}
-              placeholder="Nombre del scout..."
+              placeholder="Tu nombre..."
               className="input-apple w-full"
             />
           </div>
 
-          {/* Actions */}
           <div className="flex gap-2">
             <button
               onClick={() => { setIsAdding(false); setNewComment(''); setNewSentiment('neutral') }}
@@ -187,23 +172,18 @@ function PlayerComments({ player }: CommentsProps) {
               disabled={!newComment.trim() || !newAuthor.trim()}
               className="btn-apple-primary flex-1 disabled:opacity-50"
             >
-              Guardar comentario
+              Guardar
             </button>
           </div>
         </div>
       )}
 
-      {/* Comments list */}
       {comments.length === 0 && !isAdding ? (
-        <div className="text-center py-8 text-apple-gray-400 dark:text-apple-gray-500">
-          <svg className="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
-          <p className="text-sm">No hay comentarios aún</p>
-          <p className="text-xs mt-1">Sé el primero en agregar una observación</p>
+        <div className="text-center py-6 text-apple-gray-400">
+          <p className="text-sm">Sin comentarios</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {comments
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
             .map(comment => {
@@ -212,35 +192,27 @@ function PlayerComments({ player }: CommentsProps) {
               return (
                 <div
                   key={comment.id}
-                  className={`p-4 rounded-xl border ${config.bg} ${config.border}`}
+                  className={`p-3 rounded-xl border ${config.bg} ${config.border}`}
                 >
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">{config.icon}</span>
-                      <span className={`text-xs font-semibold ${config.text}`}>
-                        {config.label}
-                      </span>
-                    </div>
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <span className={`text-xs font-semibold ${config.text}`}>
+                      {config.icon} {config.label}
+                    </span>
                     <button
                       onClick={() => handleDeleteComment(comment.id)}
-                      className="text-apple-gray-400 hover:text-red-500 transition-colors p-1"
-                      title="Eliminar comentario"
+                      className="text-apple-gray-400 hover:text-red-500 transition-colors"
                     >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </button>
                   </div>
-                  <p className="text-sm text-apple-gray-700 dark:text-apple-gray-300 leading-relaxed mb-3">
+                  <p className="text-sm text-apple-gray-700 dark:text-apple-gray-300 leading-relaxed mb-2">
                     {comment.text}
                   </p>
-                  <div className="flex items-center justify-between text-xs text-apple-gray-500 dark:text-apple-gray-400">
+                  <div className="flex items-center justify-between text-2xs text-apple-gray-500">
                     <span className="font-medium">{comment.author}</span>
-                    <span>
-                      {date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      {' · '}
-                      {date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+                    <span>{date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}</span>
                   </div>
                 </div>
               )
@@ -250,6 +222,8 @@ function PlayerComments({ player }: CommentsProps) {
     </div>
   )
 }
+
+// ─── SUBJECTIVE METRICS GROUPS ────────────────────────────────────────────────
 
 function getSubjectiveGroups(metrics: SubjectiveMetric[], jsk: string) {
   const playerMetrics = metrics.filter(m => String(m.JugadorSK) === String(jsk))
@@ -266,41 +240,37 @@ function getSubjectiveGroups(metrics: SubjectiveMetric[], jsk: string) {
 
   return [...grouped.entries()].map(([tipo, nums]) => {
     const avg = nums.reduce((a, b) => a + b, 0) / nums.length
-    const attrMap = new Map<string, number>()
-    for (const m of playerMetrics.filter(x => x['Tipo Atributo'] === tipo)) {
-      const n = parseInt(m.numero, 10)
-      if (!isNaN(n)) attrMap.set(m.Atributo, n * 20)
-    }
     return {
       tipo,
       averageScore: Math.round(avg * 20),
-      attributes: [...attrMap.entries()].map(([name, score]) => ({ name, score })),
     }
   }).slice(0, 4)
 }
 
-// Convert raw position (possibly Wyscout code) to display-friendly Spanish name
+// ─── POSITION DISPLAY ─────────────────────────────────────────────────────────
+
 function getDisplayPosition(rawPosition: string | undefined): string {
   if (!rawPosition) return '—'
   const trimmed = rawPosition.trim()
 
-  // Handle multiple positions like "RCB , LCB" or "RCB / LCB" - convert each and join
   const separator = trimmed.includes(',') ? ',' : trimmed.includes('/') ? '/' : null
   if (separator) {
     const positions = trimmed.split(separator).map(p => p.trim())
     const displayPositions = positions
       .map(p => DISPLAY_POSITION_MAP[p] || p)
-      .filter((v, i, arr) => arr.indexOf(v) === i) // Remove duplicates
+      .filter((v, i, arr) => arr.indexOf(v) === i)
     return displayPositions.join(' / ')
   }
 
   return DISPLAY_POSITION_MAP[trimmed] || trimmed
 }
 
+// ─── INFO COMPONENTS ──────────────────────────────────────────────────────────
+
 function InfoRow({ label, value }: { label: string; value?: string | null }) {
   if (!value || value === '-' || value === '') return null
   return (
-    <div className="flex justify-between py-2.5 border-b border-apple-gray-100 dark:border-apple-gray-800/50 last:border-0">
+    <div className="flex justify-between py-2 border-b border-apple-gray-100 dark:border-apple-gray-800/50 last:border-0">
       <span className="text-sm text-apple-gray-500 dark:text-apple-gray-400">{label}</span>
       <span className="text-sm font-medium text-apple-gray-800 dark:text-white text-right ml-4">{value}</span>
     </div>
@@ -310,22 +280,20 @@ function InfoRow({ label, value }: { label: string; value?: string | null }) {
 interface MetricWithPercentileProps {
   label: string
   value?: string | number | null
-  percentile?: number | null  // 0-100
-  showBar?: boolean
+  percentile?: number | null
 }
 
-function MetricRowWithPercentile({ label, value, percentile, showBar = true }: MetricWithPercentileProps) {
+function MetricRowWithPercentile({ label, value, percentile }: MetricWithPercentileProps) {
   const num = typeof value === 'number' ? value : parseFloat(String(value ?? '').replace(',', '.'))
   const displayVal = isNaN(num) ? (value || '—') : (num % 1 === 0 ? num.toFixed(0) : num.toFixed(2))
 
-  // Determine quality based on percentile
   const getQualityInfo = (p: number | null | undefined) => {
-    if (p === null || p === undefined) return { label: '', color: '', bg: '', textColor: 'text-apple-gray-800 dark:text-white' }
-    if (p >= 80) return { label: 'Elite', color: 'bg-emerald-500', bg: 'bg-emerald-500/10', textColor: 'text-emerald-500' }
-    if (p >= 60) return { label: 'Bueno', color: 'bg-blue-500', bg: 'bg-blue-500/10', textColor: 'text-blue-500' }
-    if (p >= 40) return { label: 'Promedio', color: 'bg-amber-500', bg: 'bg-amber-500/10', textColor: 'text-amber-500' }
-    if (p >= 20) return { label: 'Bajo', color: 'bg-orange-500', bg: 'bg-orange-500/10', textColor: 'text-orange-500' }
-    return { label: 'Crítico', color: 'bg-red-500', bg: 'bg-red-500/10', textColor: 'text-red-500' }
+    if (p === null || p === undefined) return { label: '', color: 'bg-apple-gray-300', textColor: 'text-apple-gray-800 dark:text-white' }
+    if (p >= 80) return { label: 'Elite', color: 'bg-emerald-500', textColor: 'text-emerald-500' }
+    if (p >= 60) return { label: 'Bueno', color: 'bg-yellow-500', textColor: 'text-yellow-600 dark:text-yellow-400' }
+    if (p >= 40) return { label: 'Promedio', color: 'bg-amber-500', textColor: 'text-amber-500' }
+    if (p >= 20) return { label: 'Bajo', color: 'bg-orange-500', textColor: 'text-orange-500' }
+    return { label: 'Crítico', color: 'bg-red-500', textColor: 'text-red-500' }
   }
 
   const quality = getQualityInfo(percentile)
@@ -339,13 +307,13 @@ function MetricRowWithPercentile({ label, value, percentile, showBar = true }: M
             {displayVal}
           </span>
           {percentile !== null && percentile !== undefined && (
-            <span className={`text-2xs font-semibold px-1.5 py-0.5 rounded ${quality.bg} ${quality.textColor}`}>
+            <span className={`text-2xs font-semibold px-1.5 py-0.5 rounded ${quality.color}/15 ${quality.textColor}`}>
               {quality.label}
             </span>
           )}
         </div>
       </div>
-      {showBar && percentile !== null && percentile !== undefined && (
+      {percentile !== null && percentile !== undefined && (
         <div className="flex items-center gap-2">
           <div className="flex-1 h-1.5 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-full overflow-hidden">
             <div
@@ -353,7 +321,7 @@ function MetricRowWithPercentile({ label, value, percentile, showBar = true }: M
               style={{ width: `${Math.min(100, Math.max(0, percentile))}%` }}
             />
           </div>
-          <span className="text-2xs text-apple-gray-400 tabular-nums w-10 text-right">
+          <span className="text-2xs text-apple-gray-400 tabular-nums w-12 text-right">
             Top {100 - Math.round(percentile)}%
           </span>
         </div>
@@ -362,27 +330,18 @@ function MetricRowWithPercentile({ label, value, percentile, showBar = true }: M
   )
 }
 
-// Simple metric row without percentile (for basic stats like games, minutes)
-function MetricRow({ label, value }: { label: string; value?: string }) {
-  const num = parseFloat(String(value ?? '').replace(',', '.'))
-  const displayVal = isNaN(num) ? (value || '—') : (num % 1 === 0 ? num.toFixed(0) : num.toFixed(2))
-  return (
-    <div className="flex justify-between py-2.5 border-b border-apple-gray-100 dark:border-apple-gray-800/50 last:border-0">
-      <span className="text-sm text-apple-gray-500 dark:text-apple-gray-400">{label}</span>
-      <span className="text-sm font-semibold text-apple-gray-800 dark:text-white tabular-nums">{displayVal}</span>
-    </div>
-  )
-}
+// ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function PlayerDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [searchParams] = useSearchParams()
   const source = (searchParams.get('source') ?? 'externo') as 'externo' | 'interno' | 'seguimiento'
-  const overridePosition = searchParams.get('pos') // Position from list (for seguimiento)
+  const overridePosition = searchParams.get('pos')
   const { external, internal, monitoring, normalized, evolution, subjectiveMetrics, marketValueHistory, loading, error } = useData()
   const [activeTab, setActiveTab] = useState('General')
-  const [exporting, setExporting] = useState(false)
   const [comparisonLeague, setComparisonLeague] = useState<string>('all')
+  const [showExportModal, setShowExportModal] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
 
   const player: EnrichedPlayer | null = useMemo(() => {
     if (!id) return null
@@ -393,7 +352,6 @@ export default function PlayerDetailPage() {
     }
 
     if (source === 'seguimiento') {
-      // Find in monitoring and return metricsPlayer
       const monPlayer = monitoring.find(p =>
         normalizeName(p.Jugador) === normalizeName(decodedId) ||
         normalizeName(p['Nombre jugador']) === normalizeName(decodedId)
@@ -404,7 +362,6 @@ export default function PlayerDetailPage() {
     return external.find(p => normalizeName(p.Jugador) === normalizeName(decodedId)) ?? null
   }, [id, source, external, internal, monitoring])
 
-  // Get monitoring player data for seguimiento (for WyscoutVideo, etc.)
   const monitoringPlayer = useMemo(() => {
     if (source !== 'seguimiento' || !id) return null
     const decodedId = decodeURIComponent(id)
@@ -414,24 +371,17 @@ export default function PlayerDetailPage() {
     ) ?? null
   }, [id, source, monitoring])
 
-  // Use override position from URL (seguimiento) or player's position
-  // For seguimiento, try 'Posición específica' first (has Wyscout codes like RCB, LCB)
   const rawPosition = useMemo(() => {
     if (overridePosition) return overridePosition
     if (!player) return ''
-    // Try Posición específica first (usually has Wyscout codes)
     const posEsp = player['Posición específica']?.trim()
     if (posEsp) return posEsp
-    // Fallback to regular position
     return player['Posición']?.trim() || ''
   }, [overridePosition, player])
 
-  // Calculate position key for scoring - handle multiple positions like "RCB , LCB" or "RCB / LCB"
   const posKey = useMemo(() => {
     const rawPos = rawPosition.trim()
-    // Try direct match first
     if (POSITION_MAP[rawPos]) return POSITION_MAP[rawPos]
-    // If multiple positions (comma or slash separated), try each
     const separator = rawPos.includes(',') ? ',' : rawPos.includes('/') ? '/' : null
     if (separator) {
       for (const pos of rawPos.split(separator).map(p => p.trim())) {
@@ -441,7 +391,6 @@ export default function PlayerDetailPage() {
     return ''
   }, [rawPosition])
 
-  // Display-friendly position name (Spanish)
   const displayPosition = getDisplayPosition(rawPosition)
 
   const subjectiveGroups = useMemo(() => {
@@ -456,26 +405,35 @@ export default function PlayerDetailPage() {
     return (player as EnrichedPlayer & { jugadorSK?: string }).jugadorSK ?? ''
   }, [player, source])
 
-  const allPlayersForSource = source === 'interno' ? internal : external
+  // Calculate average score for same position (for comparison)
+  const positionAverageScore = useMemo(() => {
+    if (!player || !posKey) return null
+    const allPlayers = [...external, ...internal]
+    const samePosPlayers = allPlayers.filter(p => {
+      const pPosKey = POSITION_MAP[p['Posición']?.trim() ?? ''] ?? ''
+      return pPosKey === posKey && p.ggScore !== null && p.minutesPlayed >= 300
+    })
+    if (samePosPlayers.length < 5) return null
+    const sum = samePosPlayers.reduce((s, p) => s + (p.ggScore ?? 0), 0)
+    return sum / samePosPlayers.length
+  }, [player, posKey, external, internal])
 
-  // Calculate percentiles for each metric compared to same position players
+  // Calculate percentiles for metrics
   const metricPercentiles = useMemo(() => {
     if (!player || !posKey) return {}
 
     const allPlayers = [...external, ...internal]
-    // Filter players with same position
     const samePosList = allPlayers.filter(p => {
       const pPosKey = POSITION_MAP[p['Posición']?.trim() ?? ''] ?? ''
-      return pPosKey === posKey && p.minutesPlayed >= 300 // Minimum minutes threshold
+      return pPosKey === posKey && p.minutesPlayed >= 300
     })
 
-    if (samePosList.length < 5) return {} // Not enough data
+    if (samePosList.length < 5) return {}
 
     const percentiles: Record<string, number> = {}
     const displayMetricsList = DISPLAY_METRICS[posKey] ?? DISPLAY_METRICS['_default']
 
     for (const metric of displayMetricsList) {
-      // Skip non-numeric metrics
       if (metric === 'Partidos jugados' || metric === 'Minutos jugados') continue
 
       const playerVal = player[metric]
@@ -483,7 +441,6 @@ export default function PlayerDetailPage() {
 
       if (isNaN(playerNum)) continue
 
-      // Get all values for this metric
       const values = samePosList
         .map(p => {
           const v = p[metric]
@@ -494,17 +451,13 @@ export default function PlayerDetailPage() {
 
       if (values.length < 5) continue
 
-      // Calculate percentile (% of players below this value)
       const countBelow = values.filter(v => v < playerNum).length
-      const percentile = (countBelow / values.length) * 100
-
-      percentiles[metric] = percentile
+      percentiles[metric] = (countBelow / values.length) * 100
     }
 
     return percentiles
   }, [player, posKey, external, internal])
 
-  // Get available leagues from data
   const availableLeagues = useMemo(() => {
     const allPlayers = [...external, ...internal]
     const leagueSet = new Set<string>()
@@ -514,21 +467,17 @@ export default function PlayerDetailPage() {
     return [...leagueSet].sort()
   }, [external, internal])
 
-  // Set default comparison league based on player's league
   useEffect(() => {
     if (player) {
       const playerLeague = player.Liga
-      // If player's league exists in our database, use it as default
       if (playerLeague && availableLeagues.includes(playerLeague)) {
         setComparisonLeague(playerLeague)
       } else {
-        // Player's league not in database, use global average
         setComparisonLeague('all')
       }
     }
   }, [player?.Jugador, player?.Liga, availableLeagues])
 
-  // Filter market value history for this player
   const playerMarketValueHistory = useMemo(() => {
     if (!player || source !== 'interno') return []
     const playerNameNorm = normalizeName(player.Jugador)
@@ -538,9 +487,68 @@ export default function PlayerDetailPage() {
     })
   }, [player, source, marketValueHistory])
 
+  // Define tabs based on source
   const tabs = source === 'interno'
-    ? ['General', 'Radar', 'Valor', 'Evolución']
-    : ['General', 'Radar']
+    ? ['General', 'Radar', 'Valor', 'Evolución', 'Métricas']
+    : ['General', 'Radar', 'Métricas']
+
+  // Compute radar data for PDF export
+  const computeRadarData = useMemo(() => {
+    if (!player || !posKey) return []
+
+    const radarMetrics = RADAR_METRICS[posKey] ?? RADAR_METRICS['_default'] ?? []
+    const allPlayers = [...external, ...internal]
+
+    // Get player's normalized values
+    const normPlayer = normalized.find(n => normalizeName(n.Jugador) === normalizeName(player.Jugador))
+
+    // Calculate position averages
+    const posPlayers = normalized.filter(p => {
+      const pPos = p['Posición']?.trim() ?? ''
+      const pPosKey = POSITION_MAP[pPos] ?? ''
+      return pPosKey === posKey
+    })
+
+    if (posPlayers.length === 0) return []
+
+    const result: { metric: string; value: number; average: number }[] = []
+
+    for (const metric of radarMetrics) {
+      // Player value
+      let playerVal = 50
+      if (normPlayer) {
+        const v = normPlayer[metric]
+        playerVal = typeof v === 'number' ? v * 100 : 50
+      }
+
+      // Average value
+      const avgSum = posPlayers.reduce((s, p) => {
+        const v = p[metric]
+        return s + (typeof v === 'number' ? v : 0)
+      }, 0)
+      const avgVal = (avgSum / posPlayers.length) * 100
+
+      result.push({ metric, value: playerVal, average: avgVal })
+    }
+
+    return result
+  }, [player, posKey, normalized, external, internal])
+
+  // PDF Export handler
+  const handleExportPdf = async (sections: string[]) => {
+    if (!player) return
+
+    await exportPlayerToPdfFull({
+      player,
+      source,
+      sections,
+      positionAverageScore,
+      subjectiveGroups,
+      marketValueHistory: playerMarketValueHistory,
+      metricPercentiles,
+      radarData: computeRadarData,
+    })
+  }
 
   if (loading) return <LoadingSpinner fullScreen message="Cargando ficha del jugador..." />
   if (error) return <EmptyState title="Error" description={error} icon="error" />
@@ -556,17 +564,15 @@ export default function PlayerDetailPage() {
     : player.contractStatus === 'warning' ? 'text-amber-500'
     : 'text-apple-gray-700 dark:text-apple-gray-300'
 
-  const handleExport = async () => {
-    setExporting(true)
-    try { await exportPlayerToPdf(player.Jugador) } finally { setExporting(false) }
-  }
-
   return (
-    <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6 animate-fade-in" id="player-detail-content">
+    <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-6 animate-fade-in" id="player-detail-content" ref={contentRef}>
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-apple-gray-500 dark:text-apple-gray-400 mb-5">
-        <Link to={source === 'interno' ? '/interno' : '/'} className="hover:text-brand-green transition-colors">
-          {source === 'interno' ? 'Scout Interno' : 'Scout Externo'}
+        <Link
+          to={source === 'interno' ? '/interno' : source === 'seguimiento' ? '/seguimiento' : '/'}
+          className="hover:text-brand-green transition-colors"
+        >
+          {source === 'interno' ? 'Scout Interno' : source === 'seguimiento' ? 'Seguimiento' : 'Scout Externo'}
         </Link>
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -574,61 +580,203 @@ export default function PlayerDetailPage() {
         <span className="text-apple-gray-800 dark:text-white font-medium">{player.Jugador}</span>
       </nav>
 
-      {/* Player header */}
-      <div className="card-apple p-6 mb-5">
-        <div className="flex flex-wrap items-start justify-between gap-5">
-          {/* Info */}
-          <div className="flex items-start gap-5">
-            {/* Avatar */}
-            {player.Imagen ? (
-              <img
-                src={player.Imagen}
-                alt={player.Jugador}
-                className="w-20 h-20 rounded-2xl object-cover flex-shrink-0 shadow-apple dark:shadow-apple-dark"
-              />
-            ) : (
-              <div className="w-20 h-20 bg-gradient-to-br from-apple-gray-100 to-apple-gray-200 dark:from-apple-gray-700 dark:to-apple-gray-800 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-apple dark:shadow-apple-dark">
-                <span className="text-2xl font-bold text-apple-gray-400 dark:text-apple-gray-500">
-                  {player.Jugador.split(' ').map(w => w[0]).slice(0, 2).join('')}
-                </span>
+      {/* Main content grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left sidebar - Player info & Score */}
+        <div className="lg:col-span-4 space-y-5">
+          {/* Player card */}
+          <div className="card-apple overflow-hidden" id="player-header-card">
+            {/* Header with gradient, pattern and logo */}
+            <div className="relative h-28 overflow-hidden">
+              {/* Base gradient */}
+              <div className="absolute inset-0 bg-gradient-to-br from-brand-green/25 via-emerald-500/15 to-apple-gray-100/50 dark:to-apple-gray-800/50" />
+              {/* Radial glow */}
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(34,197,94,0.2),transparent_60%)]" />
+              {/* Subtle pattern */}
+              <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05]" style={{
+                backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)',
+                backgroundSize: '12px 12px'
+              }} />
+              {/* Logo watermark - centered in header */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <img
+                  src="/logo-light.png"
+                  alt=""
+                  className="w-28 h-28 object-contain opacity-50 dark:hidden"
+                />
+                <img
+                  src="/logo-dark.png"
+                  alt=""
+                  className="w-28 h-28 object-contain opacity-60 hidden dark:block"
+                />
               </div>
-            )}
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-2xl font-bold text-apple-gray-800 dark:text-white tracking-tight">{player.Jugador}</h1>
+            </div>
+
+            {/* Avatar positioned over header */}
+            <div className="relative px-5 -mt-14">
+              {player.Imagen ? (
+                <div className="relative w-[104px] h-[104px]">
+                  {/* Background for transparent images */}
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white to-apple-gray-100 dark:from-apple-gray-700 dark:to-apple-gray-800 shadow-lg border-4 border-white dark:border-apple-gray-800" />
+                  {/* Player image */}
+                  <img
+                    src={player.Imagen}
+                    alt={player.Jugador}
+                    className="relative w-full h-full rounded-2xl object-cover border-4 border-white dark:border-apple-gray-800"
+                    style={{
+                      backgroundColor: 'transparent',
+                      mixBlendMode: 'normal'
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="w-[104px] h-[104px] bg-gradient-to-br from-apple-gray-100 to-apple-gray-200 dark:from-apple-gray-700 dark:to-apple-gray-800 rounded-2xl flex items-center justify-center shadow-lg border-4 border-white dark:border-apple-gray-800">
+                  <span className="text-2xl font-bold text-apple-gray-400 dark:text-apple-gray-500">
+                    {player.Jugador.split(' ').map(w => w[0]).slice(0, 2).join('')}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Player info */}
+            <div className="p-5 pt-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h1 className="text-xl font-bold text-apple-gray-800 dark:text-white tracking-tight">
+                    {player.Jugador}
+                  </h1>
+                  <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
+                    {player.Equipo || '—'}
+                  </p>
+                </div>
                 <ContractBadge status={player.contractStatus} monthsRemaining={player.monthsRemaining} />
               </div>
-              <p className="text-apple-gray-500 dark:text-apple-gray-400 text-sm mt-1">
-                {player.Equipo || '—'}
-                {player.Liga ? ` · ${player.Liga}` : ''}
-                {player['País de nacimiento'] ? ` · ${player['País de nacimiento']}` : ''}
-              </p>
-              <div className="flex flex-wrap items-center gap-2 mt-2">
+
+              <div className="flex flex-wrap items-center gap-2 mt-3">
                 <span className="inline-flex px-2.5 py-1 bg-apple-gray-100 dark:bg-apple-gray-700 rounded-lg text-xs font-medium text-apple-gray-600 dark:text-apple-gray-300">
                   {displayPosition}
                 </span>
-                <span className="text-sm text-apple-gray-500 dark:text-apple-gray-400">
-                  {player.Edad} años
-                  {player.Altura ? ` · ${player.Altura} cm` : ''}
-                  {player.Pie ? ` · Pie ${player.Pie}` : ''}
-                </span>
+                {player.Liga && (
+                  <span className="text-xs text-apple-gray-500 dark:text-apple-gray-400">
+                    {player.Liga}
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-apple-gray-100 dark:border-apple-gray-700/50">
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div>
+                    <p className="text-lg font-bold text-apple-gray-800 dark:text-white">{player.Edad}</p>
+                    <p className="text-2xs text-apple-gray-500">años</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold text-apple-gray-800 dark:text-white">{player.Altura || '—'}</p>
+                    <p className="text-2xs text-apple-gray-500">cm</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold text-apple-gray-800 dark:text-white">
+                      {player.Pie?.toLowerCase() === 'derecho' || player.Pie?.toLowerCase() === 'right' ? 'Diestro' :
+                       player.Pie?.toLowerCase() === 'izquierdo' || player.Pie?.toLowerCase() === 'left' ? 'Zurdo' :
+                       player.Pie?.toLowerCase() === 'ambos' || player.Pie?.toLowerCase() === 'both' ? 'Ambos' :
+                       player.Pie || '—'}
+                    </p>
+                    <p className="text-2xs text-apple-gray-500">pie</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-          {/* Actions */}
-          <div className="flex items-center gap-2 flex-wrap">
+
+          {/* Score GG - THE HERO */}
+          <div className="card-apple p-6" id="player-score-card">
+            <div className="text-center mb-4">
+              <h2 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">
+                Score GG
+              </h2>
+            </div>
+            <GaugeScore
+              score={player.ggScore}
+              size="lg"
+              comparisonScore={positionAverageScore}
+              comparisonLabel={`Promedio ${posKey || 'posición'}`}
+            />
+            {subjectiveGroups.length > 0 && (
+              <div className="mt-6 pt-5 border-t border-apple-gray-100 dark:border-apple-gray-700/50">
+                <h3 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-4 text-center">
+                  Evaluación Scout
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {subjectiveGroups.map(group => {
+                    const score = group.averageScore
+                    const color = score >= 70 ? '#22C55E' : score >= 50 ? '#EAB308' : score >= 30 ? '#F97316' : '#EF4444'
+                    const circumference = 2 * Math.PI * 28
+                    const progress = (score / 100) * circumference
+
+                    return (
+                      <div
+                        key={group.tipo}
+                        className="flex flex-col items-center"
+                      >
+                        {/* Circular progress */}
+                        <div className="relative w-20 h-20">
+                          <svg className="w-full h-full -rotate-90" viewBox="0 0 64 64">
+                            {/* Background circle */}
+                            <circle
+                              cx="32"
+                              cy="32"
+                              r="28"
+                              fill="none"
+                              className="stroke-apple-gray-200 dark:stroke-apple-gray-700"
+                              strokeWidth="6"
+                            />
+                            {/* Progress circle */}
+                            <circle
+                              cx="32"
+                              cy="32"
+                              r="28"
+                              fill="none"
+                              stroke={color}
+                              strokeWidth="6"
+                              strokeLinecap="round"
+                              strokeDasharray={`${progress} ${circumference}`}
+                              style={{ transition: 'stroke-dasharray 0.8s ease-out' }}
+                            />
+                          </svg>
+                          {/* Score in center */}
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span
+                              className="text-lg font-bold tabular-nums"
+                              style={{ color }}
+                            >
+                              {score}
+                            </span>
+                          </div>
+                        </div>
+                        {/* Label */}
+                        <p className="text-2xs text-apple-gray-600 dark:text-apple-gray-400 font-medium mt-2 text-center capitalize">
+                          {group.tipo}
+                        </p>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Quick links & actions */}
+          <div className="card-apple p-4 space-y-2">
             {player.Transfermkt && (
               <a
                 href={player.Transfermkt}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="btn-apple-secondary text-sm"
+                className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-apple-gray-50 dark:bg-apple-gray-800/50 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700/50 transition-colors group"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <span className="text-sm text-apple-gray-700 dark:text-apple-gray-300">Transfermarkt</span>
+                <svg className="w-4 h-4 text-apple-gray-400 group-hover:text-brand-green transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                 </svg>
-                <span className="hidden sm:inline">Transfermarkt</span>
-                <span className="sm:hidden">TM</span>
               </a>
             )}
             {monitoringPlayer?.WyscoutVideo && (
@@ -636,113 +784,282 @@ export default function PlayerDetailPage() {
                 href={monitoringPlayer.WyscoutVideo}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="btn-apple-secondary text-sm !bg-red-500/10 !text-red-500 hover:!bg-red-500/20"
+                className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors group"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <span className="text-sm text-red-600 dark:text-red-400">Video Wyscout</span>
+                <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span className="hidden sm:inline">Video Wyscout</span>
-                <span className="sm:hidden">Video</span>
               </a>
             )}
             <button
-              onClick={handleExport}
-              disabled={exporting}
-              className="btn-apple-primary text-sm disabled:opacity-50"
+              onClick={() => setShowExportModal(true)}
+              className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-brand-green/10 hover:bg-brand-green/20 transition-colors"
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <span className="text-sm text-brand-green font-medium">
+                Exportar PDF
+              </span>
+              <svg className="w-4 h-4 text-brand-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              <span className="hidden sm:inline">Exportar PDF</span>
-              <span className="sm:hidden">PDF</span>
             </button>
           </div>
+
+          {/* Comments - on sidebar */}
+          <div className="card-apple p-5">
+            <PlayerComments player={player} />
+          </div>
         </div>
-      </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-5 bg-apple-gray-100/50 dark:bg-apple-gray-800/50 rounded-xl p-1 w-fit">
-        {tabs.map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ease-apple ${
-              activeTab === tab
-                ? 'bg-white dark:bg-apple-gray-700 text-apple-gray-800 dark:text-white shadow-apple dark:shadow-apple-dark'
-                : 'text-apple-gray-500 dark:text-apple-gray-400 hover:text-apple-gray-700 dark:hover:text-apple-gray-200'
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
+        {/* Main content area */}
+        <div className="lg:col-span-8 space-y-5">
+          {/* Tabs */}
+          <div className="flex gap-1 bg-apple-gray-100/50 dark:bg-apple-gray-800/50 rounded-xl p-1 overflow-x-auto">
+            {tabs.map(tab => (
+              <button
+                key={tab}
+                data-tab={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ease-apple whitespace-nowrap ${
+                  activeTab === tab
+                    ? 'bg-white dark:bg-apple-gray-700 text-apple-gray-800 dark:text-white shadow-apple dark:shadow-apple-dark'
+                    : 'text-apple-gray-500 dark:text-apple-gray-400 hover:text-apple-gray-700 dark:hover:text-apple-gray-200'
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
 
-      {/* Tab content */}
-      <div className="card-apple p-6">
+          {/* Tab content */}
+          <div className="card-apple p-6" id="player-tab-content">
 
-        {/* GENERAL TAB */}
-        {activeTab === 'General' && (
-          <div className="space-y-8 animate-fade-in">
-            {/* Main content grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Left: info */}
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-3">
-                    Información Personal
-                  </h3>
-                  <div className="space-y-0">
-                    <InfoRow label="Edad" value={player.Edad ? `${player.Edad} años` : null} />
-                    <InfoRow label="Nacionalidad" value={player['País de nacimiento']} />
-                    <InfoRow label="Altura" value={player.Altura ? `${player.Altura} cm` : null} />
-                    <InfoRow label="Pie dominante" value={player.Pie} />
-                    <InfoRow label="Posición específica" value={getDisplayPosition(player['Posición específica'])} />
+            {/* GENERAL TAB */}
+            {activeTab === 'General' && (
+              <div className="space-y-6 animate-fade-in" id="tab-content-general">
+                {/* Key info cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-gradient-to-br from-apple-gray-50 to-white dark:from-apple-gray-800/50 dark:to-apple-gray-800 rounded-xl p-4 border border-apple-gray-100 dark:border-apple-gray-700">
+                    <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mb-1">Partidos</p>
+                    <p className="text-2xl font-bold text-apple-gray-800 dark:text-white tabular-nums">
+                      {player['Partidos jugados'] || '—'}
+                    </p>
+                  </div>
+                  <div className="bg-gradient-to-br from-apple-gray-50 to-white dark:from-apple-gray-800/50 dark:to-apple-gray-800 rounded-xl p-4 border border-apple-gray-100 dark:border-apple-gray-700">
+                    <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mb-1">Minutos</p>
+                    <p className="text-2xl font-bold text-apple-gray-800 dark:text-white tabular-nums">
+                      {player.minutesPlayed?.toLocaleString() || '—'}
+                    </p>
+                  </div>
+                  <div className="bg-gradient-to-br from-apple-gray-50 to-white dark:from-apple-gray-800/50 dark:to-apple-gray-800 rounded-xl p-4 border border-apple-gray-100 dark:border-apple-gray-700">
+                    <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mb-1">Valor</p>
+                    <p className="text-2xl font-bold text-brand-green tabular-nums">
+                      {player.marketValueFormatted || '—'}
+                    </p>
+                  </div>
+                  <div className="bg-gradient-to-br from-apple-gray-50 to-white dark:from-apple-gray-800/50 dark:to-apple-gray-800 rounded-xl p-4 border border-apple-gray-100 dark:border-apple-gray-700">
+                    <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mb-1">Contrato</p>
+                    <p className={`text-2xl font-bold tabular-nums ${contractColor}`}>
+                      {player['Vencimiento contrato']?.slice(-4) || '—'}
+                    </p>
                   </div>
                 </div>
+
+                {/* Personal info */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-3">
+                      Información Personal
+                    </h3>
+                    <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-4">
+                      <InfoRow label="Edad" value={player.Edad ? `${player.Edad} años` : null} />
+                      <InfoRow label="Nacionalidad" value={player['País de nacimiento']} />
+                      <InfoRow label="Altura" value={player.Altura ? `${player.Altura} cm` : null} />
+                      <InfoRow label="Pie dominante" value={
+                        player.Pie?.toLowerCase() === 'derecho' || player.Pie?.toLowerCase() === 'right' ? 'Diestro' :
+                        player.Pie?.toLowerCase() === 'izquierdo' || player.Pie?.toLowerCase() === 'left' ? 'Zurdo' :
+                        player.Pie?.toLowerCase() === 'ambos' || player.Pie?.toLowerCase() === 'both' ? 'Ambos' :
+                        player.Pie
+                      } />
+                      <InfoRow label="Posición específica" value={getDisplayPosition(player['Posición específica'])} />
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-3">
+                      Contrato
+                    </h3>
+                    <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-4">
+                      <div className="flex justify-between py-2 border-b border-apple-gray-100 dark:border-apple-gray-700/50">
+                        <span className="text-sm text-apple-gray-500 dark:text-apple-gray-400">Vencimiento</span>
+                        <span className={`text-sm font-medium ${contractColor}`}>
+                          {player['Vencimiento contrato'] || '—'}
+                          {player.monthsRemaining !== null && (
+                            <span className="ml-1.5 text-xs font-normal text-apple-gray-400">
+                              ({player.monthsRemaining}m)
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <InfoRow label="Valor de mercado" value={player.marketValueFormatted} />
+                      {player.Representante && <InfoRow label="Representante" value={player.Representante} />}
+                    </div>
+                  </div>
+                </div>
+
+                {/* What makes this player stand out */}
                 <div>
                   <h3 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-3">
-                    Contrato
+                    Resumen Rápido
                   </h3>
-                  <div className="space-y-0">
-                    <div className="flex justify-between py-2.5">
-                      <span className="text-sm text-apple-gray-500 dark:text-apple-gray-400">Vence</span>
-                      <span className={`text-sm font-medium ${contractColor}`}>
-                        {player['Vencimiento contrato'] || '—'}
-                        {player.monthsRemaining !== null && (
-                          <span className="ml-1.5 text-xs font-normal text-apple-gray-400">({player.monthsRemaining}m)</span>
-                        )}
-                      </span>
+                  <div className="bg-gradient-to-br from-brand-green/5 to-emerald-500/5 dark:from-brand-green/10 dark:to-emerald-500/10 rounded-xl p-5 border border-brand-green/10">
+                    <div className="flex items-start gap-4">
+                      <div className="w-12 h-12 rounded-full bg-brand-green/10 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-6 h-6 text-brand-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm text-apple-gray-700 dark:text-apple-gray-300 leading-relaxed">
+                          <span className="font-semibold text-apple-gray-800 dark:text-white">{player.Jugador}</span>
+                          {' '}es un <span className="font-medium">{displayPosition}</span>
+                          {' '}de <span className="font-medium">{player.Edad} años</span>
+                          {player.Liga && <> que juega en <span className="font-medium">{player.Liga}</span></>}.
+                          {player.ggScore !== null && (
+                            <> Su Score GG de <span className="font-bold text-brand-green">{player.ggScore.toFixed(1)}</span>
+                            {positionAverageScore && player.ggScore > positionAverageScore ? (
+                              <> está <span className="text-emerald-600 font-medium">por encima</span> del promedio de su posición</>
+                            ) : positionAverageScore && player.ggScore < positionAverageScore ? (
+                              <> está por debajo del promedio de su posición</>
+                            ) : null}.
+                            </>
+                          )}
+                          {player.contractStatus === 'critical' && (
+                            <> <span className="text-orange-500 font-medium">Contrato por vencer pronto.</span></>
+                          )}
+                        </p>
+                      </div>
                     </div>
-                    <InfoRow label="Valor mercado" value={player.marketValueFormatted} />
                   </div>
                 </div>
               </div>
-              {/* Center: Score GG */}
-              <div className="space-y-4">
-                <h3 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">
-                  Score GG
+            )}
+
+            {/* RADAR TAB */}
+            {activeTab === 'Radar' && (
+              <div className="animate-fade-in" id="tab-content-radar">
+                <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+                  <div>
+                    <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
+                      Radar — {displayPosition}
+                    </h3>
+                    <p className="text-xs text-apple-gray-400 mt-0.5">
+                      Comparando vs {comparisonLeague === 'all' ? 'promedio general' : `promedio de ${comparisonLeague}`}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-apple-gray-500 dark:text-apple-gray-400">
+                      Comparar vs:
+                    </label>
+                    <select
+                      value={comparisonLeague}
+                      onChange={e => setComparisonLeague(e.target.value)}
+                      className="input-apple text-sm py-1.5 px-3 min-w-[160px]"
+                    >
+                      <option value="all">Todas las ligas</option>
+                      {availableLeagues.map(league => (
+                        <option key={league} value={league}>{league}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {!posKey ? (
+                  <EmptyState title="Posición no reconocida" description="No se puede generar el radar para esta posición." />
+                ) : (
+                  <PlayerRadarChart
+                    player={player}
+                    allNormalized={normalized}
+                    allPlayers={[...external, ...internal]}
+                    comparisonLeague={comparisonLeague}
+                    overridePosition={rawPosition}
+                  />
+                )}
+
+                <div className="mt-4 p-4 bg-apple-gray-50 dark:bg-apple-gray-800/50 rounded-lg">
+                  <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400 leading-relaxed">
+                    El gráfico muestra las métricas normalizadas del jugador (0-100) comparadas contra el promedio
+                    de jugadores de la misma posición ({posKey})
+                    {comparisonLeague !== 'all' ? ` en ${comparisonLeague}` : ' en toda la base de datos'}.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* VALOR DE MERCADO TAB */}
+            {activeTab === 'Valor' && source === 'interno' && (
+              <div className="animate-fade-in" id="tab-content-valor">
+                <div className="flex items-center justify-between mb-5">
+                  <div>
+                    <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
+                      Evolución del Valor de Mercado
+                    </h3>
+                    <p className="text-xs text-apple-gray-400 mt-0.5">
+                      Historial según Transfermarkt
+                    </p>
+                  </div>
+                </div>
+                <MarketValueChart data={playerMarketValueHistory} playerName={player.Jugador} />
+              </div>
+            )}
+
+            {/* EVOLUCIÓN TAB */}
+            {activeTab === 'Evolución' && source === 'interno' && (
+              <div className="animate-fade-in" id="tab-content-evolution">
+                <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-5">
+                  Evolución por partido
                 </h3>
-                <ScoreBar score={player.ggScore} size="lg" />
-                {!posKey && (
-                  <p className="text-xs text-apple-gray-400">Posición no reconocida para el cálculo.</p>
+                {playerJugadorSK ? (
+                  <EvolutionChart evolution={evolution} playerSK={playerJugadorSK} />
+                ) : (
+                  <EmptyState
+                    title="Sin datos de evolución"
+                    description="No se encontraron datos de evolución para este jugador."
+                    icon="search"
+                  />
                 )}
               </div>
-              {/* Right: Key metrics with percentiles */}
-              <div>
-                <h3 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-2">
-                  Métricas Clave — {posKey || 'General'}
-                </h3>
-                <p className="text-2xs text-apple-gray-400 dark:text-apple-gray-500 mb-3">
-                  Comparado vs jugadores de su posición
-                </p>
-                <div className="space-y-0">
-                  {displayMetrics.map(metric => {
+            )}
+
+            {/* MÉTRICAS TAB */}
+            {activeTab === 'Métricas' && (
+              <div className="animate-fade-in" id="tab-content-metrics">
+                <div className="mb-5">
+                  <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
+                    Métricas Detalladas — {posKey || 'General'}
+                  </h3>
+                  <p className="text-xs text-apple-gray-400 mt-0.5">
+                    Comparado vs jugadores de su posición con +300 minutos
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+                  {displayMetrics.map((metric, idx) => {
                     const isBasicStat = metric === 'Partidos jugados' || metric === 'Minutos jugados'
                     const percentile = metricPercentiles[metric]
 
                     if (isBasicStat) {
-                      return <MetricRow key={metric} label={metric} value={String(player[metric] ?? '')} />
+                      const val = player[metric]
+                      const num = typeof val === 'number' ? val : parseFloat(String(val ?? '').replace(',', '.'))
+                      return (
+                        <div key={metric} className="flex justify-between py-3 border-b border-apple-gray-100 dark:border-apple-gray-800/50">
+                          <span className="text-sm text-apple-gray-500 dark:text-apple-gray-400">{metric}</span>
+                          <span className="text-sm font-semibold text-apple-gray-800 dark:text-white tabular-nums">
+                            {isNaN(num) ? '—' : num.toFixed(0)}
+                          </span>
+                        </div>
+                      )
                     }
 
                     return (
@@ -751,145 +1068,32 @@ export default function PlayerDetailPage() {
                         label={metric}
                         value={player[metric]}
                         percentile={percentile}
-                        showBar={percentile !== undefined}
                       />
                     )
                   })}
                 </div>
-              </div>
-            </div>
 
-            {/* Evaluación Scout - Speedometers (solo para interno) */}
-            {source === 'interno' && subjectiveGroups.length > 0 && (
-              <div className="pt-6 border-t border-apple-gray-200/50 dark:border-apple-gray-700/50">
-                <h3 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-6">
-                  Evaluación Scout
-                </h3>
-                <SpeedometerGroup groups={subjectiveGroups} />
+                {!posKey && (
+                  <p className="mt-4 text-xs text-apple-gray-400">
+                    Posición no reconocida para mostrar métricas específicas.
+                  </p>
+                )}
               </div>
             )}
           </div>
-        )}
-
-        {/* RADAR TAB */}
-        {activeTab === 'Radar' && (
-          <div className="animate-fade-in">
-            {/* Header with league selector */}
-            <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-              <div>
-                <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
-                  Radar — {displayPosition}
-                </h3>
-                <p className="text-xs text-apple-gray-400 mt-0.5">
-                  Comparando vs {comparisonLeague === 'all' ? 'promedio general (todas las ligas)' : `promedio de ${comparisonLeague}`}
-                </p>
-              </div>
-
-              {/* League selector */}
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-apple-gray-500 dark:text-apple-gray-400">
-                  Comparar vs:
-                </label>
-                <select
-                  value={comparisonLeague}
-                  onChange={e => setComparisonLeague(e.target.value)}
-                  className="input-apple text-sm py-1.5 px-3 pr-8 min-w-[180px]"
-                >
-                  <option value="all">Todas las ligas</option>
-                  {availableLeagues.map(league => (
-                    <option key={league} value={league}>
-                      {league}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Player league info */}
-            {player.Liga && !availableLeagues.includes(player.Liga) && (
-              <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                <p className="text-xs text-amber-700 dark:text-amber-400">
-                  <span className="font-medium">{player.Jugador}</span> juega en <span className="font-medium">{player.Liga}</span>,
-                  que no está en nuestra base de datos. Por defecto se compara vs el promedio general.
-                </p>
-              </div>
-            )}
-
-            {!posKey ? (
-              <EmptyState title="Posición no reconocida" description="No se puede generar el radar para esta posición." />
-            ) : (
-              <PlayerRadarChart
-                player={player}
-                allNormalized={normalized}
-                allPlayers={[...external, ...internal]}
-                comparisonLeague={comparisonLeague}
-                overridePosition={rawPosition}
-              />
-            )}
-
-            {/* Legend explaining comparison */}
-            <div className="mt-4 p-4 bg-apple-gray-50 dark:bg-apple-gray-800/50 rounded-lg">
-              <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400 leading-relaxed">
-                El gráfico muestra las métricas normalizadas del jugador (0-100) comparadas contra el promedio
-                de jugadores de la misma posición ({posKey})
-                {comparisonLeague !== 'all' ? ` en ${comparisonLeague}` : ' en toda la base de datos'}.
-                Un valor de 100 indica el máximo registrado en la métrica.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* VALOR DE MERCADO TAB */}
-        {activeTab === 'Valor' && source === 'interno' && (
-          <div className="animate-fade-in">
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
-                  Evolución del Valor de Mercado
-                </h3>
-                <p className="text-xs text-apple-gray-400 mt-0.5">
-                  Historial de valuaciones según Transfermarkt
-                </p>
-              </div>
-              {player.Transfermkt && (
-                <a
-                  href={player.Transfermkt}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-brand-green hover:underline flex items-center gap-1"
-                >
-                  Ver en Transfermarkt
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                  </svg>
-                </a>
-              )}
-            </div>
-            <MarketValueChart data={playerMarketValueHistory} playerName={player.Jugador} />
-          </div>
-        )}
-
-        {/* EVOLUCIÓN TAB */}
-        {activeTab === 'Evolución' && source === 'interno' && (
-          <div className="animate-fade-in">
-            <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-5">
-              Evolución por partido
-            </h3>
-            {playerJugadorSK ? (
-              <EvolutionChart evolution={evolution} playerSK={playerJugadorSK} />
-            ) : (
-              <EmptyState
-                title="Sin datos de evolución"
-                description="No se encontraron datos de evolución para este jugador."
-                icon="search"
-              />
-            )}
-          </div>
-        )}
+        </div>
       </div>
 
-      {/* Comments section */}
-      <PlayerComments player={player} />
+      {/* Export PDF Modal */}
+      <ExportPDFModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        onExport={handleExportPdf}
+        player={player}
+        source={source}
+        availableEvolutionCharts={[]}
+        selectedEvolutionCharts={[]}
+      />
     </div>
   )
 }

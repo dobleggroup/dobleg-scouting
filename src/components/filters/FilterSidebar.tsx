@@ -299,7 +299,7 @@ export default function FilterSidebar({ players, filters, onChange, onReset }: F
                         : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600'
                     }`}
                   >
-                    {pie === 'izquierdo' ? '🦶 Izq' : pie === 'derecho' ? '🦶 Der' : '🦶 Ambos'}
+                    {pie === 'izquierdo' ? '🦶 Zurdo' : pie === 'derecho' ? '🦶 Diestro' : '🦶 Ambos'}
                   </button>
                 ))}
               </div>
