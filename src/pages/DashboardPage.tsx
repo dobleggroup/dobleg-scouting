@@ -380,18 +380,29 @@ export default function DashboardPage() {
           subtitle="años"
           large
         />
-        <StatCard
-          label="Score Promedio"
-          value={kpis.avgScore.toFixed(1)}
-          subtitle="GG Score"
-          large
-        />
+        <div className="bg-white dark:bg-apple-gray-800 rounded-xl p-5 border border-apple-gray-200 dark:border-apple-gray-700">
+          <p className="text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-1">
+            Score Promedio
+          </p>
+          <p className={`text-3xl font-bold ${
+            kpis.avgScore >= 55 ? 'text-brand-green' :
+            kpis.avgScore >= 45 ? 'text-emerald-500' :
+            kpis.avgScore >= 35 ? 'text-amber-500' : 'text-red-500'
+          }`}>
+            {kpis.avgScore.toFixed(1)}
+          </p>
+          <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-1">
+            {kpis.avgScore >= 55 ? 'Excelente' :
+             kpis.avgScore >= 45 ? 'Bueno' :
+             kpis.avgScore >= 35 ? 'Regular' : 'Bajo'} · GG Score
+          </p>
+        </div>
       </div>
 
       {/* Portfolio Value Evolution Section */}
       {marketValueHistory.length > 0 && (
         <div className="mb-8">
-          <Section title="Evolucion del Valor del Portfolio">
+          <Section title="Evolución del Valor del Portfolio">
             <PortfolioValueChart
               data={marketValueHistory}
               players={internal}
@@ -408,33 +419,48 @@ export default function DashboardPage() {
 
       {/* Alert Banner */}
       {kpis.contractCritical > 0 && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-8 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center flex-shrink-0">
-            <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-8">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center flex-shrink-0">
+              <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-red-800 dark:text-red-200">
+                {kpis.contractCritical} jugador{kpis.contractCritical > 1 ? 'es' : ''} con contrato crítico
+              </p>
+              <p className="text-sm text-red-600 dark:text-red-400">
+                Contratos que vencen en menos de 6 meses. Requiere acción inmediata.
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/interno')}
+              className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
+            >
+              Ver detalles
+            </button>
           </div>
-          <div className="flex-1">
-            <p className="font-semibold text-red-800 dark:text-red-200">
-              {kpis.contractCritical} jugador{kpis.contractCritical > 1 ? 'es' : ''} con contrato critico
-            </p>
-            <p className="text-sm text-red-600 dark:text-red-400">
-              Contratos que vencen en menos de 6 meses. Requiere accion inmediata.
-            </p>
+          {/* Show critical players */}
+          <div className="mt-3 pt-3 border-t border-red-200 dark:border-red-800/50 flex flex-wrap gap-2">
+            {contractAlerts.filter(p => (p.monthsRemaining ?? 99) <= 6).slice(0, 5).map((p, i) => (
+              <button
+                key={i}
+                onClick={() => navigateToPlayer(p)}
+                className="inline-flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-apple-gray-800 rounded-lg text-sm hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors border border-red-200 dark:border-red-800"
+              >
+                <span className="font-medium text-apple-gray-800 dark:text-white">{p.Jugador}</span>
+                <span className="text-red-600 dark:text-red-400 text-xs font-semibold">{p.monthsRemaining}m</span>
+              </button>
+            ))}
           </div>
-          <button
-            onClick={() => navigate('/interno')}
-            className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
-          >
-            Ver detalles
-          </button>
         </div>
       )}
 
       {/* Three Column Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         {/* Distribution Cards */}
-        <Section title="Composicion del Portfolio">
+        <Section title="Composición del Portfolio">
           <div className="space-y-4">
             {/* Age Distribution */}
             <div>
@@ -499,7 +525,7 @@ export default function DashboardPage() {
             {/* Position Distribution */}
             <div className="pt-4 border-t border-apple-gray-100 dark:border-apple-gray-700">
               <div className="flex items-center justify-between text-sm mb-2">
-                <span className="text-apple-gray-600 dark:text-apple-gray-400">Por Posicion</span>
+                <span className="text-apple-gray-600 dark:text-apple-gray-400">Por Posición</span>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {Object.entries(positionDistribution).map(([pos, count]) => (
@@ -515,7 +541,7 @@ export default function DashboardPage() {
 
         {/* Contract Situations */}
         <Section
-          title="Situacion de Contratos"
+          title="Situación de Contratos"
           action={{ label: 'Ver todos', onClick: () => navigate('/interno') }}
         >
           <div className="space-y-3 mb-4">
@@ -595,10 +621,10 @@ export default function DashboardPage() {
           </div>
           <div>
             <h2 className="text-xl font-bold text-apple-gray-800 dark:text-white">
-              Analisis de Ligas y Oportunidades
+              Análisis de Ligas y Oportunidades
             </h2>
             <p className="text-sm text-apple-gray-500">
-              Evaluacion de posiciones en el mercado y potencial de crecimiento
+              Evaluación de posiciones en el mercado y potencial de crecimiento
             </p>
           </div>
         </div>
@@ -704,7 +730,7 @@ export default function DashboardPage() {
                 Recomendaciones de Fichaje
               </h2>
               <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-1 ml-13">
-                Oportunidades del mercado basadas en analisis de seguimiento
+                Oportunidades del mercado basadas en análisis de seguimiento
               </p>
             </div>
             <button

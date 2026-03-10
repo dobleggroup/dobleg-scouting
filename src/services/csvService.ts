@@ -3,7 +3,7 @@ import { SHEET_URLS, COLUMN_ALIASES } from '@/constants/scoring'
 import type {
   RawRow, RawExternalPlayer, RawInternalPlayer,
   MonitoringPlayer, NormalizedPlayer, EvolutionEntry, SubjectiveMetric,
-  TransfermarktData, MarketValueHistoryEntry,
+  TransfermarktData, MarketValueHistoryEntry, GPSEntry,
 } from '@/types'
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -103,10 +103,11 @@ export interface AllRawData {
   transfermarkt: TransfermarktData[]
   masDatos: MasDatosEntry[]
   marketValueHistory: MarketValueHistoryEntry[]
+  gpsData: GPSEntry[]
 }
 
 export async function loadAllData(): Promise<AllRawData> {
-  const [extRaw, intRaw, monRaw, segMetRaw, normRaw, evoRaw, metRaw, tmRaw, masDatosRaw, mvHistRaw] = await Promise.all([
+  const [extRaw, intRaw, monRaw, segMetRaw, normRaw, evoRaw, metRaw, tmRaw, masDatosRaw, mvHistRaw, gpsRaw] = await Promise.all([
     fetchCSV(SHEET_URLS.externo),
     fetchCSV(SHEET_URLS.interno),
     fetchCSV(SHEET_URLS.seguimiento),
@@ -117,6 +118,7 @@ export async function loadAllData(): Promise<AllRawData> {
     fetchCSV(SHEET_URLS.transfermarkt),
     fetchCSV(SHEET_URLS.masDatos),
     fetchCSV(SHEET_URLS.valorMercadoHistorico),
+    fetchCSV(SHEET_URLS.gps),
   ])
 
   const external = resolveAliases(extRaw).filter(r => r['Jugador']?.trim()) as RawExternalPlayer[]
@@ -292,5 +294,62 @@ export async function loadAllData(): Promise<AllRawData> {
     .filter(e => !isNaN(e.fecha.getTime()) && e.valor > 0)
     .sort((a, b) => a.fecha.getTime() - b.fecha.getTime())
 
-  return { external, internal, monitoring, seguimientoMetrics, normalized, evolution, subjectiveMetrics, transfermarkt, masDatos, marketValueHistory }
+  // Parse GPS data
+  const parseNum = (val: string): number => {
+    if (!val) return 0
+    // Handle both comma and dot decimal separators
+    const cleaned = val.replace(/\./g, '').replace(',', '.')
+    return parseFloat(cleaned) || 0
+  }
+
+  const gpsData: GPSEntry[] = gpsRaw
+    .filter(r => r['Jugador']?.trim() && r['Fecha']?.trim())
+    .map(r => {
+      // Parse date from YYYY-MM-DD or DD/MM/YYYY format
+      let fecha = new Date()
+      const fechaStr = r['Fecha'] ?? ''
+      if (fechaStr.includes('-')) {
+        fecha = new Date(fechaStr)
+      } else if (fechaStr.includes('/')) {
+        const parts = fechaStr.split('/')
+        if (parts.length === 3) {
+          fecha = new Date(
+            parseInt(parts[2], 10),
+            parseInt(parts[1], 10) - 1,
+            parseInt(parts[0], 10)
+          )
+        }
+      }
+
+      return {
+        Jugador: r['Jugador'] ?? '',
+        Fecha: fecha,
+        Equipo: r['Equipo'] ?? '',
+        Rival: r['Rival'] ?? '',
+        Resultado: r['Resultado'] ?? '',
+        Competencia: r['Competencia'] ?? '',
+        Minutos: parseNum(r['Minutos']),
+        Distancia: parseNum(r['Distancia (m)']),
+        MetrosPorMin: parseNum(r['Mts/min']),
+        Dist16_21: parseNum(r['Dist 16-21 km/h']),
+        Dist21_24: parseNum(r['Dist 21-24 km/h']),
+        DistOver24: parseNum(r['Dist >24 km/h']),
+        HSR: parseNum(r['HSR >21 km/h']),
+        VelMax: parseNum(r['Vel Max (km/h)']),
+        Sprints: parseNum(r['Sprints']),
+        AltaIntensidad: parseNum(r['% Alta Intensidad']),
+        Acc2: parseNum(r['Acc >2 m/s']),
+        Dec2: parseNum(r['Dec >2 m/s']),
+        Acc3: parseNum(r['Acc >3 m/s²']),
+        Dec3: parseNum(r['Dec >3 m/s²']),
+        Acc4: parseNum(r['Acc >4 m/s']),
+        Dec4: parseNum(r['Dec >4 m/s']),
+        PlayerLoad: parseNum(r['Player Load']),
+        RHIEBouts: parseNum(r['RHIE Bouts']),
+      }
+    })
+    .filter(e => !isNaN(e.Fecha.getTime()))
+    .sort((a, b) => a.Fecha.getTime() - b.Fecha.getTime())
+
+  return { external, internal, monitoring, seguimientoMetrics, normalized, evolution, subjectiveMetrics, transfermarkt, masDatos, marketValueHistory, gpsData }
 }

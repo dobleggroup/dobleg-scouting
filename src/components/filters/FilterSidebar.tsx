@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import type { FilterState, EnrichedPlayer } from '@/types'
-import { FILTER_POSITION_MAP } from '@/constants/scoring'
+import { FILTER_POSITION_MAP, sortLeaguesByPriority } from '@/constants/scoring'
 
 // Available metrics for column selection
 export const SELECTABLE_METRICS = [
@@ -152,7 +152,7 @@ export default function FilterSidebar({ players, filters, onChange, onReset }: F
     const mvCeil = Math.ceil(maxMV / 1_000_000) * 1_000_000
 
     return {
-      leagues: [...leagueSet].sort(),
+      leagues: sortLeaguesByPriority([...leagueSet]),
       positions: [...posSet].sort(),
       maxMinutes: Math.ceil(maxMin / 100) * 100,
       maxMarketValue: mvCeil || 50_000_000,

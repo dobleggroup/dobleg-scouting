@@ -10,6 +10,9 @@ import SimilarPlayersPage from '@/pages/SimilarPlayersPage'
 import OpportunitiesPage from '@/pages/OpportunitiesPage'
 import DashboardPage from '@/pages/DashboardPage'
 import ScatterChartPage from '@/pages/ScatterChartPage'
+import ScoutEvaluationPage from '@/pages/ScoutEvaluationPage'
+import EvaluationsAdminPage from '@/pages/EvaluationsAdminPage'
+import RadarAnalysisPage from '@/pages/RadarAnalysisPage'
 
 export default function App() {
   return (
@@ -26,6 +29,9 @@ export default function App() {
           <Route path="/comparacion" element={<ComparisonPage />} />
           <Route path="/formacion" element={<FormationPage />} />
           <Route path="/dispersion" element={<ScatterChartPage />} />
+          <Route path="/evaluar" element={<ScoutEvaluationPage />} />
+          <Route path="/evaluaciones" element={<EvaluationsAdminPage />} />
+          <Route path="/radar" element={<RadarAnalysisPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

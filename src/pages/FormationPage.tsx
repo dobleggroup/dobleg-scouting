@@ -1,7 +1,19 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useData } from '@/context/DataContext'
+import { useAuth } from '@/context/AuthContext'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
-import { FILTER_POSITION_MAP } from '@/constants/scoring'
+import AuthModal from '@/components/auth/AuthModal'
+import { FILTER_POSITION_MAP, sortLeaguesByPriority } from '@/constants/scoring'
+import {
+  fetchFormations,
+  saveFormation,
+  updateFormationPositions,
+  deleteFormation,
+  addPlayerToPosition,
+  removePlayerFromPosition,
+  type FormationData,
+  type PositionPlayer,
+} from '@/services/formationService'
 import type { EnrichedPlayer } from '@/types'
 
 const FORMATIONS: Record<string, { name: string; positions: { key: string; x: number; y: number }[] }> = {
@@ -85,25 +97,8 @@ const FORMATIONS: Record<string, { name: string; positions: { key: string; x: nu
       { key: 'ST2', x: 62, y: 22 },
     ],
   },
-  '4-1-4-1': {
-    name: '4-1-4-1',
-    positions: [
-      { key: 'GK', x: 50, y: 92 },
-      { key: 'LB', x: 15, y: 72 },
-      { key: 'CB1', x: 35, y: 75 },
-      { key: 'CB2', x: 65, y: 75 },
-      { key: 'RB', x: 85, y: 72 },
-      { key: 'CDM', x: 50, y: 60 },
-      { key: 'LM', x: 15, y: 40 },
-      { key: 'CM1', x: 38, y: 42 },
-      { key: 'CM2', x: 62, y: 42 },
-      { key: 'RM', x: 85, y: 40 },
-      { key: 'ST', x: 50, y: 18 },
-    ],
-  },
 }
 
-// Maps formation position keys to specific position filters (respects left/right)
 const POSITION_KEY_MAP: Record<string, string[]> = {
   'GK': ['Arquero'],
   'LB': ['Lateral Izquierdo', 'Lateral'],
@@ -129,7 +124,6 @@ const POSITION_KEY_MAP: Record<string, string[]> = {
   'ST2': ['Delantero'],
 }
 
-// For display in the modal header
 const POSITION_DISPLAY_NAME: Record<string, string> = {
   'GK': 'Arquero',
   'LB': 'Lateral Izquierdo',
@@ -155,104 +149,75 @@ const POSITION_DISPLAY_NAME: Record<string, string> = {
   'ST2': 'Delantero',
 }
 
-interface SavedFormation {
-  id: string
-  name: string
-  formation: string
-  players: Record<string, EnrichedPlayer | null>
-  createdAt: string
-}
-
 interface PlayerSelectorProps {
   positionKey: string
-  league: string
+  selectedLeagues: string[]
+  nationality: string
   minAge: number
   maxAge: number
   allPlayers: EnrichedPlayer[]
-  onSelect: (player: EnrichedPlayer) => void
+  currentPlayers: PositionPlayer[]
+  allSelectedPlayerIds: Set<string>
+  onAddPlayer: (player: EnrichedPlayer) => void
+  onRemovePlayer: (playerId: string) => void
   onClose: () => void
-  currentPlayer: EnrichedPlayer | null
+  userName: string
 }
 
-// Preferred foot for central defenders
-const CB_FOOT_PREFERENCE: Record<string, string> = {
-  'CB1': 'Izquierdo',  // Left CB prefers left-footed
-  'CB2': 'Derecho',    // Right CB prefers right-footed
-  'CB3': 'Derecho',    // Center/Right CB prefers right-footed
-}
-
-// Position type preference for midfielders
-const MID_POSITION_PREFERENCE: Record<string, string[]> = {
-  'CDM': ['Volante central', 'Pivote', 'Mediocentro defensivo'],
-  'CDM1': ['Volante central', 'Pivote', 'Mediocentro defensivo'],
-  'CDM2': ['Volante central', 'Pivote', 'Mediocentro defensivo'],
-  'CM1': ['Volante interno', 'Mediapunta', 'Interior', 'Volante central'],
-  'CM2': ['Volante central', 'Volante interno'],  // Central one can be either
-  'CM3': ['Volante interno', 'Mediapunta', 'Interior', 'Volante central'],
-  'CAM': ['Mediapunta', 'Volante interno', 'Interior'],
-}
-
-function PlayerSelector({ positionKey, league, minAge, maxAge, allPlayers, onSelect, onClose, currentPlayer }: PlayerSelectorProps) {
+function PlayerSelector({
+  positionKey,
+  selectedLeagues,
+  nationality,
+  minAge,
+  maxAge,
+  allPlayers,
+  currentPlayers,
+  allSelectedPlayerIds,
+  onAddPlayer,
+  onRemovePlayer,
+  onClose,
+  userName,
+}: PlayerSelectorProps) {
   const allowedPositions = POSITION_KEY_MAP[positionKey] || []
   const displayName = POSITION_DISPLAY_NAME[positionKey] || positionKey
+  const canAddMore = currentPlayers.length < 3
+  const currentPosIds = new Set(currentPlayers.map(p => p.playerId))
 
   const candidates = useMemo(() => {
-    const preferredFoot = CB_FOOT_PREFERENCE[positionKey]
-    const preferredPositions = MID_POSITION_PREFERENCE[positionKey]
-
     return allPlayers
       .filter(p => {
-        if (league && p.Liga !== league) return false
-        // Age filter
+        // Exclude players already in this position
+        if (currentPosIds.has(p.Jugador)) return false
+        // Exclude players already in other positions (can't play two positions)
+        if (allSelectedPlayerIds.has(p.Jugador)) return false
+        if (selectedLeagues.length > 0 && !selectedLeagues.includes(p.Liga)) return false
+        if (nationality) {
+          const playerNat = String(p['País de nacimiento'] || '')
+          if (playerNat !== nationality) return false
+        }
         if (p.ageNum < minAge || p.ageNum > maxAge) return false
         const rawPos = (p['Posición específica'] || p['Posición'])?.trim() ?? ''
         const playerPosKey = FILTER_POSITION_MAP[rawPos] ?? ''
         return allowedPositions.includes(playerPosKey)
       })
       .filter(p => p.ggScore !== null)
-      .map(p => {
-        // Calculate priority bonus
-        let priority = 0
-        const foot = p.Pie?.trim() || ''
-        const specificPos = (p['Posición específica'] || p['Posición'])?.trim() || ''
-
-        // Foot preference for central defenders
-        if (preferredFoot && foot.toLowerCase().includes(preferredFoot.toLowerCase())) {
-          priority += 10
-        }
-
-        // Position preference for midfielders
-        if (preferredPositions) {
-          const posIndex = preferredPositions.findIndex(pref =>
-            specificPos.toLowerCase().includes(pref.toLowerCase())
-          )
-          if (posIndex !== -1) {
-            priority += (preferredPositions.length - posIndex) * 3
-          }
-        }
-
-        return { ...p, _priority: priority }
-      })
-      .sort((a, b) => {
-        // First sort by priority, then by score
-        const priorityDiff = (b._priority || 0) - (a._priority || 0)
-        if (priorityDiff !== 0) return priorityDiff
-        return (b.ggScore ?? 0) - (a.ggScore ?? 0)
-      })
-      .slice(0, 10)
-  }, [allPlayers, league, minAge, maxAge, allowedPositions, positionKey])
+      .sort((a, b) => (b.ggScore ?? 0) - (a.ggScore ?? 0))
+      .slice(0, 15)
+  }, [allPlayers, selectedLeagues, nationality, minAge, maxAge, allowedPositions, currentPosIds, allSelectedPlayerIds])
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in" onClick={onClose}>
       <div
-        className="bg-white dark:bg-apple-gray-800 rounded-apple-xl shadow-apple-lg dark:shadow-apple-dark-md max-w-md w-full max-h-[80vh] overflow-hidden animate-scale-in"
+        className="bg-white dark:bg-apple-gray-800 rounded-apple-xl shadow-apple-lg dark:shadow-apple-dark-md max-w-lg w-full max-h-[85vh] overflow-hidden animate-scale-in"
         onClick={e => e.stopPropagation()}
       >
         <div className="p-5 border-b border-apple-gray-200 dark:border-apple-gray-700">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-bold text-apple-gray-800 dark:text-white">Seleccionar {displayName}</h3>
-              <p className="text-xs text-apple-gray-500 mt-0.5">Top 10 por Score GG {league && `· ${league}`}</p>
+              <h3 className="font-bold text-apple-gray-800 dark:text-white">{displayName}</h3>
+              <p className="text-xs text-apple-gray-500 mt-0.5">
+                {currentPlayers.length}/3 jugadores · {canAddMore ? 'Seleccioná para agregar' : 'Máximo alcanzado'}
+              </p>
             </div>
             <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-apple-gray-400 hover:text-apple-gray-600 dark:hover:text-apple-gray-200 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700 transition-colors">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -261,135 +226,209 @@ function PlayerSelector({ positionKey, league, minAge, maxAge, allPlayers, onSel
             </button>
           </div>
         </div>
-        <div className="p-3 max-h-[60vh] overflow-y-auto">
-          {candidates.length === 0 ? (
-            <p className="text-center text-apple-gray-500 py-8">No hay jugadores para esta posición</p>
-          ) : (
-            <div className="space-y-1.5">
-              {candidates.map((p, i) => {
-                const foot = p.Pie?.trim() || ''
-                const specificPos = (p['Posición específica'] || p['Posición'])?.trim() || ''
-                const preferredFoot = CB_FOOT_PREFERENCE[positionKey]
-                const isPreferredFoot = preferredFoot && foot.toLowerCase().includes(preferredFoot.toLowerCase())
 
-                return (
-                  <button
-                    key={`${p.Jugador}-${i}`}
-                    onClick={() => { onSelect(p); onClose() }}
-                    className={`w-full flex items-center gap-3 p-3.5 rounded-apple transition-all text-left ${
-                      currentPlayer?.Jugador === p.Jugador
-                        ? 'bg-brand-green/15 border-2 border-brand-green'
-                        : 'hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700 border-2 border-transparent'
-                    }`}
-                  >
-                    <div className="w-9 h-9 rounded-lg bg-apple-gray-200 dark:bg-apple-gray-600 flex items-center justify-center text-sm font-bold text-apple-gray-600 dark:text-apple-gray-300">
+        {/* Current players in position */}
+        {currentPlayers.length > 0 && (
+          <div className="p-4 bg-apple-gray-50 dark:bg-apple-gray-900/50 border-b border-apple-gray-200 dark:border-apple-gray-700">
+            <p className="text-xs font-semibold text-apple-gray-500 uppercase tracking-wider mb-2">En esta posición</p>
+            <div className="space-y-2">
+              {currentPlayers.map((p, i) => (
+                <div key={p.playerId} className="flex items-center justify-between bg-white dark:bg-apple-gray-800 rounded-apple p-3 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-brand-green/20 flex items-center justify-center text-brand-green font-bold text-sm">
                       {i + 1}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">{p.Jugador}</p>
-                      <p className="text-xs text-apple-gray-500 truncate">
-                        {p.Equipo} · {p.Edad} años
-                        {foot && <span className={isPreferredFoot ? ' font-medium text-brand-green' : ''}> · {
-                          foot.toLowerCase() === 'derecho' || foot.toLowerCase() === 'right' ? 'Diestro' :
-                          foot.toLowerCase() === 'izquierdo' || foot.toLowerCase() === 'left' ? 'Zurdo' :
-                          foot.toLowerCase() === 'ambos' || foot.toLowerCase() === 'both' ? 'Ambos' : foot
-                        }</span>}
-                      </p>
-                      {specificPos && <p className="text-2xs text-apple-gray-400 truncate">{specificPos}</p>}
+                    <div>
+                      <p className="font-medium text-sm text-apple-gray-800 dark:text-white">{p.playerName}</p>
+                      <p className="text-xs text-apple-gray-500">{p.team} · Agregado por <span className="font-medium text-brand-green">{p.addedByName}</span></p>
                     </div>
-                    <div className="text-right">
-                      <p className={`text-sm font-bold ${(p.ggScore ?? 0) >= 60 ? 'text-emerald-500' : (p.ggScore ?? 0) >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
-                        {p.ggScore?.toFixed(1)}
-                      </p>
-                      <p className="text-2xs text-apple-gray-400">{p.marketValueFormatted}</p>
-                    </div>
-                  </button>
-                )
-              })}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm font-bold ${(p.ggScore ?? 0) >= 60 ? 'text-emerald-500' : (p.ggScore ?? 0) >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
+                      {p.ggScore?.toFixed(1)}
+                    </span>
+                    <button
+                      onClick={() => onRemovePlayer(p.playerId)}
+                      className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Available players */}
+        <div className="p-4 max-h-[50vh] overflow-y-auto">
+          {!canAddMore ? (
+            <p className="text-center text-apple-gray-500 py-4 text-sm">Máximo 3 jugadores por posición</p>
+          ) : candidates.length === 0 ? (
+            <p className="text-center text-apple-gray-500 py-8">No hay más jugadores disponibles</p>
+          ) : (
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold text-apple-gray-500 uppercase tracking-wider mb-2">Agregar jugador</p>
+              {candidates.map((p, i) => (
+                <button
+                  key={`${p.Jugador}-${i}`}
+                  onClick={() => onAddPlayer(p)}
+                  className="w-full flex items-center gap-3 p-3 rounded-apple transition-all text-left hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700 border border-transparent hover:border-apple-gray-200 dark:hover:border-apple-gray-600"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-apple-gray-200 dark:bg-apple-gray-600 flex items-center justify-center text-sm font-bold text-apple-gray-600 dark:text-apple-gray-300">
+                    {i + 1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">{p.Jugador}</p>
+                    <p className="text-xs text-apple-gray-500 truncate">{p.Equipo} · {p.Edad} años</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`text-sm font-bold ${(p.ggScore ?? 0) >= 60 ? 'text-emerald-500' : (p.ggScore ?? 0) >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
+                      {p.ggScore?.toFixed(1)}
+                    </p>
+                    <p className="text-2xs text-apple-gray-400">{p.marketValueFormatted}</p>
+                  </div>
+                </button>
+              ))}
             </div>
           )}
         </div>
-        {currentPlayer && (
-          <div className="p-3 border-t border-apple-gray-200 dark:border-apple-gray-700">
-            <button
-              onClick={() => { onSelect(null as any); onClose() }}
-              className="w-full py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-apple font-medium transition-colors"
-            >
-              Quitar jugador
-            </button>
-          </div>
-        )}
       </div>
     </div>
   )
 }
 
 export default function FormationPage() {
-  const { external, internal, loading } = useData()
+  const { external, internal, loading: dataLoading } = useData()
+  const { user, userDisplayName } = useAuth()
   const allPlayers = useMemo(() => [...external, ...internal], [external, internal])
 
   const [formation, setFormation] = useState('4-3-3')
-  const [league, setLeague] = useState('')
-  const [minAge, setMinAge] = useState(16)
+  const [selectedLeagues, setSelectedLeagues] = useState<string[]>([])
+  const [nationality, setNationality] = useState('')
+  const [minAge, setMinAge] = useState(15)
   const [maxAge, setMaxAge] = useState(40)
-  const [players, setPlayers] = useState<Record<string, EnrichedPlayer | null>>({})
+  const [positions, setPositions] = useState<Record<string, PositionPlayer[]>>({})
   const [selectedPos, setSelectedPos] = useState<string | null>(null)
-  const [savedFormations, setSavedFormations] = useState<SavedFormation[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('savedFormations') || '[]')
-    } catch { return [] }
-  })
+  const [savedFormations, setSavedFormations] = useState<FormationData[]>([])
+  const [loadingFormations, setLoadingFormations] = useState(true)
   const [formationName, setFormationName] = useState('')
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [showLoadModal, setShowLoadModal] = useState(false)
+  const [showAuthModal, setShowAuthModal] = useState(false)
+  const [activeFormation, setActiveFormation] = useState<FormationData | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  // Load formations from Supabase
+  useEffect(() => {
+    async function load() {
+      setLoadingFormations(true)
+      const data = await fetchFormations(user?.id)
+      setSavedFormations(data)
+      setLoadingFormations(false)
+    }
+    load()
+  }, [user?.id])
 
   const leagues = useMemo(() => {
     const set = new Set<string>()
     allPlayers.forEach(p => { if (p.Liga) set.add(p.Liga) })
+    return sortLeaguesByPriority([...set])
+  }, [allPlayers])
+
+  const nationalities = useMemo(() => {
+    const set = new Set<string>()
+    allPlayers.forEach(p => {
+      const nat = String(p['País de nacimiento'] || '')
+      if (nat) set.add(nat)
+    })
     return [...set].sort()
   }, [allPlayers])
 
   const currentFormation = FORMATIONS[formation]
 
-  const handleSelectPlayer = useCallback((posKey: string, player: EnrichedPlayer | null) => {
-    setPlayers(prev => ({ ...prev, [posKey]: player }))
+  // Get all selected player IDs across all positions
+  const allSelectedPlayerIds = useMemo(() => {
+    const ids = new Set<string>()
+    Object.values(positions).forEach(players => {
+      players.forEach(p => ids.add(p.playerId))
+    })
+    return ids
+  }, [positions])
+
+  const handleAddPlayer = useCallback((posKey: string, player: EnrichedPlayer) => {
+    if (!user) {
+      setShowAuthModal(true)
+      return
+    }
+
+    const newPlayer: PositionPlayer = {
+      playerName: player.Jugador,
+      playerId: player.Jugador,
+      team: player.Equipo,
+      ggScore: player.ggScore,
+      addedBy: user.id,
+      addedByName: userDisplayName,
+      addedAt: new Date().toISOString(),
+    }
+
+    setPositions(prev => addPlayerToPosition(prev, posKey, newPlayer))
+  }, [user, userDisplayName])
+
+  const handleRemovePlayer = useCallback((posKey: string, playerId: string) => {
+    setPositions(prev => removePlayerFromPosition(prev, posKey, playerId))
   }, [])
 
   const clearFormation = () => {
-    setPlayers({})
+    setPositions({})
+    setActiveFormation(null)
   }
 
-  const saveFormation = () => {
-    if (!formationName.trim()) return
-    const newFormation: SavedFormation = {
-      id: Date.now().toString(),
-      name: formationName.trim(),
+  const handleSave = async () => {
+    if (!user || !formationName.trim()) return
+    setSaving(true)
+
+    const saved = await saveFormation(
+      formationName.trim(),
       formation,
-      players: { ...players },
-      createdAt: new Date().toISOString(),
+      positions,
+      user.id,
+      userDisplayName,
+      true
+    )
+
+    if (saved) {
+      setSavedFormations(prev => [saved, ...prev])
+      setActiveFormation(saved)
+      setFormationName('')
+      setShowSaveModal(false)
     }
-    const updated = [...savedFormations, newFormation]
-    setSavedFormations(updated)
-    localStorage.setItem('savedFormations', JSON.stringify(updated))
-    setFormationName('')
-    setShowSaveModal(false)
+
+    setSaving(false)
   }
 
-  const loadFormation = (saved: SavedFormation) => {
-    setFormation(saved.formation)
-    setPlayers(saved.players)
+  const handleLoad = (f: FormationData) => {
+    setFormation(f.formation_type)
+    setPositions(f.positions || {})
+    setActiveFormation(f)
     setShowLoadModal(false)
   }
 
-  const deleteFormation = (id: string) => {
-    const updated = savedFormations.filter(f => f.id !== id)
-    setSavedFormations(updated)
-    localStorage.setItem('savedFormations', JSON.stringify(updated))
+  const handleDelete = async (id: string) => {
+    const success = await deleteFormation(id)
+    if (success) {
+      setSavedFormations(prev => prev.filter(f => f.id !== id))
+      if (activeFormation?.id === id) {
+        setActiveFormation(null)
+      }
+    }
   }
 
-  const filledCount = Object.values(players).filter(Boolean).length
+  const totalPlayers = Object.values(positions).reduce((sum, arr) => sum + arr.length, 0)
 
-  if (loading) return <LoadingSpinner fullScreen message="Cargando datos..." />
+  if (dataLoading) return <LoadingSpinner fullScreen message="Cargando datos..." />
 
   return (
     <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6">
@@ -400,7 +439,12 @@ export default function FormationPage() {
             Constructor de Formaciones
           </h1>
           <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
-            {filledCount}/11 posiciones · Toca una camiseta para ver opciones
+            {totalPlayers} jugadores · Hasta 3 por posición
+            {activeFormation && (
+              <span className="ml-2 text-brand-green">
+                · Editando: {activeFormation.name} <span className="text-apple-gray-400">(por {activeFormation.created_by_name})</span>
+              </span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -411,8 +455,14 @@ export default function FormationPage() {
             Cargar
           </button>
           <button
-            onClick={() => setShowSaveModal(true)}
-            disabled={filledCount === 0}
+            onClick={() => {
+              if (!user) {
+                setShowAuthModal(true)
+              } else {
+                setShowSaveModal(true)
+              }
+            }}
+            disabled={totalPlayers === 0}
             className="btn-apple-primary disabled:opacity-50"
           >
             Guardar
@@ -427,14 +477,14 @@ export default function FormationPage() {
       </div>
 
       <div className="flex gap-6 flex-wrap lg:flex-nowrap">
-        {/* Sidebar filters */}
-        <aside className="w-full lg:w-60 flex-shrink-0">
+        {/* Sidebar */}
+        <aside className="w-full lg:w-72 flex-shrink-0">
           <div className="card-apple p-5 space-y-5 sticky top-[4rem]">
             <div>
               <label className="block text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-2">Formación</label>
               <select
                 value={formation}
-                onChange={e => { setFormation(e.target.value); setPlayers({}) }}
+                onChange={e => { setFormation(e.target.value); setPositions({}); setActiveFormation(null) }}
                 className="input-apple"
               >
                 {Object.keys(FORMATIONS).map(f => (
@@ -442,135 +492,114 @@ export default function FormationPage() {
                 ))}
               </select>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-2">Filtrar por Liga</label>
-              <select
-                value={league}
-                onChange={e => setLeague(e.target.value)}
-                className="input-apple"
-              >
-                <option value="">Todas las ligas</option>
-                {leagues.map(l => <option key={l} value={l}>{l}</option>)}
-              </select>
-            </div>
 
-            {/* Age filter */}
             <div>
               <label className="block text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-2">
-                Edad: {minAge} - {maxAge} años
+                Ligas {selectedLeagues.length > 0 && <span className="text-brand-green">({selectedLeagues.length})</span>}
               </label>
-              <div className="space-y-3">
-                <div>
-                  <div className="flex items-center justify-between text-xs text-apple-gray-500 mb-1">
-                    <span>Mínima</span>
-                    <span className="font-medium text-apple-gray-700 dark:text-apple-gray-200">{minAge}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="16"
-                    max="40"
-                    value={minAge}
-                    onChange={e => {
-                      const val = parseInt(e.target.value)
-                      setMinAge(Math.min(val, maxAge - 1))
-                    }}
-                    className="w-full h-2 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-lg appearance-none cursor-pointer accent-brand-green"
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center justify-between text-xs text-apple-gray-500 mb-1">
-                    <span>Máxima</span>
-                    <span className="font-medium text-apple-gray-700 dark:text-apple-gray-200">{maxAge}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="16"
-                    max="40"
-                    value={maxAge}
-                    onChange={e => {
-                      const val = parseInt(e.target.value)
-                      setMaxAge(Math.max(val, minAge + 1))
-                    }}
-                    className="w-full h-2 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-lg appearance-none cursor-pointer accent-brand-green"
-                  />
-                </div>
-                {/* Quick presets */}
-                <div className="flex gap-1.5">
+              <div className="flex flex-wrap gap-1.5">
+                {leagues.map(l => (
                   <button
-                    onClick={() => { setMinAge(16); setMaxAge(21) }}
-                    className={`flex-1 py-1.5 text-xs rounded-lg transition-all ${
-                      minAge === 16 && maxAge === 21
+                    key={l}
+                    onClick={() => setSelectedLeagues(prev =>
+                      prev.includes(l) ? prev.filter(x => x !== l) : [...prev, l]
+                    )}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs transition-all ${
+                      selectedLeagues.includes(l)
                         ? 'bg-brand-green text-black font-medium'
                         : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600'
                     }`}
                   >
-                    Sub-21
+                    {l}
                   </button>
-                  <button
-                    onClick={() => { setMinAge(16); setMaxAge(23) }}
-                    className={`flex-1 py-1.5 text-xs rounded-lg transition-all ${
-                      minAge === 16 && maxAge === 23
-                        ? 'bg-brand-green text-black font-medium'
-                        : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600'
-                    }`}
-                  >
-                    Sub-23
-                  </button>
-                  <button
-                    onClick={() => { setMinAge(16); setMaxAge(40) }}
-                    className={`flex-1 py-1.5 text-xs rounded-lg transition-all ${
-                      minAge === 16 && maxAge === 40
-                        ? 'bg-brand-green text-black font-medium'
-                        : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600'
-                    }`}
-                  >
-                    Todos
-                  </button>
-                </div>
+                ))}
               </div>
             </div>
 
-            {/* Selected players list */}
             <div>
-              <label className="block text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-2">Equipo ({filledCount}/11)</label>
-              <div className="space-y-1 max-h-64 overflow-y-auto scrollbar-thin">
-                {currentFormation.positions.map(pos => {
-                  const player = players[pos.key]
-                  return (
-                    <div key={pos.key} className="flex items-center gap-2 text-xs py-1.5">
-                      <span className="w-10 text-apple-gray-400 font-medium">{pos.key}</span>
-                      {player ? (
-                        <span className="text-apple-gray-800 dark:text-white truncate flex-1">{player.Jugador}</span>
-                      ) : (
-                        <span className="text-apple-gray-400 italic">Vacío</span>
-                      )}
-                    </div>
-                  )
-                })}
+              <label className="block text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-2">Nacionalidad</label>
+              <select value={nationality} onChange={e => setNationality(e.target.value)} className="input-apple">
+                <option value="">Todas</option>
+                {nationalities.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-2">
+                Edad: {minAge} - {maxAge} anos
+              </label>
+              <div className="space-y-3">
+                <div>
+                  <div className="flex justify-between text-xs text-apple-gray-500 mb-1">
+                    <span>Min: {minAge}</span>
+                    <span>Max: {maxAge}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="15"
+                    max="40"
+                    value={minAge}
+                    onChange={e => setMinAge(Math.min(Number(e.target.value), maxAge - 1))}
+                    className="w-full h-2 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-lg appearance-none cursor-pointer accent-brand-green"
+                  />
+                  <input
+                    type="range"
+                    min="15"
+                    max="40"
+                    value={maxAge}
+                    onChange={e => setMaxAge(Math.max(Number(e.target.value), minAge + 1))}
+                    className="w-full h-2 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-lg appearance-none cursor-pointer accent-brand-green mt-2"
+                  />
+                </div>
+                <div className="flex gap-1.5">
+                  {[
+                    { label: 'Sub-21', min: 15, max: 21 },
+                    { label: 'Sub-23', min: 15, max: 23 },
+                    { label: 'Todos', min: 15, max: 40 },
+                  ].map(preset => (
+                    <button
+                      key={preset.label}
+                      onClick={() => { setMinAge(preset.min); setMaxAge(preset.max) }}
+                      className={`flex-1 py-1.5 text-xs rounded-lg transition-all ${
+                        minAge === preset.min && maxAge === preset.max
+                          ? 'bg-brand-green text-black font-medium'
+                          : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
         </aside>
 
         {/* Field */}
-        <div className="flex-1">
-          <div className="bg-gradient-to-b from-emerald-600 to-emerald-700 rounded-apple-xl p-4 relative aspect-[3/4] max-w-lg mx-auto shadow-apple-lg">
+        <div className="flex-1 flex items-start justify-center">
+          <div className="bg-gradient-to-b from-emerald-600 to-emerald-700 rounded-2xl p-6 relative aspect-[3/4] w-full max-w-xl shadow-2xl">
             {/* Field markings */}
             <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 130" preserveAspectRatio="none">
-              <rect x="2" y="2" width="96" height="126" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="0.5" />
-              <circle cx="50" cy="65" r="12" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="0.3" />
-              <line x1="2" y1="65" x2="98" y2="65" stroke="rgba(255,255,255,0.4)" strokeWidth="0.3" />
-              <rect x="20" y="2" width="60" height="20" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="0.3" />
-              <rect x="30" y="2" width="40" height="8" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="0.3" />
-              <rect x="20" y="108" width="60" height="20" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="0.3" />
-              <rect x="30" y="120" width="40" height="8" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="0.3" />
-              <circle cx="50" cy="15" r="0.8" fill="rgba(255,255,255,0.4)" />
-              <circle cx="50" cy="115" r="0.8" fill="rgba(255,255,255,0.4)" />
+              <rect x="2" y="2" width="96" height="126" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="0.5" />
+              <circle cx="50" cy="65" r="12" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="0.4" />
+              <circle cx="50" cy="65" r="1" fill="rgba(255,255,255,0.5)" />
+              <line x1="2" y1="65" x2="98" y2="65" stroke="rgba(255,255,255,0.4)" strokeWidth="0.4" />
+              <rect x="20" y="2" width="60" height="20" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="0.4" />
+              <rect x="30" y="2" width="40" height="8" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="0.4" />
+              <rect x="20" y="108" width="60" height="20" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="0.4" />
+              <rect x="30" y="120" width="40" height="8" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="0.4" />
+              {/* Corner arcs */}
+              <path d="M 2 6 Q 2 2 6 2" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="0.3" />
+              <path d="M 94 2 Q 98 2 98 6" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="0.3" />
+              <path d="M 2 124 Q 2 128 6 128" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="0.3" />
+              <path d="M 94 128 Q 98 128 98 124" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="0.3" />
             </svg>
 
-            {/* Players */}
+            {/* Position markers */}
             {currentFormation.positions.map(pos => {
-              const player = players[pos.key]
+              const playersInPos = positions[pos.key] || []
+              const hasPlayers = playersInPos.length > 0
+
               return (
                 <button
                   key={pos.key}
@@ -578,28 +607,39 @@ export default function FormationPage() {
                   className="absolute transform -translate-x-1/2 -translate-y-1/2 group"
                   style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
                 >
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg ${
-                    player
-                      ? 'bg-white text-apple-gray-900'
-                      : 'bg-white/20 border-2 border-dashed border-white/60 text-white hover:bg-white/30'
-                  }`}>
-                    {player ? (
-                      <span className="text-[10px] font-bold text-center leading-tight px-1 truncate">
-                        {player.Jugador.split(' ').slice(-1)[0]}
-                      </span>
-                    ) : (
-                      <span className="text-xs font-medium">{pos.key}</span>
+                  <div className={`relative transition-all duration-200 ${hasPlayers ? '' : 'hover:scale-110'}`}>
+                    {/* Main circle */}
+                    <div className={`w-14 h-14 rounded-full flex items-center justify-center shadow-xl transition-all ${
+                      hasPlayers
+                        ? 'bg-white text-apple-gray-900 ring-2 ring-white/50'
+                        : 'bg-white/15 border-2 border-dashed border-white/50 text-white/80 hover:bg-white/25 hover:border-white/70'
+                    }`}>
+                      {hasPlayers ? (
+                        <span className="text-xl font-bold">{playersInPos.length}</span>
+                      ) : (
+                        <span className="text-sm font-semibold">{pos.key}</span>
+                      )}
+                    </div>
+
+                    {/* Player badges */}
+                    {hasPlayers && (
+                      <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-0.5">
+                        {playersInPos.slice(0, 3).map((p, i) => (
+                          <div
+                            key={p.playerId}
+                            className="whitespace-nowrap bg-white dark:bg-apple-gray-800 rounded-md px-2 py-0.5 shadow-md text-xs"
+                          >
+                            <span className="font-semibold text-apple-gray-800 dark:text-white">
+                              {p.playerName.split(' ').slice(-1)[0]}
+                            </span>
+                            <span className={`ml-1.5 font-bold ${(p.ggScore ?? 0) >= 60 ? 'text-brand-green' : (p.ggScore ?? 0) >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
+                              {p.ggScore?.toFixed(0)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
-                  {player && (
-                    <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap">
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md shadow-sm ${
-                        (player.ggScore ?? 0) >= 60 ? 'bg-emerald-500' : (player.ggScore ?? 0) >= 40 ? 'bg-amber-500' : 'bg-red-500'
-                      } text-white`}>
-                        {player.ggScore?.toFixed(0)}
-                      </span>
-                    </div>
-                  )}
                 </button>
               )
             })}
@@ -611,13 +651,17 @@ export default function FormationPage() {
       {selectedPos && (
         <PlayerSelector
           positionKey={selectedPos}
-          league={league}
+          selectedLeagues={selectedLeagues}
+          nationality={nationality}
           minAge={minAge}
           maxAge={maxAge}
           allPlayers={allPlayers}
-          currentPlayer={players[selectedPos] || null}
-          onSelect={(p) => handleSelectPlayer(selectedPos, p)}
+          currentPlayers={positions[selectedPos] || []}
+          allSelectedPlayerIds={allSelectedPlayerIds}
+          onAddPlayer={(p) => handleAddPlayer(selectedPos, p)}
+          onRemovePlayer={(id) => handleRemovePlayer(selectedPos, id)}
           onClose={() => setSelectedPos(null)}
+          userName={userDisplayName}
         />
       )}
 
@@ -625,20 +669,28 @@ export default function FormationPage() {
       {showSaveModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in" onClick={() => setShowSaveModal(false)}>
           <div className="bg-white dark:bg-apple-gray-800 rounded-apple-xl p-6 max-w-sm w-full shadow-apple-lg animate-scale-in" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-apple-gray-800 dark:text-white mb-4">Guardar formación</h3>
+            <h3 className="text-lg font-bold text-apple-gray-800 dark:text-white mb-2">Guardar formación</h3>
+            <p className="text-sm text-apple-gray-500 mb-4">
+              Guardando como <span className="font-medium text-brand-green">{userDisplayName}</span>
+            </p>
             <input
               type="text"
               value={formationName}
               onChange={e => setFormationName(e.target.value)}
               placeholder="Nombre de la formación..."
               className="input-apple mb-4"
+              autoFocus
             />
             <div className="flex gap-2">
               <button onClick={() => setShowSaveModal(false)} className="btn-apple-secondary flex-1">
                 Cancelar
               </button>
-              <button onClick={saveFormation} disabled={!formationName.trim()} className="btn-apple-primary flex-1 disabled:opacity-50">
-                Guardar
+              <button
+                onClick={handleSave}
+                disabled={!formationName.trim() || saving}
+                className="btn-apple-primary flex-1 disabled:opacity-50"
+              >
+                {saving ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
           </div>
@@ -648,7 +700,7 @@ export default function FormationPage() {
       {/* Load modal */}
       {showLoadModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in" onClick={() => setShowLoadModal(false)}>
-          <div className="bg-white dark:bg-apple-gray-800 rounded-apple-xl max-w-md w-full max-h-[70vh] overflow-hidden shadow-apple-lg animate-scale-in" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-apple-gray-800 rounded-apple-xl max-w-lg w-full max-h-[80vh] overflow-hidden shadow-apple-lg animate-scale-in" onClick={e => e.stopPropagation()}>
             <div className="p-5 border-b border-apple-gray-200 dark:border-apple-gray-700 flex items-center justify-between">
               <h3 className="text-lg font-bold text-apple-gray-800 dark:text-white">Formaciones guardadas</h3>
               <button onClick={() => setShowLoadModal(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-apple-gray-400 hover:text-apple-gray-600 dark:hover:text-apple-gray-200 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700 transition-colors">
@@ -657,35 +709,62 @@ export default function FormationPage() {
                 </svg>
               </button>
             </div>
-            <div className="p-4 max-h-[50vh] overflow-y-auto">
-              {savedFormations.length === 0 ? (
+            <div className="p-4 max-h-[60vh] overflow-y-auto">
+              {loadingFormations ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="w-6 h-6 border-2 border-brand-green border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : savedFormations.length === 0 ? (
                 <p className="text-center text-apple-gray-500 py-8">No hay formaciones guardadas</p>
               ) : (
                 <div className="space-y-2">
-                  {savedFormations.map(f => (
-                    <div key={f.id} className="flex items-center justify-between p-4 bg-apple-gray-50 dark:bg-apple-gray-700 rounded-apple">
-                      <div>
-                        <p className="font-medium text-apple-gray-800 dark:text-white text-sm">{f.name}</p>
-                        <p className="text-xs text-apple-gray-500">{f.formation} · {Object.values(f.players).filter(Boolean).length} jugadores</p>
+                  {savedFormations.map(f => {
+                    const playerCount = Object.values(f.positions || {}).reduce((sum, arr) => sum + (arr?.length || 0), 0)
+                    const isOwn = user?.id === f.created_by
+
+                    return (
+                      <div key={f.id} className="flex items-center justify-between p-4 bg-apple-gray-50 dark:bg-apple-gray-700 rounded-apple">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">{f.name}</p>
+                            {isOwn && (
+                              <span className="text-2xs bg-brand-green/20 text-brand-green px-1.5 py-0.5 rounded font-medium">Tuya</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-apple-gray-500 mt-0.5">
+                            {f.formation_type} · {playerCount} jugadores · por <span className="font-medium">{f.created_by_name}</span>
+                          </p>
+                        </div>
+                        <div className="flex gap-1.5 ml-3">
+                          <button
+                            onClick={() => handleLoad(f)}
+                            className="px-3 py-1.5 text-xs bg-brand-green text-black font-medium rounded-lg hover:bg-green-400 transition-colors"
+                          >
+                            Cargar
+                          </button>
+                          {isOwn && (
+                            <button
+                              onClick={() => handleDelete(f.id)}
+                              className="w-8 h-8 flex items-center justify-center text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex gap-1.5">
-                        <button onClick={() => loadFormation(f)} className="px-3 py-1.5 text-xs bg-brand-green text-black font-medium rounded-lg hover:bg-green-400 transition-colors">
-                          Cargar
-                        </button>
-                        <button onClick={() => deleteFormation(f.id)} className="w-8 h-8 flex items-center justify-center text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
           </div>
         </div>
       )}
+
+      {/* Auth modal */}
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
     </div>
   )
 }

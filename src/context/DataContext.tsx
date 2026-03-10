@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { loadAllData, type MasDatosEntry, type SeguimientoMetricsPlayer } from '@/services/csvService'
 import { computeGGScores, normalizeName, parseMarketValue, formatMarketValue, parseContractDate, monthsBetween, getNumericValue } from '@/utils/scoring'
 import { POSITION_MAP, SCORING_CONFIG } from '@/constants/scoring'
-import type { AppData, EnrichedPlayer, EvolutionEntry, TransfermarktData, MonitoringPlayer, MarketValueHistoryEntry } from '@/types'
+import type { AppData, EnrichedPlayer, EvolutionEntry, TransfermarktData, MonitoringPlayer, MarketValueHistoryEntry, GPSEntry } from '@/types'
 
 const DataContext = createContext<AppData | null>(null)
 
@@ -967,6 +967,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     evolution: [],
     subjectiveMetrics: [],
     marketValueHistory: [],
+    gpsData: [],
     loading: true,
     error: null,
     lastUpdated: null,
@@ -1036,6 +1037,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           evolution: raw.evolution,
           subjectiveMetrics: raw.subjectiveMetrics,
           marketValueHistory: raw.marketValueHistory,
+          gpsData: raw.gpsData,
           loading: false,
           error: null,
           lastUpdated: new Date(),

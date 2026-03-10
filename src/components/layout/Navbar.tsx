@@ -1,18 +1,25 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useTheme } from '@/context/ThemeContext'
+import { useAuth } from '@/context/AuthContext'
 import ThemeToggle from './ThemeToggle'
+import AuthModal from '@/components/auth/AuthModal'
 
 const navLinks = [
   { to: '/', label: 'Scout Externo', icon: 'globe', exact: true },
   { to: '/interno', label: 'Scout Interno', icon: 'users' },
   { to: '/dashboard', label: 'Dashboard', icon: 'chart' },
   { to: '/seguimiento', label: 'Seguimiento', icon: 'eye' },
+  { to: '/evaluar', label: 'Reporte', icon: 'clipboard' },
+]
+
+const talentSearchLinks = [
   { to: '/oportunidades', label: 'Oportunidades', icon: 'star' },
   { to: '/similares', label: 'Similares', icon: 'search' },
   { to: '/comparacion', label: 'Comparaciones', icon: 'compare' },
   { to: '/formacion', label: 'Formaciones', icon: 'layout' },
-  { to: '/dispersion', label: 'Dispersión', icon: 'scatter' },
+  { to: '/dispersion', label: 'Dispersion', icon: 'scatter' },
+  { to: '/radar', label: 'Detector', icon: 'radar' },
 ]
 
 function NavIcon({ icon, className = "w-5 h-5" }: { icon: string; className?: string }) {
@@ -26,6 +33,8 @@ function NavIcon({ icon, className = "w-5 h-5" }: { icon: string; className?: st
     compare: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />,
     layout: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />,
     scatter: <><circle cx="7" cy="17" r="2" strokeWidth={1.5} /><circle cx="12" cy="7" r="2" strokeWidth={1.5} /><circle cx="17" cy="12" r="2" strokeWidth={1.5} /><circle cx="7" cy="7" r="2" strokeWidth={1.5} /><circle cx="17" cy="17" r="2" strokeWidth={1.5} /></>,
+    radar: <><circle cx="12" cy="12" r="9" strokeWidth={1.5} /><circle cx="12" cy="12" r="5" strokeWidth={1.5} /><line x1="12" y1="3" x2="12" y2="21" strokeWidth={1.5} /><line x1="3" y1="12" x2="21" y2="12" strokeWidth={1.5} /></>,
+    clipboard: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />,
   }
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -36,13 +45,36 @@ function NavIcon({ icon, className = "w-5 h-5" }: { icon: string; className?: st
 
 export default function Navbar() {
   const { theme } = useTheme()
+  const { user, userDisplayName, signOut, loading: authLoading } = useAuth()
   const location = useLocation()
   const [isOpen, setIsOpen] = useState(false)
+  const [showAuthModal, setShowAuthModal] = useState(false)
+  const [showUserMenu, setShowUserMenu] = useState(false)
+  const [showTalentMenu, setShowTalentMenu] = useState(false)
+  const userMenuRef = useRef<HTMLDivElement>(null)
+  const talentMenuRef = useRef<HTMLDivElement>(null)
+
+  // Check if current route is a talent search route
+  const isTalentRoute = talentSearchLinks.some(l => location.pathname === l.to)
 
   // Close menu on route change
   useEffect(() => {
     setIsOpen(false)
   }, [location.pathname])
+
+  // Close menus on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false)
+      }
+      if (talentMenuRef.current && !talentMenuRef.current.contains(event.target as Node)) {
+        setShowTalentMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   // Prevent scroll when menu is open
   useEffect(() => {
@@ -95,11 +127,111 @@ export default function Navbar() {
                 {link.label}
               </NavLink>
             ))}
+
+            {/* Talent Search Dropdown */}
+            <div className="relative" ref={talentMenuRef}>
+              <button
+                onClick={() => setShowTalentMenu(!showTalentMenu)}
+                className={`flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                  isTalentRoute
+                    ? 'bg-brand-green text-gray-900 shadow-sm'
+                    : 'text-apple-gray-600 dark:text-apple-gray-300 hover:text-apple-gray-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-apple-gray-700/50'
+                }`}
+              >
+                Busqueda
+                <svg className={`w-3.5 h-3.5 transition-transform ${showTalentMenu ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showTalentMenu && (
+                <div className="absolute top-full left-0 mt-2 w-48 bg-white dark:bg-apple-gray-800 rounded-xl shadow-xl border border-apple-gray-200 dark:border-apple-gray-700 py-1 animate-scale-in origin-top-left z-50">
+                  {talentSearchLinks.map(link => (
+                    <NavLink
+                      key={link.to}
+                      to={link.to}
+                      onClick={() => setShowTalentMenu(false)}
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                          isActive
+                            ? 'bg-brand-green/10 text-brand-green font-medium'
+                            : 'text-apple-gray-700 dark:text-apple-gray-300 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700'
+                        }`
+                      }
+                    >
+                      <NavIcon icon={link.icon} className="w-4 h-4" />
+                      {link.label}
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+            </div>
           </nav>
 
           {/* Right side */}
           <div className="flex items-center gap-2">
             <ThemeToggle />
+
+            {/* User menu */}
+            {!authLoading && (
+              user ? (
+                <div className="relative" ref={userMenuRef}>
+                  <button
+                    onClick={() => setShowUserMenu(!showUserMenu)}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-apple-gray-100 dark:bg-apple-gray-800 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-700 transition-colors"
+                  >
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-brand-green to-emerald-600 flex items-center justify-center text-white text-sm font-semibold">
+                      {userDisplayName.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="hidden sm:block text-sm font-medium text-apple-gray-700 dark:text-apple-gray-300 max-w-24 truncate">
+                      {userDisplayName}
+                    </span>
+                    <svg className="w-4 h-4 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {/* Dropdown */}
+                  {showUserMenu && (
+                    <div className="absolute right-0 mt-2 w-52 bg-white dark:bg-apple-gray-800 rounded-apple shadow-apple-lg dark:shadow-apple-dark-md border border-apple-gray-200 dark:border-apple-gray-700 py-1 animate-scale-in origin-top-right">
+                      <div className="px-4 py-2 border-b border-apple-gray-100 dark:border-apple-gray-700">
+                        <p className="text-sm font-medium text-apple-gray-800 dark:text-white truncate">{userDisplayName}</p>
+                        <p className="text-xs text-apple-gray-500 truncate">{user.email}</p>
+                      </div>
+                      <NavLink
+                        to="/evaluaciones"
+                        onClick={() => setShowUserMenu(false)}
+                        className="flex items-center gap-2 w-full px-4 py-2 text-left text-sm text-apple-gray-700 dark:text-apple-gray-300 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                        Gestionar evaluaciones
+                      </NavLink>
+                      <button
+                        onClick={() => {
+                          signOut()
+                          setShowUserMenu(false)
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700 transition-colors"
+                      >
+                        Cerrar sesion
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowAuthModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-green hover:bg-emerald-600 text-white text-sm font-medium transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span className="hidden sm:inline">Ingresar</span>
+                </button>
+              )
+            )}
 
             {/* Hamburger button */}
             <button
@@ -118,6 +250,9 @@ export default function Navbar() {
           </div>
         </div>
       </header>
+
+      {/* Auth Modal */}
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
 
       {/* Mobile menu overlay */}
       <div
@@ -152,6 +287,31 @@ export default function Navbar() {
                 {link.label}
               </NavLink>
             ))}
+          </div>
+
+          {/* Talent Search Section */}
+          <div className="mt-4 pt-4 border-t border-apple-gray-200 dark:border-apple-gray-800">
+            <p className="px-4 mb-2 text-xs font-semibold text-apple-gray-400 uppercase tracking-wider">
+              Busqueda de Talento
+            </p>
+            <div className="space-y-1">
+              {talentSearchLinks.map(link => (
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
+                      isActive
+                        ? 'bg-brand-green text-gray-900'
+                        : 'text-apple-gray-700 dark:text-apple-gray-300 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-800'
+                    }`
+                  }
+                >
+                  <NavIcon icon={link.icon} className="w-5 h-5" />
+                  {link.label}
+                </NavLink>
+              ))}
+            </div>
           </div>
 
           {/* Footer in menu */}

@@ -23,6 +23,7 @@ export const SHEET_URLS = {
   evolucion: buildSheetUrl('/spreadsheets/d/e/2PACX-1vS7cuAywNQtcMc1R7Nzai9vUHHv8ZK09fTcm5GbwWD2_u0pRUeBRsVu_6SjLbdnMIL5SAJy-Liwn1yd/pub?gid=1395066371&single=true&output=csv'),
   metricas: buildSheetUrl('/spreadsheets/d/e/2PACX-1vS7cuAywNQtcMc1R7Nzai9vUHHv8ZK09fTcm5GbwWD2_u0pRUeBRsVu_6SjLbdnMIL5SAJy-Liwn1yd/pub?gid=2041650226&single=true&output=csv'),
   valorMercadoHistorico: buildSheetUrl('/spreadsheets/d/e/2PACX-1vSneBjGlw2I3SyXV-uw1V8Cs_O4lbiQw39melKEZJNhunpshakPrn7AZQBN2L8N9Yw_HA-EeVOt3qvf/pub?gid=1121324076&single=true&output=csv'),
+  gps: buildSheetUrl('/spreadsheets/d/e/2PACX-1vSneBjGlw2I3SyXV-uw1V8Cs_O4lbiQw39melKEZJNhunpshakPrn7AZQBN2L8N9Yw_HA-EeVOt3qvf/pub?gid=1233910424&single=true&output=csv'),
 } as const
 
 // ─── COLUMN ALIASES ───────────────────────────────────────────────────────────
@@ -477,3 +478,30 @@ export const METRIC_CATEGORIES: Record<string, string[]> = {
 export const ALL_METRICS: string[] = Array.from(new Set(
   Object.values(METRIC_CATEGORIES).flat()
 ))
+
+// ─── LEAGUE ORDERING ──────────────────────────────────────────────────────────
+// Leagues available in the platform, ordered by priority
+export const ORDERED_LEAGUES = [
+  'Liga Argentina',
+  '2° Argentina',
+  'Liga Uruguay',
+  'Liga Chile',
+  'Liga Paraguay',
+  'Liga Colombia',
+  '2° Colombia',
+] as const
+
+// Helper to sort leagues by priority (unknown leagues go to the end)
+export function sortLeaguesByPriority(leagues: string[]): string[] {
+  return leagues.sort((a, b) => {
+    const indexA = ORDERED_LEAGUES.indexOf(a as typeof ORDERED_LEAGUES[number])
+    const indexB = ORDERED_LEAGUES.indexOf(b as typeof ORDERED_LEAGUES[number])
+    // If both are in the list, sort by index
+    if (indexA !== -1 && indexB !== -1) return indexA - indexB
+    // If only one is in the list, that one comes first
+    if (indexA !== -1) return -1
+    if (indexB !== -1) return 1
+    // Both unknown, sort alphabetically
+    return a.localeCompare(b)
+  })
+}

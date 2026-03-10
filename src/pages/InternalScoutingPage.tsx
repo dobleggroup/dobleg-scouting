@@ -8,6 +8,7 @@ import EmptyState from '@/components/ui/EmptyState'
 import { FILTER_POSITION_MAP } from '@/constants/scoring'
 import { parseContractDate } from '@/utils/scoring'
 import { exportTableToPdf } from '@/utils/pdfExport'
+import { fuzzyMatch } from '@/lib/search'
 import type { FilterState, EnrichedPlayer } from '@/types'
 
 const DEFAULT_FILTERS: FilterState = {
@@ -49,13 +50,15 @@ function saveFiltersToStorage(filters: FilterState): void {
 
 function applyFilters(players: EnrichedPlayer[], filters: FilterState): EnrichedPlayer[] {
   return players.filter(p => {
-    if (filters.search && !p.Jugador.toLowerCase().includes(filters.search.toLowerCase())) return false
+    // Smart search for player name (handles accents, case, partial matches)
+    if (filters.search && !fuzzyMatch(filters.search, p.Jugador)) return false
     if (filters.positions.length > 0) {
       const rawPos = (p['Posición específica'] || p['Posición'])?.trim() ?? ''
       const posKey = FILTER_POSITION_MAP[rawPos] ?? ''
       if (!filters.positions.includes(posKey)) return false
     }
-    if (filters.teamSearch && !p.Equipo.toLowerCase().includes(filters.teamSearch.toLowerCase())) return false
+    // Smart search for team name
+    if (filters.teamSearch && !fuzzyMatch(filters.teamSearch, p.Equipo)) return false
     if (filters.minAge > 0 && p.ageNum < filters.minAge) return false
     if (filters.maxAge > 0 && p.ageNum > filters.maxAge) return false
     if (filters.minMinutes > 0 && p.minutesPlayed < filters.minMinutes) return false

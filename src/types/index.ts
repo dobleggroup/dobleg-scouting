@@ -124,6 +124,35 @@ export interface MarketValueHistoryEntry {
   edad: number
 }
 
+// ─── GPS / PHYSICAL DATA ─────────────────────────────────────────────────────
+
+export interface GPSEntry {
+  Jugador: string
+  Fecha: Date
+  Equipo: string
+  Rival: string
+  Resultado: string
+  Competencia: string
+  Minutos: number
+  Distancia: number           // meters
+  MetrosPorMin: number        // m/min
+  Dist16_21: number           // distance at 16-21 km/h
+  Dist21_24: number           // distance at 21-24 km/h
+  DistOver24: number          // distance above 24 km/h
+  HSR: number                 // High Speed Running >21 km/h
+  VelMax: number              // max velocity km/h
+  Sprints: number
+  AltaIntensidad: number      // % high intensity
+  Acc2: number                // accelerations >2 m/s²
+  Dec2: number                // decelerations >2 m/s²
+  Acc3: number                // accelerations >3 m/s²
+  Dec3: number                // decelerations >3 m/s²
+  Acc4: number                // accelerations >4 m/s²
+  Dec4: number                // decelerations >4 m/s²
+  PlayerLoad: number
+  RHIEBouts: number           // Repeated High Intensity Efforts
+}
+
 // ─── ENRICHED PLAYER ─────────────────────────────────────────────────────────
 
 export interface EnrichedPlayer {
@@ -204,6 +233,7 @@ export interface AppData {
   evolution: EvolutionEntry[]
   subjectiveMetrics: SubjectiveMetric[]
   marketValueHistory: MarketValueHistoryEntry[]
+  gpsData: GPSEntry[]
   loading: boolean
   error: string | null
   lastUpdated: Date | null

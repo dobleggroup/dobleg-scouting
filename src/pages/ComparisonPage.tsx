@@ -3,6 +3,7 @@ import { useData } from '@/context/DataContext'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import ComparisonView from '@/components/comparison/ComparisonView'
 import { exportComparisonToPdf } from '@/utils/pdfExport'
+import { smartSearch } from '@/lib/search'
 import type { EnrichedPlayer } from '@/types'
 
 const PLAYER_COLORS = ['#22C55E', '#3B82F6', '#F59E0B']
@@ -25,14 +26,9 @@ function PlayerSearch({ players, selected, onSelect, color, label, leagues }: Pl
   const [playerFilter, setPlayerFilter] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
 
-  // Search results (direct name search)
+  // Search results (direct name search) - using smart search
   const searchResults = useMemo(() => {
-    if (!searchText.trim()) return []
-    const s = searchText.toLowerCase()
-    return players
-      .filter(p => p.Jugador.toLowerCase().includes(s))
-      .sort((a, b) => (b.ggScore ?? 0) - (a.ggScore ?? 0))
-      .slice(0, 10)
+    return smartSearch(players, searchText, p => `${p.Jugador} ${p.Equipo}`, 10)
   }, [players, searchText])
 
   // Filtered teams based on league selection

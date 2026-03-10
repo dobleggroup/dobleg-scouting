@@ -8,6 +8,7 @@ import PlayerRadarChart from '@/components/charts/PlayerRadarChart'
 import EvolutionChart from '@/components/charts/EvolutionChart'
 import MarketValueChart from '@/components/charts/MarketValueChart'
 import GaugeScore from '@/components/charts/GaugeScore'
+import GPSTab from '@/components/charts/GPSTab'
 import ExportPDFModal from '@/components/ui/ExportPDFModal'
 import { exportPlayerToPdfFull } from '@/utils/pdfExport'
 import { normalizeName } from '@/utils/scoring'
@@ -337,7 +338,7 @@ export default function PlayerDetailPage() {
   const [searchParams] = useSearchParams()
   const source = (searchParams.get('source') ?? 'externo') as 'externo' | 'interno' | 'seguimiento'
   const overridePosition = searchParams.get('pos')
-  const { external, internal, monitoring, normalized, evolution, subjectiveMetrics, marketValueHistory, loading, error } = useData()
+  const { external, internal, monitoring, normalized, evolution, subjectiveMetrics, marketValueHistory, gpsData, loading, error } = useData()
   const [activeTab, setActiveTab] = useState('General')
   const [comparisonLeague, setComparisonLeague] = useState<string>('all')
   const [showExportModal, setShowExportModal] = useState(false)
@@ -404,6 +405,29 @@ export default function PlayerDetailPage() {
     if (!player || source !== 'interno') return ''
     return (player as EnrichedPlayer & { jugadorSK?: string }).jugadorSK ?? ''
   }, [player, source])
+
+  // Filter GPS data for the current player
+  const playerGpsData = useMemo(() => {
+    if (!player || source !== 'interno') return []
+    const playerNameNorm = normalizeName(player.Jugador)
+    return gpsData.filter(entry => {
+      const entryNameNorm = normalizeName(entry.Jugador)
+      // Match by exact name or partial name (handle abbreviated names)
+      if (entryNameNorm === playerNameNorm) return true
+      // Try matching by last name if one is abbreviated
+      const playerParts = playerNameNorm.split(' ')
+      const entryParts = entryNameNorm.split(' ')
+      const playerLast = playerParts[playerParts.length - 1]
+      const entryLast = entryParts[entryParts.length - 1]
+      if (playerLast === entryLast && playerParts.length > 0 && entryParts.length > 0) {
+        // Check if first initial matches
+        const playerInit = playerParts[0]?.[0] ?? ''
+        const entryInit = entryParts[0]?.[0] ?? ''
+        return playerInit === entryInit
+      }
+      return false
+    })
+  }, [player, source, gpsData])
 
   // Calculate average score for same position (for comparison)
   const positionAverageScore = useMemo(() => {
@@ -489,7 +513,7 @@ export default function PlayerDetailPage() {
 
   // Define tabs based on source
   const tabs = source === 'interno'
-    ? ['General', 'Radar', 'Valor', 'Evolución', 'Métricas']
+    ? ['General', 'Radar', 'Físico', 'Valor', 'Evolución', 'Métricas']
     : ['General', 'Radar', 'Métricas']
 
   // Compute radar data for PDF export
@@ -994,6 +1018,16 @@ export default function PlayerDetailPage() {
                     {comparisonLeague !== 'all' ? ` en ${comparisonLeague}` : ' en toda la base de datos'}.
                   </p>
                 </div>
+              </div>
+            )}
+
+            {/* FÍSICO / GPS TAB */}
+            {activeTab === 'Físico' && source === 'interno' && (
+              <div className="animate-fade-in" id="tab-content-gps">
+                <GPSTab
+                  gpsEntries={playerGpsData}
+                  playerName={player.Jugador}
+                />
               </div>
             )}
 

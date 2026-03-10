@@ -1,12 +1,15 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useData } from '@/context/DataContext'
-import { useMonitoringStatus, STATUS_CONFIG } from '@/hooks/useMonitoringStatus'
+import { useAuth } from '@/context/AuthContext'
+import { useMonitoringStatus, STATUS_CONFIG, formatStatusWithScout } from '@/hooks/useMonitoringStatus'
+import type { MonitoringStatusRecord } from '@/services/monitoringService'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import EmptyState from '@/components/ui/EmptyState'
 import ScoreBar from '@/components/ui/ScoreBar'
-import ScoreEvolutionMini from '@/components/charts/ScoreEvolutionMini'
+import AuthModal from '@/components/auth/AuthModal'
 import { SELECTABLE_METRICS } from '@/components/filters/FilterSidebar'
+// ScoreEvolutionMini removed - now showing status history instead
 import type { MonitoringPlayer, ManagementStatus } from '@/types'
 
 // ─── FILTER SECTION COMPONENT ────────────────────────────────────────────────
@@ -34,40 +37,79 @@ function FilterSection({ title, children, defaultOpen = true }: { title: string;
 // ─── STATUS BADGE COMPONENT ──────────────────────────────────────────────────
 
 function StatusBadge({
-  status,
+  statusRecord,
   playerId,
-  onStatusChange
+  onStatusChange,
+  requiresAuth,
+  onAuthRequired,
+  onStatusChanged,
 }: {
-  status: ManagementStatus
+  statusRecord: MonitoringStatusRecord | null
   playerId: string
-  onStatusChange: (id: string, status: ManagementStatus) => void
+  onStatusChange: (id: string, status: ManagementStatus) => Promise<boolean>
+  requiresAuth: boolean
+  onAuthRequired: () => void
+  onStatusChanged?: () => void
 }) {
   const [isOpen, setIsOpen] = useState(false)
+  const [isUpdating, setIsUpdating] = useState(false)
+  const status: ManagementStatus = statusRecord?.status || 'en_seguimiento'
   const config = STATUS_CONFIG[status]
+
+  const handleChange = async (newStatus: ManagementStatus) => {
+    if (requiresAuth) {
+      onAuthRequired()
+      setIsOpen(false)
+      return
+    }
+    if (newStatus === status) {
+      setIsOpen(false)
+      return
+    }
+    setIsUpdating(true)
+    const success = await onStatusChange(playerId, newStatus)
+    setIsUpdating(false)
+    setIsOpen(false)
+    if (success && onStatusChanged) {
+      onStatusChanged()
+    }
+  }
 
   return (
     <div className="relative">
       <button
         onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen) }}
-        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${config.bgColor} ${config.color} hover:opacity-80 whitespace-nowrap`}
+        disabled={isUpdating}
+        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${config.bgColor} ${config.color} hover:opacity-80 whitespace-nowrap disabled:opacity-50`}
       >
         {config.label}
-        <svg className="inline-block w-3.5 h-3.5 ml-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="inline-block w-3.5 h-3.5 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
 
+      {/* Show who changed it - only for non-default statuses */}
+      {statusRecord?.changed_by_name && status !== 'en_seguimiento' && (
+        <p className="text-2xs text-apple-gray-400 mt-0.5 truncate max-w-[140px]">
+          por {statusRecord.changed_by_name}
+        </p>
+      )}
+
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-apple-gray-800 rounded-xl shadow-xl border border-apple-gray-200 dark:border-apple-gray-700 py-1.5 min-w-[160px]">
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+          <div className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-apple-gray-800 rounded-xl shadow-xl border border-apple-gray-200 dark:border-apple-gray-700 py-1.5 min-w-[180px]">
+            {requiresAuth && (
+              <p className="px-4 py-2 text-xs text-apple-gray-500 border-b border-apple-gray-100 dark:border-apple-gray-700">
+                Inicia sesion para cambiar
+              </p>
+            )}
             {(Object.entries(STATUS_CONFIG) as [ManagementStatus, typeof config][]).map(([key, cfg]) => (
               <button
                 key={key}
                 onClick={(e) => {
                   e.stopPropagation()
-                  onStatusChange(playerId, key)
-                  setIsOpen(false)
+                  handleChange(key)
                 }}
                 className={`w-full px-4 py-2 text-left text-sm hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700 transition-colors ${
                   key === status ? 'font-semibold' : ''
@@ -226,12 +268,14 @@ function saveFilters(filters: MonitoringFilters): void {
 export default function MonitoringPage() {
   const navigate = useNavigate()
   const { monitoring, loading, error } = useData()
+  const { user } = useAuth()
   const {
     getPlayerStatus,
     setPlayerStatus,
-    getScoreTrend,
-    syncScores
+    requiresAuth,
+    loading: statusLoading,
   } = useMonitoringStatus()
+  const [showAuthModal, setShowAuthModal] = useState(false)
 
   // Load persisted filters on mount
   const savedFilters = loadFilters()
@@ -260,19 +304,6 @@ export default function MonitoringPage() {
     })
   }, [search, posFilters, ligaFilters, clubSearch, rolFilter, repreFilter, statusFilter, sortByScore, sortByOpportunity, pie, minHeight, maxHeight, selectedMetrics])
 
-  // Sync scores to localStorage on load
-  useEffect(() => {
-    if (monitoring.length > 0) {
-      const scoresToSync = monitoring
-        .filter(p => p.ggScore !== null && p.ggScore !== undefined)
-        .map(p => ({
-          id: p.Jugador,
-          ggScore: p.ggScore!,
-          opportunityScore: p.opportunityScore ?? undefined
-        }))
-      syncScores(scoresToSync)
-    }
-  }, [monitoring, syncScores])
 
   // Extract unique values for filters
   const { positions, ligas, roles, representantes, statusCounts } = useMemo(() => {
@@ -705,7 +736,7 @@ export default function MonitoringPage() {
                         </span>
                       </th>
                       <th className="px-3 py-3 text-left text-2xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">
-                        Evolucion
+                        Actualizado
                       </th>
                       <th
                         className="px-3 py-3 text-left text-2xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider cursor-pointer hover:text-brand-green transition-colors select-none"
@@ -765,8 +796,8 @@ export default function MonitoringPage() {
                       const playerImage = player.metricsPlayer?.Imagen || player.externalPlayer?.Imagen
                       const displayName = player['Nombre jugador'] || player.Jugador
                       const initials = displayName.split(' ').map(w => w[0]).slice(0, 2).join('')
-                      const playerStatus = getPlayerStatus(player.Jugador)?.status || 'en_seguimiento'
-                      const scoreTrend = getScoreTrend(player.Jugador, 6)
+                      const statusRecord = getPlayerStatus(player.Jugador)
+                      const playerStatus = statusRecord?.status || 'en_seguimiento'
 
                       return (
                         <tr
@@ -839,10 +870,18 @@ export default function MonitoringPage() {
                             )}
                           </td>
 
-                          {/* Evolution */}
+                          {/* Status changed by - only show for non-default statuses */}
                           <td className="px-3 py-3">
-                            {hasData && scoreTrend.length > 0 ? (
-                              <ScoreEvolutionMini history={scoreTrend} />
+                            {statusRecord?.changed_by_name && playerStatus !== 'en_seguimiento' ? (
+                              <div className="text-xs">
+                                <span className="text-apple-gray-500">por </span>
+                                <span className="font-medium text-apple-gray-700 dark:text-apple-gray-300">
+                                  {statusRecord.changed_by_name}
+                                </span>
+                                <p className="text-2xs text-apple-gray-400">
+                                  {new Date(statusRecord.changed_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+                                </p>
+                              </div>
                             ) : (
                               <span className="text-2xs text-apple-gray-400">—</span>
                             )}
@@ -869,9 +908,12 @@ export default function MonitoringPage() {
                           {/* Status */}
                           <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
                             <StatusBadge
-                              status={playerStatus}
+                              statusRecord={statusRecord}
                               playerId={player.Jugador}
                               onStatusChange={setPlayerStatus}
+                              requiresAuth={requiresAuth}
+                              onAuthRequired={() => setShowAuthModal(true)}
+                              onStatusChanged={() => setStatusFilter('')}
                             />
                           </td>
 
@@ -938,6 +980,9 @@ export default function MonitoringPage() {
           )}
         </div>
       </div>
+
+      {/* Auth Modal */}
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
     </div>
   )
 }
