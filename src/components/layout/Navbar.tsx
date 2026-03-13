@@ -4,6 +4,7 @@ import { useTheme } from '@/context/ThemeContext'
 import { useAuth } from '@/context/AuthContext'
 import ThemeToggle from './ThemeToggle'
 import AuthModal from '@/components/auth/AuthModal'
+import { PDFBuilderFloatingButton } from '@/components/pdf/AddToReportButton'
 
 const navLinks = [
   { to: '/', label: 'Scout Externo', icon: 'globe', exact: true },
@@ -170,6 +171,7 @@ export default function Navbar() {
 
           {/* Right side */}
           <div className="flex items-center gap-2">
+            <PDFBuilderFloatingButton />
             <ThemeToggle />
 
             {/* User menu */}

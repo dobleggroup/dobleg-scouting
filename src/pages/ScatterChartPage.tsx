@@ -4,6 +4,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { ScatterChart, Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ReferenceLine, Label, LabelList } from 'recharts'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
+import AddToReportButton from '@/components/pdf/AddToReportButton'
 import type { EnrichedPlayer } from '@/types'
 
 // Color interpolation from red (bad) to yellow (medium) to green (good)
@@ -264,17 +265,6 @@ function generateAnalysis(
   return analysis
 }
 
-// Preset combinations for common analysis scenarios
-const SCATTER_PRESETS = [
-  { label: 'Eficiencia Goleadora', x: 'xG', y: 'Goles', z: 'ggScore', desc: 'xG vs Goles, color por Score' },
-  { label: 'Creatividad', x: 'Jugadas claves/90', y: 'xA/90', z: 'Pases progresivos exitosos/90', desc: 'Creación de juego' },
-  { label: 'Perfil Extremo', x: 'Gambetas completadas/90', y: 'Centros/90', z: 'Duelos atacantes ganados, %', desc: 'Desborde y centros' },
-  { label: 'Presencia en Área', x: 'Toques en el área de penalti/90', y: 'xG/90', z: 'Remates a portería, %', desc: 'Delantero de área' },
-  { label: 'Mediocampo Completo', x: 'Pases progresivos exitosos/90', y: 'Interceptaciones/90', z: 'Duelos ganados, %', desc: 'Box-to-box' },
-  { label: 'Defensor Moderno', x: 'Duelos aéreos ganados, %', y: 'Pases, %', z: 'Interceptaciones/90', desc: 'Central que saca juego' },
-  { label: 'Oportunidades', x: 'ggScore', y: 'marketValueRaw', z: 'monthsRemaining', desc: 'Score vs valor, color por contrato' },
-]
-
 export default function ScatterChartPage() {
   const { external, internal, loading } = useData()
   const chartRef = useRef<HTMLDivElement>(null)
@@ -525,54 +515,38 @@ export default function ScatterChartPage() {
             Compara jugadores en multiples dimensiones
           </p>
         </div>
-        <button
-          onClick={exportToPDF}
-          disabled={exporting || chartData.length === 0}
-          className="flex items-center gap-2 px-5 py-2.5 bg-apple-gray-800 dark:bg-white text-white dark:text-apple-gray-800 rounded-xl font-medium text-sm hover:bg-apple-gray-700 dark:hover:bg-apple-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {exporting ? (
-            <>
-              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-              Exportando...
-            </>
-          ) : (
-            <>
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Exportar PDF
-            </>
-          )}
-        </button>
-      </div>
-
-      {/* Presets */}
-      <div className="mb-4">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-xs font-medium text-apple-gray-500 uppercase tracking-wider">Presets rápidos:</span>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {SCATTER_PRESETS.map((preset, idx) => (
-            <button
-              key={idx}
-              onClick={() => {
-                setXMetric(preset.x)
-                setYMetric(preset.y)
-                setZMetric(preset.z)
-              }}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
-                xMetric === preset.x && yMetric === preset.y && zMetric === preset.z
-                  ? 'bg-brand-green text-gray-900 border-brand-green shadow-md'
-                  : 'bg-white dark:bg-apple-gray-800 border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 hover:border-brand-green hover:text-brand-green'
-              }`}
-              title={preset.desc}
-            >
-              {preset.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <AddToReportButton
+            type="scatter"
+            title={`Dispersion: ${getMetricDisplayName(xMetric)} vs ${getMetricDisplayName(yMetric)}`}
+            description={`Grafico de dispersion con ${chartData.length} jugadores. Color por ${getMetricDisplayName(zMetric)}.`}
+            captureId="scatter-chart-container"
+            source="Dispersion"
+            variant="compact"
+            players={chartData.filter(d => selectedPlayers.has(d.id)).map(d => d.name)}
+          />
+          <button
+            onClick={exportToPDF}
+            disabled={exporting || chartData.length === 0}
+            className="flex items-center gap-2 px-5 py-2.5 bg-apple-gray-800 dark:bg-white text-white dark:text-apple-gray-800 rounded-xl font-medium text-sm hover:bg-apple-gray-700 dark:hover:bg-apple-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {exporting ? (
+              <>
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Exportando...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Exportar PDF
+              </>
+            )}
+          </button>
         </div>
       </div>
 
@@ -848,7 +822,7 @@ export default function ScatterChartPage() {
       </div>
 
       {/* Chart */}
-      <div ref={chartRef} className="bg-white dark:bg-apple-gray-800 rounded-2xl border border-apple-gray-200 dark:border-apple-gray-700 p-6">
+      <div ref={chartRef} id="scatter-chart-container" className="bg-white dark:bg-apple-gray-800 rounded-2xl border border-apple-gray-200 dark:border-apple-gray-700 p-6">
         {/* Chart Title for PDF */}
         <div className="mb-6 text-center">
           <h2 className="text-xl font-bold text-apple-gray-800 dark:text-white">

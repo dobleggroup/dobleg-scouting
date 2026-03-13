@@ -1,9 +1,10 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useData } from '@/context/DataContext'
 import { useAuth } from '@/context/AuthContext'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import AuthModal from '@/components/auth/AuthModal'
 import { FILTER_POSITION_MAP, sortLeaguesByPriority } from '@/constants/scoring'
+import { smartSearch } from '@/lib/search'
 import {
   fetchFormations,
   saveFormation,
@@ -178,18 +179,34 @@ function PlayerSelector({
   onClose,
   userName,
 }: PlayerSelectorProps) {
+  const [searchQuery, setSearchQuery] = useState('')
+  const [activeTab, setActiveTab] = useState<'search' | 'suggestions'>('suggestions')
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
   const allowedPositions = POSITION_KEY_MAP[positionKey] || []
   const displayName = POSITION_DISPLAY_NAME[positionKey] || positionKey
   const canAddMore = currentPlayers.length < 3
   const currentPosIds = new Set(currentPlayers.map(p => p.playerId))
 
+  // Players available (not already selected anywhere)
+  const availablePlayers = useMemo(() => {
+    return allPlayers.filter(p => {
+      if (currentPosIds.has(p.Jugador)) return false
+      if (allSelectedPlayerIds.has(p.Jugador)) return false
+      return true
+    })
+  }, [allPlayers, currentPosIds, allSelectedPlayerIds])
+
+  // Search results
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return []
+    return smartSearch(availablePlayers, searchQuery, p => `${p.Jugador} ${p.Equipo}`, 12)
+  }, [availablePlayers, searchQuery])
+
+  // Suggested candidates (filtered by position and other criteria)
   const candidates = useMemo(() => {
-    return allPlayers
+    return availablePlayers
       .filter(p => {
-        // Exclude players already in this position
-        if (currentPosIds.has(p.Jugador)) return false
-        // Exclude players already in other positions (can't play two positions)
-        if (allSelectedPlayerIds.has(p.Jugador)) return false
         if (selectedLeagues.length > 0 && !selectedLeagues.includes(p.Liga)) return false
         if (nationality) {
           const playerNat = String(p['País de nacimiento'] || '')
@@ -203,20 +220,57 @@ function PlayerSelector({
       .filter(p => p.ggScore !== null)
       .sort((a, b) => (b.ggScore ?? 0) - (a.ggScore ?? 0))
       .slice(0, 15)
-  }, [allPlayers, selectedLeagues, nationality, minAge, maxAge, allowedPositions, currentPosIds, allSelectedPlayerIds])
+  }, [availablePlayers, selectedLeagues, nationality, minAge, maxAge, allowedPositions])
+
+  // Focus search when switching to search tab
+  useEffect(() => {
+    if (activeTab === 'search' && searchInputRef.current) {
+      searchInputRef.current.focus()
+    }
+  }, [activeTab])
+
+  const renderPlayerCard = (p: EnrichedPlayer, i: number, showPosition = false) => (
+    <button
+      key={`${p.Jugador}-${i}`}
+      onClick={() => onAddPlayer(p)}
+      className="w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700 border border-apple-gray-100 dark:border-apple-gray-700 hover:border-brand-green/50"
+    >
+      {p.Imagen ? (
+        <img src={p.Imagen} alt="" className="w-10 h-10 rounded-lg object-cover bg-apple-gray-200" />
+      ) : (
+        <div className="w-10 h-10 rounded-lg bg-apple-gray-200 dark:bg-apple-gray-600 flex items-center justify-center text-sm font-bold text-apple-gray-500">
+          {p.Jugador.split(' ').map(w => w[0]).slice(0, 2).join('')}
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <p className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">{p.Jugador}</p>
+        <p className="text-xs text-apple-gray-500 truncate">
+          {p.Equipo} · {p.ageNum} años
+          {showPosition && <span className="text-apple-gray-400"> · {p['Posición'] || p['Posicion']}</span>}
+        </p>
+      </div>
+      <div className="text-right flex-shrink-0">
+        <p className={`text-sm font-bold ${(p.ggScore ?? 0) >= 60 ? 'text-emerald-500' : (p.ggScore ?? 0) >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
+          {p.ggScore?.toFixed(1)}
+        </p>
+        <p className="text-2xs text-apple-gray-400">{p.marketValueFormatted}</p>
+      </div>
+    </button>
+  )
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in" onClick={onClose}>
       <div
-        className="bg-white dark:bg-apple-gray-800 rounded-apple-xl shadow-apple-lg dark:shadow-apple-dark-md max-w-lg w-full max-h-[85vh] overflow-hidden animate-scale-in"
+        className="bg-white dark:bg-apple-gray-800 rounded-2xl shadow-2xl max-w-lg w-full max-h-[85vh] overflow-hidden animate-scale-in"
         onClick={e => e.stopPropagation()}
       >
+        {/* Header */}
         <div className="p-5 border-b border-apple-gray-200 dark:border-apple-gray-700">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="font-bold text-apple-gray-800 dark:text-white">{displayName}</h3>
+              <h3 className="text-lg font-bold text-apple-gray-800 dark:text-white">{displayName}</h3>
               <p className="text-xs text-apple-gray-500 mt-0.5">
-                {currentPlayers.length}/3 jugadores · {canAddMore ? 'Seleccioná para agregar' : 'Máximo alcanzado'}
+                {currentPlayers.length}/3 jugadores · {canAddMore ? 'Selecciona para agregar' : 'Maximo alcanzado'}
               </p>
             </div>
             <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-apple-gray-400 hover:text-apple-gray-600 dark:hover:text-apple-gray-200 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700 transition-colors">
@@ -225,22 +279,54 @@ function PlayerSelector({
               </svg>
             </button>
           </div>
+
+          {/* Tabs */}
+          {canAddMore && (
+            <div className="flex gap-1 bg-apple-gray-100 dark:bg-apple-gray-700 rounded-xl p-1">
+              <button
+                onClick={() => setActiveTab('suggestions')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                  activeTab === 'suggestions'
+                    ? 'bg-white dark:bg-apple-gray-600 text-apple-gray-800 dark:text-white shadow-sm'
+                    : 'text-apple-gray-500 hover:text-apple-gray-700 dark:hover:text-apple-gray-300'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Sugeridos
+              </button>
+              <button
+                onClick={() => setActiveTab('search')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                  activeTab === 'search'
+                    ? 'bg-white dark:bg-apple-gray-600 text-apple-gray-800 dark:text-white shadow-sm'
+                    : 'text-apple-gray-500 hover:text-apple-gray-700 dark:hover:text-apple-gray-300'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                Buscar
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Current players in position */}
         {currentPlayers.length > 0 && (
           <div className="p-4 bg-apple-gray-50 dark:bg-apple-gray-900/50 border-b border-apple-gray-200 dark:border-apple-gray-700">
-            <p className="text-xs font-semibold text-apple-gray-500 uppercase tracking-wider mb-2">En esta posición</p>
+            <p className="text-xs font-semibold text-apple-gray-500 uppercase tracking-wider mb-2">En esta posicion</p>
             <div className="space-y-2">
               {currentPlayers.map((p, i) => (
-                <div key={p.playerId} className="flex items-center justify-between bg-white dark:bg-apple-gray-800 rounded-apple p-3 shadow-sm">
+                <div key={p.playerId} className="flex items-center justify-between bg-white dark:bg-apple-gray-800 rounded-xl p-3 shadow-sm border border-apple-gray-100 dark:border-apple-gray-700">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-brand-green/20 flex items-center justify-center text-brand-green font-bold text-sm">
                       {i + 1}
                     </div>
                     <div>
                       <p className="font-medium text-sm text-apple-gray-800 dark:text-white">{p.playerName}</p>
-                      <p className="text-xs text-apple-gray-500">{p.team} · Agregado por <span className="font-medium text-brand-green">{p.addedByName}</span></p>
+                      <p className="text-xs text-apple-gray-500">{p.team}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -262,36 +348,75 @@ function PlayerSelector({
           </div>
         )}
 
-        {/* Available players */}
+        {/* Content area */}
         <div className="p-4 max-h-[50vh] overflow-y-auto">
           {!canAddMore ? (
-            <p className="text-center text-apple-gray-500 py-4 text-sm">Máximo 3 jugadores por posición</p>
+            <p className="text-center text-apple-gray-500 py-4 text-sm">Maximo 3 jugadores por posicion</p>
+          ) : activeTab === 'search' ? (
+            <div className="space-y-3">
+              {/* Search input */}
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Buscar por nombre o equipo..."
+                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-apple-gray-100 dark:bg-apple-gray-700 border border-apple-gray-200 dark:border-apple-gray-600 text-apple-gray-800 dark:text-white placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-green/50 text-sm"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-apple-gray-400 hover:text-apple-gray-600"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              {/* Search results */}
+              {searchQuery.trim() ? (
+                searchResults.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-apple-gray-500">{searchResults.length} resultado{searchResults.length !== 1 ? 's' : ''}</p>
+                    {searchResults.map((p, i) => renderPlayerCard(p, i, true))}
+                  </div>
+                ) : (
+                  <div className="py-8 text-center">
+                    <svg className="w-12 h-12 mx-auto text-apple-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <p className="text-apple-gray-500 text-sm">No se encontraron jugadores</p>
+                    <p className="text-apple-gray-400 text-xs mt-1">Proba con otro nombre o equipo</p>
+                  </div>
+                )
+              ) : (
+                <div className="py-8 text-center">
+                  <svg className="w-12 h-12 mx-auto text-apple-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <p className="text-apple-gray-500 text-sm">Busca cualquier jugador</p>
+                  <p className="text-apple-gray-400 text-xs mt-1">Sin restriccion de posicion</p>
+                </div>
+              )}
+            </div>
           ) : candidates.length === 0 ? (
-            <p className="text-center text-apple-gray-500 py-8">No hay más jugadores disponibles</p>
+            <div className="py-8 text-center">
+              <svg className="w-12 h-12 mx-auto text-apple-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+              <p className="text-apple-gray-500 text-sm">No hay jugadores sugeridos</p>
+              <p className="text-apple-gray-400 text-xs mt-1">Usa la busqueda para encontrar cualquier jugador</p>
+            </div>
           ) : (
-            <div className="space-y-1.5">
-              <p className="text-xs font-semibold text-apple-gray-500 uppercase tracking-wider mb-2">Agregar jugador</p>
-              {candidates.map((p, i) => (
-                <button
-                  key={`${p.Jugador}-${i}`}
-                  onClick={() => onAddPlayer(p)}
-                  className="w-full flex items-center gap-3 p-3 rounded-apple transition-all text-left hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700 border border-transparent hover:border-apple-gray-200 dark:hover:border-apple-gray-600"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-apple-gray-200 dark:bg-apple-gray-600 flex items-center justify-center text-sm font-bold text-apple-gray-600 dark:text-apple-gray-300">
-                    {i + 1}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">{p.Jugador}</p>
-                    <p className="text-xs text-apple-gray-500 truncate">{p.Equipo} · {p.Edad} años</p>
-                  </div>
-                  <div className="text-right">
-                    <p className={`text-sm font-bold ${(p.ggScore ?? 0) >= 60 ? 'text-emerald-500' : (p.ggScore ?? 0) >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
-                      {p.ggScore?.toFixed(1)}
-                    </p>
-                    <p className="text-2xs text-apple-gray-400">{p.marketValueFormatted}</p>
-                  </div>
-                </button>
-              ))}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-apple-gray-500 uppercase tracking-wider mb-2">Mejores para {displayName}</p>
+              {candidates.map((p, i) => renderPlayerCard(p, i))}
             </div>
           )}
         </div>

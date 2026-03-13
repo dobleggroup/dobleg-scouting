@@ -5,6 +5,7 @@ import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend, 
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { RADAR_METRICS as POSITION_RADAR_METRICS, METRIC_ABBREVIATIONS, sortLeaguesByPriority } from '@/constants/scoring'
 import { smartSearch } from '@/lib/search'
+import AddToReportButton from '@/components/pdf/AddToReportButton'
 import type { EnrichedPlayer } from '@/types'
 
 // Metrics organized by category for dropdown
@@ -694,10 +695,23 @@ export default function RadarAnalysisPage() {
         {/* Main content */}
         <div className="lg:col-span-3 space-y-6">
           {/* Radar Chart */}
-          <div className="bg-white dark:bg-apple-gray-800 rounded-2xl p-6 shadow-sm border border-apple-gray-100 dark:border-apple-gray-700">
-            <h3 className="text-lg font-semibold text-apple-gray-800 dark:text-white mb-4">
-              Comparación Radar
-            </h3>
+          <div id="radar-detector-container" className="bg-white dark:bg-apple-gray-800 rounded-2xl p-6 shadow-sm border border-apple-gray-100 dark:border-apple-gray-700">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-apple-gray-800 dark:text-white">
+                Comparacion Radar
+              </h3>
+              {selectedPlayers.length > 0 && (
+                <AddToReportButton
+                  type="detector"
+                  title={`Detector: ${selectedPlayers.map(p => p.Jugador).join(' vs ')}`}
+                  description={`Comparacion radar de ${selectedPlayers.length} jugadores en ${selectedMetrics.length} metricas.`}
+                  captureId="radar-detector-container"
+                  source="Detector de Talentos"
+                  variant="compact"
+                  players={selectedPlayers.map(p => p.Jugador)}
+                />
+              )}
+            </div>
 
             {selectedPlayers.length === 0 ? (
               <div className="h-96 flex items-center justify-center">

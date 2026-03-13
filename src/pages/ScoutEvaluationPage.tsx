@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
-import { createEvaluation, fetchRecentEvaluations, type ScoutEvaluation } from '@/services/scoutEvaluationService'
+import { createEvaluation, fetchRecentEvaluations, updateEvaluation, type ScoutEvaluation, type PlayerSource } from '@/services/scoutEvaluationService'
+import { setPlayerStatus, fetchAllStatuses } from '@/services/monitoringService'
 import { smartSearch } from '@/lib/search'
 
 // Position options
@@ -164,6 +165,157 @@ function Input({
   )
 }
 
+// ─── RECENT EVALUATION CARD WITH LINKING ──────────────────────────────────────
+
+interface PlayerOption {
+  id: string
+  name: string
+  team: string
+  source: 'interno' | 'externo' | 'seguimiento'
+}
+
+interface RecentEvaluationCardProps {
+  evaluation: ScoutEvaluation
+  allPlayers: PlayerOption[]
+  onLink: (playerId: string, playerSource: PlayerSource) => Promise<boolean>
+}
+
+function RecentEvaluationCard({ evaluation, allPlayers, onLink }: RecentEvaluationCardProps) {
+  const [isLinking, setIsLinking] = useState(false)
+  const [linkSearch, setLinkSearch] = useState('')
+  const [showLinkDropdown, setShowLinkDropdown] = useState(false)
+  const [linking, setLinking] = useState(false)
+
+  const isLinked = !!evaluation.player_id
+  const score = evaluation.technical_score
+
+  // Filter players for linking
+  const filteredForLink = useMemo(() => {
+    if (linkSearch.length < 2) return []
+    const results = smartSearch(
+      allPlayers,
+      linkSearch,
+      (p) => `${p.name} ${p.team}`,
+      5
+    )
+    return results
+  }, [linkSearch, allPlayers])
+
+  const handleLink = async (player: PlayerOption) => {
+    setLinking(true)
+    const success = await onLink(player.id, player.source)
+    setLinking(false)
+    if (success) {
+      setIsLinking(false)
+      setLinkSearch('')
+      setShowLinkDropdown(false)
+    }
+  }
+
+  return (
+    <div className={`p-3 rounded-xl transition-all ${
+      isLinked
+        ? 'bg-brand-green/5 border border-brand-green/20'
+        : 'bg-amber-500/5 border border-amber-500/20'
+    }`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isLinked ? 'bg-brand-green' : 'bg-amber-500'}`} />
+            <div className="font-medium text-apple-gray-900 dark:text-white text-sm truncate">
+              {evaluation.player_name}
+            </div>
+          </div>
+          <div className="text-xs text-apple-gray-500 truncate ml-4">
+            {evaluation.team} - {new Date(evaluation.match_date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+          </div>
+        </div>
+        {score && (
+          <div className={`text-lg font-bold ${
+            score >= 8 ? 'text-brand-green' :
+            score >= 6 ? 'text-emerald-500' :
+            score >= 4 ? 'text-amber-500' : 'text-red-500'
+          }`}>
+            {score}
+          </div>
+        )}
+      </div>
+
+      {/* Link button or linked status */}
+      {!isLinked && !isLinking && (
+        <button
+          onClick={() => setIsLinking(true)}
+          className="mt-2 w-full py-1.5 px-3 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+          </svg>
+          Vincular a jugador
+        </button>
+      )}
+
+      {isLinked && (
+        <div className="mt-2 flex items-center gap-1.5 text-2xs text-brand-green">
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          Vinculado correctamente
+        </div>
+      )}
+
+      {/* Linking UI */}
+      {isLinking && (
+        <div className="mt-3 space-y-2">
+          <div className="relative">
+            <input
+              type="text"
+              value={linkSearch}
+              onChange={e => {
+                setLinkSearch(e.target.value)
+                setShowLinkDropdown(e.target.value.length >= 2)
+              }}
+              onFocus={() => setShowLinkDropdown(linkSearch.length >= 2)}
+              placeholder="Buscar jugador..."
+              className="w-full px-3 py-2 text-sm rounded-lg bg-white dark:bg-apple-gray-700 border border-apple-gray-200 dark:border-apple-gray-600 focus:outline-none focus:border-brand-green"
+              autoFocus
+            />
+
+            {showLinkDropdown && filteredForLink.length > 0 && (
+              <div className="absolute z-50 mt-1 w-full bg-white dark:bg-apple-gray-800 rounded-lg shadow-xl border border-apple-gray-200 dark:border-apple-gray-700 py-1 max-h-40 overflow-auto">
+                {filteredForLink.map(p => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => handleLink(p)}
+                    disabled={linking}
+                    className="w-full px-3 py-2 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700 transition-colors disabled:opacity-50"
+                  >
+                    <div className="text-sm font-medium text-apple-gray-900 dark:text-white">{p.name}</div>
+                    <div className="text-2xs text-apple-gray-500">{p.team}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setIsLinking(false)
+                setLinkSearch('')
+                setShowLinkDropdown(false)
+              }}
+              className="flex-1 py-1.5 text-xs font-medium text-apple-gray-500 hover:text-apple-gray-700 dark:hover:text-apple-gray-300 transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ScoutEvaluationPage() {
   const { user, userDisplayName } = useAuth()
   const { external, internal } = useData()
@@ -182,17 +334,34 @@ export default function ScoutEvaluationPage() {
   const [score, setScore] = useState<number>()
   const [notes, setNotes] = useState('')
   const [recommendation, setRecommendation] = useState<'fichar' | 'seguir_observando' | 'descartar' | ''>('')
+  const [playerSource, setPlayerSource] = useState<PlayerSource | null>(null)
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
 
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
+  const [addedToMonitoring, setAddedToMonitoring] = useState(false)
 
   // Recent evaluations for sidebar
   const [recentEvaluations, setRecentEvaluations] = useState<ScoutEvaluation[]>([])
 
+  // Monitoring statuses to check if player is in seguimiento
+  const [monitoringStatuses, setMonitoringStatuses] = useState<Record<string, { status: string }>>({})
+
   useEffect(() => {
     fetchRecentEvaluations(5).then(setRecentEvaluations)
   }, [success])
+
+  // Load monitoring statuses
+  useEffect(() => {
+    fetchAllStatuses().then(statuses => {
+      const statusMap: Record<string, { status: string }> = {}
+      Object.entries(statuses).forEach(([id, record]) => {
+        statusMap[id] = { status: record.status }
+      })
+      setMonitoringStatuses(statusMap)
+    })
+  }, [])
 
   // Update scout name when user changes
   useEffect(() => {
@@ -207,30 +376,43 @@ export default function ScoutEvaluationPage() {
     return [{ id: user?.id || '', name: userDisplayName }]
   }, [user, userDisplayName])
 
-  // Combined player list for autocomplete
-  const allPlayers = useMemo(() => {
-    const players: Array<{ name: string; team: string; position: string }> = []
+  // Internal player IDs for quick lookup
+  const internalPlayerIds = useMemo(() => {
+    return new Set(internal.map(p => p.Jugador))
+  }, [internal])
 
-    external.forEach(p => {
+  // Combined player list for autocomplete with source info
+  const allPlayers = useMemo(() => {
+    const players: Array<{ name: string; team: string; position: string; source: PlayerSource; id: string }> = []
+
+    // Internal players first
+    internal.forEach(p => {
       players.push({
         name: p.Jugador,
         team: p.Equipo || '',
         position: String(p['Posicion'] || ''),
+        source: 'interno',
+        id: p.Jugador,
       })
     })
 
-    internal.forEach(p => {
+    // External players
+    external.forEach(p => {
       if (!players.find(x => x.name === p.Jugador)) {
+        // Check if in seguimiento
+        const isInMonitoring = monitoringStatuses[p.Jugador]?.status === 'seguimiento'
         players.push({
           name: p.Jugador,
           team: p.Equipo || '',
           position: String(p['Posicion'] || ''),
+          source: isInMonitoring ? 'seguimiento' : 'externo',
+          id: p.Jugador,
         })
       }
     })
 
     return players
-  }, [external, internal])
+  }, [external, internal, monitoringStatuses])
 
   // Filtered players for autocomplete - using smart search
   const filteredPlayers = useMemo(() => {
@@ -245,8 +427,23 @@ export default function ScoutEvaluationPage() {
   const handleSelectPlayer = (player: typeof allPlayers[0]) => {
     setPlayerName(player.name)
     setTeam(player.team)
+    setPlayerSource(player.source)
+    setSelectedPlayerId(player.id)
     setPlayerSearch('')
     setShowPlayerDropdown(false)
+  }
+
+  // Handle manual player name entry (not from autocomplete)
+  const handleManualPlayerName = (name: string) => {
+    setPlayerName(name)
+    // Try to detect source from name
+    if (internalPlayerIds.has(name)) {
+      setPlayerSource('interno')
+    } else {
+      const isInMonitoring = monitoringStatuses[name]?.status === 'seguimiento'
+      setPlayerSource(isInMonitoring ? 'seguimiento' : 'externo')
+    }
+    setSelectedPlayerId(name)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -255,9 +452,14 @@ export default function ScoutEvaluationPage() {
 
     setError('')
     setSubmitting(true)
+    setAddedToMonitoring(false)
+
+    // Determine if we should auto-add to monitoring
+    const shouldAutoAddToMonitoring = playerSource === 'externo' && !!selectedPlayerId
 
     const result = await createEvaluation(
       {
+        player_id: selectedPlayerId || undefined, // Link to player if selected
         player_name: playerName,
         team: team || undefined,
         position: position || undefined,
@@ -268,10 +470,31 @@ export default function ScoutEvaluationPage() {
         technical_score: score, // Single match performance score
         notes: notes || undefined,
         recommendation: recommendation || undefined,
+        source: playerSource || undefined,
+        auto_added_to_monitoring: shouldAutoAddToMonitoring,
       },
       user.id,
       scoutName
     )
+
+    // Auto-add to seguimiento if external player
+    if (result && shouldAutoAddToMonitoring && selectedPlayerId) {
+      await setPlayerStatus(
+        selectedPlayerId,
+        'en_seguimiento',
+        user.id,
+        scoutName,
+        `Auto-agregado al crear reporte scout`
+      )
+      setAddedToMonitoring(true)
+      // Refresh monitoring statuses
+      const statuses = await fetchAllStatuses()
+      const statusMap: Record<string, { status: string }> = {}
+      Object.entries(statuses).forEach(([id, record]) => {
+        statusMap[id] = { status: record.status }
+      })
+      setMonitoringStatuses(statusMap)
+    }
 
     setSubmitting(false)
 
@@ -287,8 +510,13 @@ export default function ScoutEvaluationPage() {
       setScore(undefined)
       setNotes('')
       setRecommendation('')
+      setPlayerSource(null)
+      setSelectedPlayerId(null)
 
-      setTimeout(() => setSuccess(false), 4000)
+      setTimeout(() => {
+        setSuccess(false)
+        setAddedToMonitoring(false)
+      }, 5000)
     } else {
       setError('Error al guardar. Intenta de nuevo.')
     }
@@ -392,12 +620,53 @@ export default function ScoutEvaluationPage() {
                         onClick={() => handleSelectPlayer(p)}
                         className="w-full px-4 py-3 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700 transition-colors"
                       >
-                        <div className="font-medium text-apple-gray-900 dark:text-white">{p.name}</div>
+                        <div className="flex items-center justify-between">
+                          <div className="font-medium text-apple-gray-900 dark:text-white">{p.name}</div>
+                          <span className={`text-2xs px-2 py-0.5 rounded-full font-medium ${
+                            p.source === 'interno'
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                              : p.source === 'seguimiento'
+                              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                              : 'bg-apple-gray-100 text-apple-gray-600 dark:bg-apple-gray-700 dark:text-apple-gray-400'
+                          }`}>
+                            {p.source === 'interno' ? 'Interno' : p.source === 'seguimiento' ? 'Seguimiento' : 'Externo'}
+                          </span>
+                        </div>
                         <div className="text-xs text-apple-gray-500">{p.team}</div>
                       </button>
                     ))}
                   </div>
                 </>
+              )}
+
+              {/* Source indicator */}
+              {playerSource && playerName && (
+                <div className="mt-2 flex items-center gap-2">
+                  <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-medium ${
+                    playerSource === 'interno'
+                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                      : playerSource === 'seguimiento'
+                      ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                      : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                  }`}>
+                    {playerSource === 'interno' ? (
+                      <>
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                        Jugador del plantel interno
+                      </>
+                    ) : playerSource === 'seguimiento' ? (
+                      <>
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                        En seguimiento
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9" /></svg>
+                        Jugador externo (se agregara a seguimiento)
+                      </>
+                    )}
+                  </span>
+                </div>
               )}
             </div>
 
@@ -563,40 +832,61 @@ export default function ScoutEvaluationPage() {
         </div>
       </div>
 
-      {/* Recent evaluations - Desktop sidebar */}
+      {/* Recent evaluations - Desktop sidebar with linking */}
       {recentEvaluations.length > 0 && (
-        <div className="hidden xl:block fixed right-6 top-32 w-72">
+        <div className="hidden xl:block fixed right-6 top-32 w-80">
           <div className="bg-white dark:bg-apple-gray-800 rounded-2xl p-5 shadow-sm border border-apple-gray-100 dark:border-apple-gray-700">
             <h3 className="text-sm font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-4">
               Ultimas evaluaciones
             </h3>
             <div className="space-y-3">
-              {recentEvaluations.slice(0, 4).map(ev => (
-                <div
+              {recentEvaluations.slice(0, 5).map(ev => (
+                <RecentEvaluationCard
                   key={ev.id}
-                  className="p-3 rounded-xl bg-apple-gray-50 dark:bg-apple-gray-700/50"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium text-apple-gray-900 dark:text-white text-sm truncate">
-                        {ev.player_name}
-                      </div>
-                      <div className="text-xs text-apple-gray-500 truncate">
-                        {ev.team} - {new Date(ev.match_date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
-                      </div>
-                    </div>
-                    {ev.technical_score && (
-                      <div className={`text-lg font-bold ml-2 ${
-                        ev.technical_score >= 8 ? 'text-brand-green' :
-                        ev.technical_score >= 6 ? 'text-emerald-500' :
-                        ev.technical_score >= 4 ? 'text-amber-500' : 'text-red-500'
-                      }`}>
-                        {ev.technical_score}
-                      </div>
-                    )}
-                  </div>
-                </div>
+                  evaluation={ev}
+                  allPlayers={allPlayers}
+                  onLink={async (playerId, playerSource) => {
+                    const success = await updateEvaluation(ev.id, { player_id: playerId })
+                    if (success) {
+                      // Add to seguimiento if external player
+                      if (playerSource === 'externo' && user) {
+                        await setPlayerStatus(
+                          playerId,
+                          'en_seguimiento',
+                          user.id,
+                          userDisplayName || 'Scout',
+                          `Auto-agregado al vincular reporte scout`
+                        )
+                        // Refresh monitoring statuses
+                        const statuses = await fetchAllStatuses()
+                        const statusMap: Record<string, { status: string }> = {}
+                        Object.entries(statuses).forEach(([id, record]) => {
+                          statusMap[id] = { status: record.status }
+                        })
+                        setMonitoringStatuses(statusMap)
+                      }
+                      // Refresh evaluations
+                      const updated = await fetchRecentEvaluations(10)
+                      setRecentEvaluations(updated)
+                    }
+                    return success
+                  }}
+                />
               ))}
+            </div>
+
+            {/* Legend */}
+            <div className="mt-4 pt-4 border-t border-apple-gray-100 dark:border-apple-gray-700">
+              <div className="flex items-center gap-3 text-2xs text-apple-gray-500">
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full bg-brand-green" />
+                  <span>Vinculado</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full bg-amber-500" />
+                  <span>Pendiente</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>

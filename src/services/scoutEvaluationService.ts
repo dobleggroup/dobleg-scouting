@@ -1,5 +1,7 @@
 import { supabase } from '@/lib/supabase'
 
+export type PlayerSource = 'interno' | 'externo' | 'seguimiento'
+
 export interface ScoutEvaluation {
   id: string
   player_id: string | null
@@ -22,6 +24,9 @@ export interface ScoutEvaluation {
   weaknesses: string | null
   notes: string | null
   recommendation: 'fichar' | 'seguir_observando' | 'descartar' | null
+
+  source: PlayerSource | null  // Where the player comes from
+  auto_added_to_monitoring: boolean | null  // If auto-added to seguimiento
 
   scout_id: string
   scout_name: string
@@ -46,6 +51,8 @@ export interface NewEvaluation {
   weaknesses?: string
   notes?: string
   recommendation?: 'fichar' | 'seguir_observando' | 'descartar'
+  source?: PlayerSource
+  auto_added_to_monitoring?: boolean
 }
 
 // Create a new evaluation

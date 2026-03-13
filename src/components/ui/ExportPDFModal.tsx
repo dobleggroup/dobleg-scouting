@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import type { EnrichedPlayer } from '@/types'
 
+export type PDFTheme = 'light' | 'dark'
+
 interface ExportSection {
   id: string
   label: string
@@ -12,7 +14,7 @@ interface ExportSection {
 interface ExportPDFModalProps {
   isOpen: boolean
   onClose: () => void
-  onExport: (sections: string[]) => Promise<void>
+  onExport: (sections: string[], theme: PDFTheme) => Promise<void>
   player: EnrichedPlayer
   source: 'externo' | 'interno' | 'seguimiento'
   availableEvolutionCharts?: string[]
@@ -30,6 +32,7 @@ export default function ExportPDFModal({
 }: ExportPDFModalProps) {
   const [selectedSections, setSelectedSections] = useState<Set<string>>(new Set())
   const [selectedCharts, setSelectedCharts] = useState<Set<string>>(new Set())
+  const [theme, setTheme] = useState<PDFTheme>('light')
   const [exporting, setExporting] = useState(false)
   const [exportProgress, setExportProgress] = useState('')
 
@@ -139,7 +142,7 @@ export default function ExportPDFModal({
         sectionsToExport.push(...[...selectedCharts].map(c => `chart:${c}`))
       }
 
-      await onExport(sectionsToExport)
+      await onExport(sectionsToExport, theme)
       setExportProgress('¡Exportación completada!')
       setTimeout(() => {
         onClose()
@@ -191,6 +194,78 @@ export default function ExportPDFModal({
 
         {/* Content */}
         <div className="px-6 py-4 max-h-[60vh] overflow-y-auto">
+          {/* Theme selector */}
+          <div className="mb-5">
+            <label className="text-xs font-medium text-apple-gray-600 dark:text-apple-gray-400 mb-2 block">
+              Estilo del PDF
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setTheme('light')}
+                className={`relative p-3 rounded-xl border-2 transition-all ${
+                  theme === 'light'
+                    ? 'border-brand-green bg-brand-green/5'
+                    : 'border-apple-gray-200 dark:border-apple-gray-700 hover:border-apple-gray-300 dark:hover:border-apple-gray-600'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  {/* Light mode preview */}
+                  <div className="w-12 h-16 rounded-lg bg-white border border-apple-gray-200 overflow-hidden flex-shrink-0">
+                    <div className="h-1 bg-brand-green" />
+                    <div className="p-1.5">
+                      <div className="h-1.5 w-6 bg-apple-gray-300 rounded mb-1" />
+                      <div className="h-1 w-4 bg-apple-gray-200 rounded mb-1.5" />
+                      <div className="h-3 w-full bg-apple-gray-100 rounded" />
+                    </div>
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-medium text-apple-gray-800 dark:text-white">Modo Claro</p>
+                    <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400">Ideal para imprimir</p>
+                  </div>
+                </div>
+                {theme === 'light' && (
+                  <div className="absolute top-2 right-2 w-4 h-4 bg-brand-green rounded-full flex items-center justify-center">
+                    <svg className="w-2.5 h-2.5 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                )}
+              </button>
+
+              <button
+                onClick={() => setTheme('dark')}
+                className={`relative p-3 rounded-xl border-2 transition-all ${
+                  theme === 'dark'
+                    ? 'border-brand-green bg-brand-green/5'
+                    : 'border-apple-gray-200 dark:border-apple-gray-700 hover:border-apple-gray-300 dark:hover:border-apple-gray-600'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  {/* Dark mode preview */}
+                  <div className="w-12 h-16 rounded-lg bg-apple-gray-800 border border-apple-gray-700 overflow-hidden flex-shrink-0">
+                    <div className="h-1 bg-brand-green" />
+                    <div className="p-1.5">
+                      <div className="h-1.5 w-6 bg-apple-gray-600 rounded mb-1" />
+                      <div className="h-1 w-4 bg-apple-gray-700 rounded mb-1.5" />
+                      <div className="h-3 w-full bg-apple-gray-700 rounded" />
+                    </div>
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-medium text-apple-gray-800 dark:text-white">Modo Oscuro</p>
+                    <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400">Ideal para digital</p>
+                  </div>
+                </div>
+                {theme === 'dark' && (
+                  <div className="absolute top-2 right-2 w-4 h-4 bg-brand-green rounded-full flex items-center justify-center">
+                    <svg className="w-2.5 h-2.5 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                )}
+              </button>
+            </div>
+          </div>
+
           {/* Quick actions */}
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm text-apple-gray-500 dark:text-apple-gray-400">

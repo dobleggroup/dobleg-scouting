@@ -9,10 +9,12 @@ import EvolutionChart from '@/components/charts/EvolutionChart'
 import MarketValueChart from '@/components/charts/MarketValueChart'
 import GaugeScore from '@/components/charts/GaugeScore'
 import GPSTab from '@/components/charts/GPSTab'
-import ExportPDFModal from '@/components/ui/ExportPDFModal'
+import ExportPDFModal, { type PDFTheme } from '@/components/ui/ExportPDFModal'
 import { exportPlayerToPdfFull } from '@/utils/pdfExport'
+import AddToReportButton from '@/components/pdf/AddToReportButton'
 import { normalizeName } from '@/utils/scoring'
 import { POSITION_MAP, DISPLAY_POSITION_MAP, DISPLAY_METRICS, RADAR_METRICS } from '@/constants/scoring'
+import { fetchPlayerEvaluations, fetchEvaluationsByName, type ScoutEvaluation } from '@/services/scoutEvaluationService'
 import type { EnrichedPlayer, SubjectiveMetric } from '@/types'
 
 // ─── PLAYER COMMENTS SYSTEM ───────────────────────────────────────────────────
@@ -220,6 +222,236 @@ function PlayerComments({ player }: CommentsProps) {
             })}
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── SCORE SCOUT TIMELINE ─────────────────────────────────────────────────────
+
+interface ScoreScoutTimelineProps {
+  playerId: string | undefined
+  playerName: string
+}
+
+function ScoreScoutTimeline({ playerId, playerName }: ScoreScoutTimelineProps) {
+  const [evaluations, setEvaluations] = useState<ScoutEvaluation[]>([])
+  const [loading, setLoading] = useState(true)
+  const [expanded, setExpanded] = useState(false)
+
+  useEffect(() => {
+    async function loadEvaluations() {
+      setLoading(true)
+      const allEvals: ScoutEvaluation[] = []
+      const seenIds = new Set<string>()
+
+      // Fetch by player ID if provided and not empty
+      if (playerId && playerId.trim() !== '') {
+        const byId = await fetchPlayerEvaluations(playerId)
+        byId.forEach(e => {
+          if (!seenIds.has(e.id)) {
+            seenIds.add(e.id)
+            allEvals.push(e)
+          }
+        })
+      }
+
+      // Also fetch by name (catches evaluations linked by name or not yet linked)
+      if (playerName) {
+        const byName = await fetchEvaluationsByName(playerName)
+        byName.forEach(e => {
+          if (!seenIds.has(e.id)) {
+            seenIds.add(e.id)
+            allEvals.push(e)
+          }
+        })
+
+        // Also try fetching where player_id equals the player name
+        // (this handles the case where external players use name as ID)
+        const byNameAsId = await fetchPlayerEvaluations(playerName)
+        byNameAsId.forEach(e => {
+          if (!seenIds.has(e.id)) {
+            seenIds.add(e.id)
+            allEvals.push(e)
+          }
+        })
+      }
+
+      // Sort by match date
+      allEvals.sort((a, b) => new Date(b.match_date).getTime() - new Date(a.match_date).getTime())
+
+      setEvaluations(allEvals)
+      setLoading(false)
+    }
+    loadEvaluations()
+  }, [playerId, playerName])
+
+  if (loading) {
+    return (
+      <div className="card-apple p-5 animate-pulse space-y-3">
+        <div className="h-4 bg-apple-gray-200 dark:bg-apple-gray-700 rounded w-1/3" />
+        <div className="h-20 bg-apple-gray-100 dark:bg-apple-gray-800 rounded-xl" />
+      </div>
+    )
+  }
+
+  if (evaluations.length === 0) {
+    return null // Don't show section if no evaluations
+  }
+
+  // Calculate average score
+  const scores = evaluations
+    .map(e => e.technical_score) // Using technical_score as the match performance score
+    .filter((s): s is number => s !== null)
+  const avgScore = scores.length > 0
+    ? scores.reduce((a, b) => a + b, 0) / scores.length
+    : null
+
+  // Get score color
+  const getScoreColor = (score: number) => {
+    if (score >= 8) return 'text-brand-green'
+    if (score >= 6) return 'text-emerald-500'
+    if (score >= 4) return 'text-amber-500'
+    return 'text-red-500'
+  }
+
+  const getScoreBg = (score: number) => {
+    if (score >= 8) return 'bg-brand-green/10 border-brand-green/30'
+    if (score >= 6) return 'bg-emerald-500/10 border-emerald-500/30'
+    if (score >= 4) return 'bg-amber-500/10 border-amber-500/30'
+    return 'bg-red-500/10 border-red-500/30'
+  }
+
+  const getRecommendationBadge = (rec: string | null) => {
+    switch (rec) {
+      case 'fichar':
+        return { label: 'Fichar', color: 'bg-brand-green/10 text-brand-green border-brand-green/30' }
+      case 'seguir_observando':
+        return { label: 'Seguir observando', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30' }
+      case 'descartar':
+        return { label: 'Descartar', color: 'bg-red-500/10 text-red-500 border-red-500/30' }
+      default:
+        return null
+    }
+  }
+
+  const displayEvaluations = expanded ? evaluations : evaluations.slice(0, 3)
+
+  return (
+    <div className="card-apple p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
+          Score Scout
+        </h3>
+        {avgScore !== null && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-apple-gray-500">Promedio:</span>
+            <span className={`text-lg font-bold ${getScoreColor(avgScore)}`}>
+              {avgScore.toFixed(1)}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Average score bar */}
+      {avgScore !== null && (
+        <div className="relative h-2 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${
+              avgScore >= 8 ? 'bg-brand-green' :
+              avgScore >= 6 ? 'bg-emerald-500' :
+              avgScore >= 4 ? 'bg-amber-500' : 'bg-red-500'
+            }`}
+            style={{ width: `${avgScore * 10}%` }}
+          />
+        </div>
+      )}
+
+      {/* Timeline */}
+      <div className="relative">
+        {/* Vertical line */}
+        <div className="absolute left-4 top-0 bottom-0 w-px bg-apple-gray-200 dark:bg-apple-gray-700" />
+
+        <div className="space-y-3">
+          {displayEvaluations.map((evaluation, idx) => {
+            const score = evaluation.technical_score
+            const recBadge = getRecommendationBadge(evaluation.recommendation)
+            const date = new Date(evaluation.match_date)
+
+            return (
+              <div key={evaluation.id} className="relative pl-10">
+                {/* Timeline dot */}
+                <div className={`absolute left-2 top-3 w-4 h-4 rounded-full border-2 ${
+                  score ? getScoreBg(score) : 'bg-apple-gray-100 border-apple-gray-300'
+                } flex items-center justify-center`}>
+                  {score && (
+                    <div className={`w-2 h-2 rounded-full ${
+                      score >= 8 ? 'bg-brand-green' :
+                      score >= 6 ? 'bg-emerald-500' :
+                      score >= 4 ? 'bg-amber-500' : 'bg-red-500'
+                    }`} />
+                  )}
+                </div>
+
+                {/* Evaluation card */}
+                <div className={`p-3 rounded-xl border transition-all ${
+                  score ? getScoreBg(score) : 'bg-apple-gray-50 dark:bg-apple-gray-800/50 border-apple-gray-200 dark:border-apple-gray-700'
+                }`}>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {score && (
+                          <span className={`text-lg font-bold ${getScoreColor(score)}`}>
+                            {score}
+                          </span>
+                        )}
+                        <span className="text-xs text-apple-gray-500">
+                          {date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </span>
+                        {recBadge && (
+                          <span className={`text-2xs font-medium px-2 py-0.5 rounded-full border ${recBadge.color}`}>
+                            {recBadge.label}
+                          </span>
+                        )}
+                      </div>
+                      {(evaluation.competition || evaluation.rival) && (
+                        <p className="text-xs text-apple-gray-500 mt-1">
+                          {evaluation.competition && <span>{evaluation.competition}</span>}
+                          {evaluation.competition && evaluation.rival && <span> vs </span>}
+                          {evaluation.rival && <span>{evaluation.rival}</span>}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {evaluation.notes && (
+                    <p className="text-sm text-apple-gray-600 dark:text-apple-gray-400 leading-relaxed">
+                      {evaluation.notes}
+                    </p>
+                  )}
+
+                  <div className="mt-2 flex items-center gap-2 text-2xs text-apple-gray-400">
+                    <span>{evaluation.scout_name}</span>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Show more/less */}
+      {evaluations.length > 3 && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="w-full text-center text-sm text-brand-green hover:text-brand-green/80 font-medium py-2 transition-colors"
+        >
+          {expanded ? 'Ver menos' : `Ver ${evaluations.length - 3} evaluaciones más`}
+        </button>
+      )}
+
+      <p className="text-2xs text-apple-gray-400 text-center">
+        {evaluations.length} evaluacion{evaluations.length !== 1 ? 'es' : ''} de scouts
+      </p>
     </div>
   )
 }
@@ -559,13 +791,14 @@ export default function PlayerDetailPage() {
   }, [player, posKey, normalized, external, internal])
 
   // PDF Export handler
-  const handleExportPdf = async (sections: string[]) => {
+  const handleExportPdf = async (sections: string[], theme: PDFTheme) => {
     if (!player) return
 
     await exportPlayerToPdfFull({
       player,
       source,
       sections,
+      theme,
       positionAverageScore,
       subjectiveGroups,
       marketValueHistory: playerMarketValueHistory,
@@ -589,7 +822,7 @@ export default function PlayerDetailPage() {
     : 'text-apple-gray-700 dark:text-apple-gray-300'
 
   return (
-    <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-6 animate-fade-in" id="player-detail-content" ref={contentRef}>
+    <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-6 animate-fade-in" id="player-detail-container" ref={contentRef}>
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-apple-gray-500 dark:text-apple-gray-400 mb-5">
         <Link
@@ -788,6 +1021,9 @@ export default function PlayerDetailPage() {
             )}
           </div>
 
+          {/* Score Scout Timeline - self-contained, renders its own card if evaluations exist */}
+          <ScoreScoutTimeline playerId={player.id || player.Jugador} playerName={player.Jugador} />
+
           {/* Quick links & actions */}
           <div className="card-apple p-4 space-y-2">
             {player.Transfermkt && (
@@ -817,6 +1053,15 @@ export default function PlayerDetailPage() {
                 </svg>
               </a>
             )}
+            <AddToReportButton
+              type="player-card"
+              title={`Ficha: ${player.Jugador}`}
+              description={`${player.Equipo} - ${player['Posición'] || player['Posicion']} - ${player.ageNum} años`}
+              captureId="player-detail-container"
+              source={source === 'interno' ? 'Scout Interno' : 'Scout Externo'}
+              variant="menu-item"
+              players={[player.Jugador]}
+            />
             <button
               onClick={() => setShowExportModal(true)}
               className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-brand-green/10 hover:bg-brand-green/20 transition-colors"
