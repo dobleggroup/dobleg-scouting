@@ -13,7 +13,29 @@
       "Bash(mv:*)",
       "WebSearch",
       "Bash(vercel login:*)",
-      "Bash(npm i:*)"
+      "Bash(npm i:*)",
+      "Bash(npm run:*)",
+      "Bash(timeout 8 npx tsc:*)",
+      "Bash(npx tsc:*)",
+      "WebFetch(domain:doc-10-68-sheets.googleusercontent.com)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "WebFetch(domain:dobleg-scouting.netlify.app)",
+      "Bash(npm install:*)",
+      "Bash(lsof:*)",
+      "Bash(cp:*)",
+      "Bash(npx netlify:*)",
+      "Bash(cp \"/c/Users/marcos/Downloads/Agregar un título.png\" public/brand/logo-black.png && cp \"/c/Users/marcos/Downloads/Agregar un título \\(1\\).png\" public/brand/logo-white.png && ls public/brand/)",
+      "WebFetch(domain:api.apify.com)",
+      "Bash(cd C:/Users/marcos/Desktop/transfermarkt-api && python -m pip install fastapi uvicorn lxml requests httpx)",
+      "Bash(py -m pip install fastapi uvicorn lxml requests httpx)",
+      "Bash(py -m pip install beautifulsoup4 slowapi pydantic-settings python-dateutil openpyxl pandas)",
+      "Bash(cd C:/Users/marcos/Desktop/transfermarkt-api && py app/main.py)",
+      "Bash(cd C:/Users/marcos/Desktop/transfermarkt-api && PYTHONPATH=. py app/main.py)",
+      "Bash(cut:*)",
+      "Bash(netlify status:*)",
+      "Bash(npx netlify-cli:*)"
     ]
   }
 }
