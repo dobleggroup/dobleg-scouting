@@ -73,14 +73,23 @@ export interface MonitoringPlayer {
 
 export interface TransfermarktData {
   Jugador: string
-  nombre_tm: string
-  equipo_csv: string
-  liga_csv: string
-  'Valor de mercado': string
-  'Fin de contrato': string
-  Representante: string
-  Transfermkt: string
-  Imagen: string
+  Equipo: string
+  Liga: string
+  // New format columns
+  'Nombre TM'?: string
+  'Valor Mercado €'?: string
+  'Fin Contrato'?: string
+  'Agente'?: string
+  'URL Imagen'?: string
+  // Legacy format columns (kept for backwards compatibility)
+  nombre_tm?: string
+  equipo_csv?: string
+  liga_csv?: string
+  'Valor de mercado'?: string
+  'Fin de contrato'?: string
+  Representante?: string
+  Transfermkt?: string
+  Imagen?: string
 }
 
 export interface NormalizedPlayer {

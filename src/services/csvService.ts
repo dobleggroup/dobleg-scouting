@@ -243,6 +243,8 @@ export async function loadAllData(): Promise<AllRawData> {
     .filter(r => r['Jugador']?.trim())
     .map(r => ({
       Jugador: r['Jugador'] ?? '',
+      Equipo: r['Equipo'] ?? r['equipo_csv'] ?? '',
+      Liga: r['Liga'] ?? r['liga_csv'] ?? '',
       nombre_tm: r['nombre_tm'] ?? '',
       equipo_csv: r['equipo_csv'] ?? '',
       liga_csv: r['liga_csv'] ?? '',

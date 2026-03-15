@@ -1,7 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://qgwmxjjumauortbwvivu.supabase.co'
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFnd214amp1bWF1b3J0Ynd2aXZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwODI4ODAsImV4cCI6MjA4ODY1ODg4MH0.sDJ6P9bOa-VrjpxZgD_umuIPFiGsonVs0bQtzdYw37E'
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+// Validate environment variables at startup
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    'Missing Supabase credentials. Copy .env.example to .env.local and add your Supabase URL and anon key.'
+  )
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -44,4 +51,103 @@ export interface DbComment {
   created_by: string
   created_by_name: string
   created_at: string
+}
+
+export interface DbSeguimiento {
+  id: string
+  player_key: string
+  player_name: string
+  team: string | null
+  league: string | null
+  position: string | null
+  age: number | null
+  image_url: string | null
+  added_by: string
+  added_by_name: string | null
+  source: 'ficha' | 'reporte' | 'manual'
+  notes: string | null
+  created_at: string
+}
+
+// ─── SEGUIMIENTO FUNCTIONS ───────────────────────────────────────────────────
+
+export async function addToSeguimiento(
+  player: {
+    playerKey: string
+    playerName: string
+    team?: string
+    league?: string
+    position?: string
+    age?: number
+    imageUrl?: string
+  },
+  source: 'ficha' | 'reporte' | 'manual' = 'ficha',
+  notes?: string
+): Promise<{ success: boolean; error?: string }> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return { success: false, error: 'Debes iniciar sesión para agregar jugadores a seguimiento' }
+  }
+
+  const { error } = await supabase.from('seguimiento').upsert({
+    player_key: player.playerKey,
+    player_name: player.playerName,
+    team: player.team || null,
+    league: player.league || null,
+    position: player.position || null,
+    age: player.age || null,
+    image_url: player.imageUrl || null,
+    added_by: user.id,
+    added_by_name: user.user_metadata?.full_name || user.email || null,
+    source,
+    notes: notes || null,
+  }, {
+    onConflict: 'player_key',
+  })
+
+  if (error) {
+    console.error('Error adding to seguimiento:', error)
+    return { success: false, error: error.message }
+  }
+
+  return { success: true }
+}
+
+export async function removeFromSeguimiento(playerKey: string): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('seguimiento')
+    .delete()
+    .eq('player_key', playerKey)
+
+  if (error) {
+    console.error('Error removing from seguimiento:', error)
+    return { success: false, error: error.message }
+  }
+
+  return { success: true }
+}
+
+export async function isInSeguimiento(playerKey: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('seguimiento')
+    .select('id')
+    .eq('player_key', playerKey)
+    .single()
+
+  if (error || !data) return false
+  return true
+}
+
+export async function getSeguimientoList(): Promise<DbSeguimiento[]> {
+  const { data, error } = await supabase
+    .from('seguimiento')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching seguimiento:', error)
+    return []
+  }
+
+  return data || []
 }
