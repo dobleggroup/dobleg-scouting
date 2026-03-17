@@ -35,7 +35,7 @@ function buildTransfermarktByLinkMap(tmData: TransfermarktData[]): Map<string, T
   return map
 }
 
-// Enrich internal player using their Transfermarkt link
+// Enrich internal player using their Transfermarkt link (only fills missing data)
 function enrichInternalWithTransfermarktLink(
   player: EnrichedPlayer,
   tmByLinkMap: Map<string, TransfermarktData>
@@ -56,50 +56,51 @@ function enrichInternalWithTransfermarktLink(
   const tm = tmByLinkMap.get(normalizedUrl)
   if (!tm) return player
 
-  // Get values from Transfermarkt data
-  const marketValueStr = tm['Valor de mercado'] || ''
-  const contractStr = tm['Fin de contrato'] || ''
-  const imagen = tm.Imagen || ''
-  const representante = tm.Representante || ''
+  // Only fill in MISSING data - don't overwrite masDatos values
+  const enriched = { ...player }
 
-  // Parse market value
-  const marketValueRaw = parseMarketValue(marketValueStr)
-
-  // Parse contract date
-  const contractDate = parseContractDate(contractStr)
-  const now = new Date()
-  const monthsRemaining = contractDate ? monthsBetween(now, contractDate) : null
-  const contractStatus: 'ok' | 'warning' | 'critical' =
-    monthsRemaining === null ? 'ok'
-    : monthsRemaining < 7 ? 'critical'
-    : monthsRemaining < 13 ? 'warning'
-    : 'ok'
-
-  return {
-    ...player,
-    'Valor de mercado (Transfermarkt)': marketValueStr,
-    'Vencimiento contrato': contractStr,
-    Imagen: player.Imagen || imagen,  // Prioritize CSV image, fallback to Transfermarkt
-    Representante: representante,
-    marketValueRaw: marketValueRaw > 0 ? marketValueRaw : player.marketValueRaw,
-    marketValueFormatted: marketValueRaw > 0 ? formatMarketValue(marketValueRaw) : player.marketValueFormatted,
-    monthsRemaining: monthsRemaining ?? player.monthsRemaining,
-    contractStatus,
+  // Image - only if missing
+  if (!enriched.Imagen && tm.Imagen) {
+    enriched.Imagen = tm.Imagen
   }
+
+  // Representante - only if missing
+  if (!enriched.Representante && tm.Representante) {
+    enriched.Representante = tm.Representante
+  }
+
+  // Market value - only if missing
+  if (enriched.marketValueRaw === 0 && tm['Valor de mercado']) {
+    const marketValueRaw = parseMarketValue(tm['Valor de mercado'])
+    if (marketValueRaw > 0) {
+      enriched['Valor de mercado (Transfermarkt)'] = tm['Valor de mercado']
+      enriched.marketValueRaw = marketValueRaw
+      enriched.marketValueFormatted = formatMarketValue(marketValueRaw)
+    }
+  }
+
+  // Contract - only if missing
+  if (!enriched['Vencimiento contrato'] && tm['Fin de contrato']) {
+    enriched['Vencimiento contrato'] = tm['Fin de contrato']
+    const contractDate = parseContractDate(tm['Fin de contrato'])
+    if (contractDate) {
+      const now = new Date()
+      const monthsRemaining = monthsBetween(now, contractDate)
+      enriched.monthsRemaining = monthsRemaining
+      enriched.contractStatus = monthsRemaining < 7 ? 'critical' : monthsRemaining < 13 ? 'warning' : 'ok'
+    }
+  }
+
+  return enriched
 }
 
 function buildMasDatosMap(masDatos: MasDatosEntry[]): Map<string, MasDatosEntry> {
   const map = new Map<string, MasDatosEntry>()
   for (const entry of masDatos) {
-    if (entry.Jugador && entry['Valor de mercado']) {
-      // Key by player name (normalized)
+    if (entry.Jugador) {
+      // Key by player name (normalized) - primary key for interno matching
       const key = normalizeName(entry.Jugador)
       map.set(key, entry)
-      // Also add key with team for more precise matching
-      if (entry.Equipo) {
-        const keyWithTeam = `${key}|${normalizeName(entry.Equipo)}`
-        map.set(keyWithTeam, entry)
-      }
     }
   }
   return map
@@ -109,43 +110,59 @@ function enrichWithMasDatos(
   player: EnrichedPlayer,
   masDatosMap: Map<string, MasDatosEntry>
 ): EnrichedPlayer {
-  // Skip if player already has a market value
-  if (player.marketValueRaw > 0) return player
-
+  // Match by normalized player name (masDatos "Jugador" column matches interno "Jugador")
   const nameKey = normalizeName(player.Jugador)
-  const teamKey = normalizeName(player.Equipo)
+  const entry = masDatosMap.get(nameKey)
 
-  // Try exact match with team first
-  let entry = masDatosMap.get(`${nameKey}|${teamKey}`)
+  if (!entry) return player
 
-  // Try partial team match (team name contains or is contained)
-  if (!entry) {
-    for (const [key, val] of masDatosMap.entries()) {
-      if (!key.includes('|')) continue // Skip name-only keys
-      const [entryName, entryTeam] = key.split('|')
-      if (entryName === nameKey) {
-        // Check if teams partially match
-        if (teamKey.includes(entryTeam) || entryTeam.includes(teamKey)) {
-          entry = val
-          break
-        }
-      }
+  // Build enriched player with ALL available data from masDatos
+  const enriched = { ...player }
+
+  // Always update Liga from masDatos (it has the correct current league)
+  if (entry.Liga && entry.Liga.trim()) {
+    enriched.Liga = entry.Liga
+  }
+
+  // Update Equipo if masDatos has it (current team)
+  if (entry.Equipo && entry.Equipo.trim()) {
+    enriched.Equipo = entry.Equipo
+  }
+
+  // Update market value
+  if (entry['Valor de mercado']) {
+    const marketValueRaw = parseMarketValue(entry['Valor de mercado'])
+    if (marketValueRaw > 0) {
+      enriched['Valor de mercado (Transfermarkt)'] = entry['Valor de mercado']
+      enriched.marketValueRaw = marketValueRaw
+      enriched.marketValueFormatted = formatMarketValue(marketValueRaw)
     }
   }
 
-  // NO fallback to name-only match - too risky with common names like Caicedo, López, etc.
-
-  if (!entry || !entry['Valor de mercado']) return player
-
-  const marketValueRaw = parseMarketValue(entry['Valor de mercado'])
-  if (marketValueRaw === 0) return player
-
-  return {
-    ...player,
-    'Valor de mercado (Transfermarkt)': entry['Valor de mercado'],
-    marketValueRaw,
-    marketValueFormatted: formatMarketValue(marketValueRaw),
+  // Update image
+  if (entry.Imagen && entry.Imagen.trim()) {
+    enriched.Imagen = entry.Imagen
   }
+
+  // Update contract end date
+  if (entry['Fecha fin de contrato'] && entry['Fecha fin de contrato'].trim()) {
+    enriched['Vencimiento contrato'] = entry['Fecha fin de contrato']
+    // Parse contract date for status
+    const contractDate = parseContractDate(entry['Fecha fin de contrato'])
+    if (contractDate) {
+      const now = new Date()
+      const monthsRemaining = monthsBetween(now, contractDate)
+      enriched.monthsRemaining = monthsRemaining
+      enriched.contractStatus = monthsRemaining < 7 ? 'critical' : monthsRemaining < 13 ? 'warning' : 'ok'
+    }
+  }
+
+  // Update Transfermarkt link
+  if (entry.Transfermkt && entry.Transfermkt.trim()) {
+    enriched.Transfermkt = entry.Transfermkt
+  }
+
+  return enriched
 }
 
 // ─── MARKET VALUE ESTIMATION ─────────────────────────────────────────────────
@@ -156,6 +173,14 @@ const ARGENTINA_TIER_2 = ['san lorenzo', 'velez sarsfield', 'velez', 'estudiante
   'newell', 'newells', 'rosario central', 'belgrano'] // Big clubs
 const ARGENTINA_TIER_3 = ['lanus', 'argentinos juniors', 'argentinos', 'union santa fe', 'union', 'defensa y justicia',
   'defensa', 'banfield', 'huracan', 'gimnasia la plata', 'gimnasia', 'godoy cruz', 'central cordoba'] // Mid clubs
+
+// All Argentine teams for league detection (combine all tiers)
+const ALL_ARGENTINA_TEAMS = [
+  ...ARGENTINA_TIER_1, ...ARGENTINA_TIER_2, ...ARGENTINA_TIER_3,
+  // Additional teams that might appear in interno data
+  'colon', 'platense', 'tigre', 'sarmiento', 'instituto', 'barracas central',
+  'central cordoba santiago', 'aldosivi', 'arsenal', 'patronato', 'atletico tucuman'
+]
 
 // Detect league type for a player
 function getLeagueType(player: EnrichedPlayer): 'argentina1' | 'colombia' | 'other' {
@@ -168,6 +193,15 @@ function getLeagueType(player: EnrichedPlayer): 'argentina1' | 'colombia' | 'oth
   if (league.includes('colombia') || league.includes('betplay') ||
       league.includes('dimayor') || league === '2° colombia' || league === '2 colombia') {
     return 'colombia'
+  }
+
+  // If Liga is unknown/desarrollo, try to detect from team name
+  if (!league || league.includes('desarrollo') || league === 'sin datos') {
+    const team = normalizeName(player.Equipo || '')
+    // Check if team is a known Argentine club
+    if (ALL_ARGENTINA_TEAMS.some(t => team.includes(t) || t.includes(team))) {
+      return 'argentina1'
+    }
   }
 
   return 'other'
@@ -267,38 +301,32 @@ function estimateMarketValue(player: EnrichedPlayer, leagueType: 'argentina1' | 
 }
 
 function enrichWithEstimatedValue(player: EnrichedPlayer): EnrichedPlayer {
-  // Get league type
+  // Get league type (may detect from team name if Liga is desarrollo)
   const leagueType = getLeagueType(player)
 
   // Only estimate for Argentina 1st or Colombia
   if (leagueType === 'other') return player
 
-  const estimatedValue = estimateMarketValue(player, leagueType)
+  // Check if we need to fix Liga (was detected from team name, not from masDatos)
+  const currentLiga = normalizeName(player.Liga || '')
+  const needsLigaFix = !currentLiga || currentLiga.includes('desarrollo') || currentLiga === 'sin datos' || currentLiga === 'reserva'
+  const detectedLiga = leagueType === 'argentina1' ? 'Liga Argentina' : 'Liga Colombia'
 
-  // If player has no value, use estimation
+  // Only estimate if player has NO market value (don't override real TM values from masDatos)
   if (player.marketValueRaw === 0) {
+    const estimatedValue = estimateMarketValue(player, leagueType)
     return {
       ...player,
+      Liga: needsLigaFix ? detectedLiga : player.Liga,
       'Valor de mercado (Transfermarkt)': formatMarketValue(estimatedValue),
       marketValueRaw: estimatedValue,
       marketValueFormatted: formatMarketValue(estimatedValue),
     }
   }
 
-  // If player has a very low Transfermarkt value but our estimation is significantly higher,
-  // use the higher estimation (likely undervalued young talent from reserves)
-  const score = player.ggScore ?? 0
-  const age = player.ageNum || 25
-  const isYoungTalent = age <= 23 && score >= 40
-  const isVeryUndervalued = estimatedValue > player.marketValueRaw * 3 // Estimation is 3x+ higher
-
-  if (isYoungTalent && isVeryUndervalued && player.marketValueRaw < 200_000) {
-    return {
-      ...player,
-      'Valor de mercado (Transfermarkt)': formatMarketValue(estimatedValue),
-      marketValueRaw: estimatedValue,
-      marketValueFormatted: formatMarketValue(estimatedValue),
-    }
+  // Player has market value - only fix Liga if needed
+  if (needsLigaFix) {
+    return { ...player, Liga: detectedLiga }
   }
 
   return player
@@ -1002,6 +1030,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
         const internalScored = computeGGScores(raw.internal, 'interno', scoreMap)
 
+        // DEBUG: Log first interno player to check data
+        if (raw.internal.length > 0) {
+          const firstPlayer = raw.internal[0]
+          console.log('[DEBUG interno] Jugador:', firstPlayer['Jugador'])
+          console.log('[DEBUG interno] Valor de mercado:', firstPlayer['Valor de mercado'])
+          console.log('[DEBUG interno] Valor TM:', firstPlayer['Valor de mercado (Transfermarkt)'])
+          console.log('[DEBUG interno] Liga:', firstPlayer['Liga'])
+          console.log('[DEBUG interno] Keys:', Object.keys(firstPlayer).slice(0, 15).join(', '))
+        }
+        if (internalScored.length > 0) {
+          console.log('[DEBUG scored] Jugador:', internalScored[0].Jugador)
+          console.log('[DEBUG scored] marketValueRaw:', internalScored[0].marketValueRaw)
+          console.log('[DEBUG scored] Liga:', internalScored[0].Liga)
+          // Calculate total
+          const totalValue = internalScored.reduce((sum, p) => sum + (p.marketValueRaw || 0), 0)
+          console.log('[DEBUG scored] TOTAL PORTFOLIO:', totalValue, '=', (totalValue/1000000).toFixed(1) + 'M')
+        }
+
         // Enrich internal players with:
         // 1. Transfermarkt data using their TM link (valor de mercado, contrato, imagen)
         // 2. JugadorSK for linking to evolution/metrics
@@ -1009,12 +1055,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
         // 4. Estimated value if still missing
         const internal: EnrichedPlayer[] = internalScored.map(p => {
           const jsk = matchPlayerToJugadorSK(p, raw.evolution)
-          // First try to enrich using Transfermarkt link (most accurate)
-          let enriched = enrichInternalWithTransfermarktLink(p, tmByLinkMap)
-          // Fallback to MasDatos if no value yet
-          enriched = enrichWithMasDatos(enriched, masDatosMap)
-          // Estimate if still no value
-          enriched = enrichWithEstimatedValue(enriched)
+          // If interno already has value and liga, use them directly (no enrichment needed)
+          // Only enrich if data is missing
+          let enriched = p
+          if (p.marketValueRaw === 0 || !p.Liga || p.Liga.toLowerCase().includes('desarrollo')) {
+            // Try MasDatos for missing data
+            enriched = enrichWithMasDatos(p, masDatosMap)
+          }
+          if (enriched.marketValueRaw === 0) {
+            // Try Transfermarkt link
+            enriched = enrichInternalWithTransfermarktLink(enriched, tmByLinkMap)
+          }
+          if (enriched.marketValueRaw === 0) {
+            // Estimate only if still no value
+            enriched = enrichWithEstimatedValue(enriched)
+          }
           // Add jugadorSK
           return { ...enriched, jugadorSK: jsk ?? '' }
         })

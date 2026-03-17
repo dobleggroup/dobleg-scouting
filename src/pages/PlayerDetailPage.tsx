@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
-import { useParams, useSearchParams, Link } from 'react-router-dom'
+import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { useData } from '@/context/DataContext'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import EmptyState from '@/components/ui/EmptyState'
@@ -568,13 +568,61 @@ function MetricRowWithPercentile({ label, value, percentile }: MetricWithPercent
 export default function PlayerDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const source = (searchParams.get('source') ?? 'externo') as 'externo' | 'interno' | 'seguimiento'
   const overridePosition = searchParams.get('pos')
   const { external, internal, monitoring, normalized, evolution, subjectiveMetrics, marketValueHistory, gpsData, loading, error } = useData()
   const [activeTab, setActiveTab] = useState('General')
   const [comparisonLeague, setComparisonLeague] = useState<string>('all')
   const [showExportModal, setShowExportModal] = useState(false)
+  const [showPlayerSelector, setShowPlayerSelector] = useState(false)
+  const [playerSearchQuery, setPlayerSearchQuery] = useState('')
   const contentRef = useRef<HTMLDivElement>(null)
+  const playerSelectorRef = useRef<HTMLDivElement>(null)
+
+  // Get available players for selector based on source
+  const availablePlayers = useMemo(() => {
+    if (source === 'interno') {
+      return internal.sort((a, b) => a.Jugador.localeCompare(b.Jugador))
+    }
+    if (source === 'seguimiento') {
+      return monitoring.map(m => m.metricsPlayer).filter(Boolean).sort((a, b) => a!.Jugador.localeCompare(b!.Jugador)) as EnrichedPlayer[]
+    }
+    return external.sort((a, b) => a.Jugador.localeCompare(b.Jugador))
+  }, [source, internal, external, monitoring])
+
+  // Filter players by search query
+  const filteredPlayers = useMemo(() => {
+    if (!playerSearchQuery.trim()) return availablePlayers
+    const query = playerSearchQuery.toLowerCase()
+    return availablePlayers.filter(p =>
+      p.Jugador.toLowerCase().includes(query) ||
+      p.Equipo?.toLowerCase().includes(query) ||
+      p['Posición específica']?.toLowerCase().includes(query)
+    )
+  }, [availablePlayers, playerSearchQuery])
+
+  // Close selector when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (playerSelectorRef.current && !playerSelectorRef.current.contains(event.target as Node)) {
+        setShowPlayerSelector(false)
+        setPlayerSearchQuery('')
+      }
+    }
+    if (showPlayerSelector) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showPlayerSelector])
+
+  // Navigate to a different player
+  const handlePlayerSelect = (selectedPlayer: EnrichedPlayer) => {
+    const playerId = selectedPlayer.id || encodeURIComponent(selectedPlayer.Jugador)
+    navigate(`/jugador/${playerId}?source=${source}`)
+    setShowPlayerSelector(false)
+    setPlayerSearchQuery('')
+  }
 
   const player: EnrichedPlayer | null = useMemo(() => {
     if (!id) return null
@@ -743,10 +791,26 @@ export default function PlayerDetailPage() {
     })
   }, [player, source, marketValueHistory])
 
-  // Define tabs based on source
+  // Tab configuration with icons
+  const tabsConfig = [
+    { id: 'General', label: 'General', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z', internal: false },
+    { id: 'Radar', label: 'Radar', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', internal: false },
+    { id: 'Valor', label: 'Valor', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', internal: true },
+    { id: 'Evolución', label: 'Evolución', icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6', internal: true },
+    { id: 'Físico', label: 'Físico', icon: 'M13 10V3L4 14h7v7l9-11h-7z', internal: true },
+    { id: 'Métricas', label: 'Métricas', icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', internal: false },
+    { id: 'Salud', label: 'Salud', icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z', internal: true },
+    { id: 'Antropometría', label: 'Antropo', icon: 'M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3', internal: true },
+    { id: 'Fisioterapia', label: 'Fisio', icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z', internal: true },
+    { id: 'Nutrición', label: 'Nutrición', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253', internal: true },
+    { id: 'Neurociencia', label: 'Neuro', icon: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z', internal: true },
+    { id: 'Psicología', label: 'Psico', icon: 'M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z', internal: true },
+  ]
+
+  // Filter tabs based on source
   const tabs = source === 'interno'
-    ? ['General', 'Radar', 'Físico', 'Valor', 'Evolución', 'Métricas']
-    : ['General', 'Radar', 'Métricas']
+    ? tabsConfig
+    : tabsConfig.filter(t => !t.internal)
 
   // Compute radar data for PDF export
   const computeRadarData = useMemo(() => {
@@ -842,9 +906,9 @@ export default function PlayerDetailPage() {
         {/* Left sidebar - Player info & Score */}
         <div className="lg:col-span-4 space-y-5">
           {/* Player card */}
-          <div className="card-apple overflow-hidden" id="player-header-card">
+          <div className="card-apple" id="player-header-card">
             {/* Header with gradient, pattern and logo */}
-            <div className="relative h-28 overflow-hidden">
+            <div className="relative h-28 overflow-hidden rounded-t-apple-xl">
               {/* Base gradient */}
               <div className="absolute inset-0 bg-gradient-to-br from-brand-green/25 via-emerald-500/15 to-apple-gray-100/50 dark:to-apple-gray-800/50" />
               {/* Radial glow */}
@@ -898,13 +962,116 @@ export default function PlayerDetailPage() {
             {/* Player info */}
             <div className="p-5 pt-3">
               <div className="flex items-start justify-between gap-2">
-                <div>
-                  <h1 className="text-xl font-bold text-apple-gray-800 dark:text-white tracking-tight">
-                    {player.Jugador}
-                  </h1>
+                <div className="relative" ref={playerSelectorRef}>
+                  <button
+                    onClick={() => setShowPlayerSelector(!showPlayerSelector)}
+                    className="group flex items-center gap-1.5 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/50 -ml-2 px-2 py-1 rounded-lg transition-colors"
+                  >
+                    <h1 className="text-xl font-bold text-apple-gray-800 dark:text-white tracking-tight">
+                      {player.Jugador}
+                    </h1>
+                    <svg
+                      className={`w-4 h-4 text-apple-gray-400 group-hover:text-apple-gray-600 dark:group-hover:text-apple-gray-300 transition-transform ${showPlayerSelector ? 'rotate-180' : ''}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
                   <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
                     {player.Equipo || '—'}
                   </p>
+
+                  {/* Player Selector Dropdown */}
+                  {showPlayerSelector && (
+                    <div className="absolute top-full left-0 mt-2 w-72 bg-white dark:bg-apple-gray-800 rounded-xl shadow-lg border border-apple-gray-200 dark:border-apple-gray-700 z-50 overflow-hidden">
+                      {/* Search input */}
+                      <div className="p-2 border-b border-apple-gray-100 dark:border-apple-gray-700">
+                        <div className="relative">
+                          <svg
+                            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-apple-gray-400"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                          <input
+                            type="text"
+                            placeholder="Buscar jugador..."
+                            value={playerSearchQuery}
+                            onChange={(e) => setPlayerSearchQuery(e.target.value)}
+                            className="w-full pl-8 pr-3 py-2 text-sm bg-apple-gray-50 dark:bg-apple-gray-700 border-none rounded-lg focus:ring-2 focus:ring-brand-green/50 text-apple-gray-800 dark:text-white placeholder-apple-gray-400"
+                            autoFocus
+                          />
+                        </div>
+                      </div>
+
+                      {/* Player list */}
+                      <div className="max-h-64 overflow-y-auto">
+                        {filteredPlayers.length === 0 ? (
+                          <p className="p-4 text-sm text-apple-gray-500 text-center">
+                            No se encontraron jugadores
+                          </p>
+                        ) : (
+                          filteredPlayers.map((p) => {
+                            const isCurrentPlayer = p.Jugador === player.Jugador
+                            return (
+                              <button
+                                key={p.id || p.Jugador}
+                                onClick={() => !isCurrentPlayer && handlePlayerSelect(p)}
+                                disabled={isCurrentPlayer}
+                                className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors ${
+                                  isCurrentPlayer
+                                    ? 'bg-brand-green/10 cursor-default'
+                                    : 'hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/50'
+                                }`}
+                              >
+                                {/* Mini avatar */}
+                                {p.Imagen ? (
+                                  <img
+                                    src={p.Imagen}
+                                    alt=""
+                                    className="w-8 h-8 rounded-lg object-cover bg-apple-gray-100 dark:bg-apple-gray-700"
+                                  />
+                                ) : (
+                                  <div className="w-8 h-8 rounded-lg bg-apple-gray-100 dark:bg-apple-gray-700 flex items-center justify-center">
+                                    <span className="text-xs font-medium text-apple-gray-500">
+                                      {p.Jugador.split(' ').map(w => w[0]).slice(0, 2).join('')}
+                                    </span>
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm font-medium truncate ${
+                                    isCurrentPlayer ? 'text-brand-green' : 'text-apple-gray-800 dark:text-white'
+                                  }`}>
+                                    {p.Jugador}
+                                  </p>
+                                  <p className="text-xs text-apple-gray-500 truncate">
+                                    {p.Equipo || '—'} · {p['Posición específica'] || p.Posición || '—'}
+                                  </p>
+                                </div>
+                                {isCurrentPlayer && (
+                                  <svg className="w-4 h-4 text-brand-green shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                  </svg>
+                                )}
+                              </button>
+                            )
+                          })
+                        )}
+                      </div>
+
+                      {/* Footer with count */}
+                      <div className="px-3 py-2 border-t border-apple-gray-100 dark:border-apple-gray-700 bg-apple-gray-50/50 dark:bg-apple-gray-800/50">
+                        <p className="text-xs text-apple-gray-400">
+                          {filteredPlayers.length} de {availablePlayers.length} jugadores
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <ContractBadge status={player.contractStatus} monthsRemaining={player.monthsRemaining} />
               </div>
@@ -1082,27 +1249,57 @@ export default function PlayerDetailPage() {
         </div>
 
         {/* Main content area */}
-        <div className="lg:col-span-8 space-y-5">
-          {/* Tabs */}
-          <div className="flex gap-1 bg-apple-gray-100/50 dark:bg-apple-gray-800/50 rounded-xl p-1 overflow-x-auto">
-            {tabs.map(tab => (
-              <button
-                key={tab}
-                data-tab={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ease-apple whitespace-nowrap ${
-                  activeTab === tab
-                    ? 'bg-white dark:bg-apple-gray-700 text-apple-gray-800 dark:text-white shadow-apple dark:shadow-apple-dark'
-                    : 'text-apple-gray-500 dark:text-apple-gray-400 hover:text-apple-gray-700 dark:hover:text-apple-gray-200'
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
+        <div className="lg:col-span-8">
+          <div className="flex gap-4">
+            {/* Vertical Tab Sidebar */}
+            <div className="shrink-0 w-12 xl:w-auto">
+              <div className="sticky top-4 bg-white dark:bg-apple-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark p-1.5 xl:p-2">
+                <nav className="space-y-0.5">
+                  {tabs.map((tab, index) => {
+                    const isActive = activeTab === tab.id
+                    // Add separator before "Salud" section (medical tabs)
+                    const showSeparator = tab.id === 'Salud'
 
-          {/* Tab content */}
-          <div className="card-apple p-6" id="player-tab-content">
+                    return (
+                      <div key={tab.id}>
+                        {showSeparator && (
+                          <div className="my-2 mx-2 border-t border-apple-gray-100 dark:border-apple-gray-700" />
+                        )}
+                        <button
+                          data-tab={tab.id}
+                          onClick={() => setActiveTab(tab.id)}
+                          className={`relative w-full flex items-center gap-2.5 px-2.5 xl:px-3 py-2 xl:py-2.5 rounded-lg text-left transition-all duration-200 group ${
+                            isActive
+                              ? 'bg-brand-green text-white shadow-sm'
+                              : 'text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/50 hover:text-apple-gray-700 dark:hover:text-apple-gray-200'
+                          }`}
+                        >
+                          <svg
+                            className={`w-4 h-4 shrink-0 transition-colors ${
+                              isActive ? 'text-white' : 'text-apple-gray-400 group-hover:text-apple-gray-600 dark:group-hover:text-apple-gray-300'
+                            }`}
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={1.5}
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d={tab.icon} />
+                          </svg>
+                          <span className="text-xs font-medium hidden xl:block whitespace-nowrap">{tab.label}</span>
+                          {/* Tooltip for small screens */}
+                          <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden whitespace-nowrap z-50 pointer-events-none">
+                            {tab.id}
+                          </span>
+                        </button>
+                      </div>
+                    )
+                  })}
+                </nav>
+              </div>
+            </div>
+
+            {/* Tab content */}
+            <div className="flex-1 card-apple p-6 min-w-0" id="player-tab-content">
 
             {/* GENERAL TAB */}
             {activeTab === 'General' && (
@@ -1359,6 +1556,230 @@ export default function PlayerDetailPage() {
                 )}
               </div>
             )}
+
+            {/* SALUD TAB */}
+            {activeTab === 'Salud' && source === 'interno' && (
+              <div className="animate-fade-in" id="tab-content-salud">
+                <div className="mb-5">
+                  <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
+                    Historial de Salud
+                  </h3>
+                  <p className="text-xs text-apple-gray-400 mt-0.5">
+                    Lesiones, recuperaciones y estado físico general
+                  </p>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Body Map */}
+                  <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-6">
+                    <h4 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-4">
+                      Mapa Corporal
+                    </h4>
+                    <div className="flex justify-center">
+                      <svg viewBox="0 0 200 400" className="w-48 h-auto">
+                        {/* Head */}
+                        <ellipse cx="100" cy="30" rx="25" ry="28" className="fill-apple-gray-200 dark:fill-apple-gray-600 stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="1" />
+                        {/* Neck */}
+                        <rect x="90" y="55" width="20" height="15" className="fill-apple-gray-200 dark:fill-apple-gray-600" />
+                        {/* Torso */}
+                        <path d="M60 70 Q50 100 55 160 L75 165 L75 175 L125 175 L125 165 L145 160 Q150 100 140 70 Z" className="fill-apple-gray-200 dark:fill-apple-gray-600 stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="1" />
+                        {/* Left Arm */}
+                        <path d="M60 72 Q40 80 35 120 Q30 140 25 160 Q20 175 30 180 Q40 175 45 160 L55 120 Q58 90 60 72" className="fill-apple-gray-200 dark:fill-apple-gray-600 stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="1" />
+                        {/* Right Arm */}
+                        <path d="M140 72 Q160 80 165 120 Q170 140 175 160 Q180 175 170 180 Q160 175 155 160 L145 120 Q142 90 140 72" className="fill-apple-gray-200 dark:fill-apple-gray-600 stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="1" />
+                        {/* Left Leg */}
+                        <path d="M75 175 L70 250 Q65 280 60 320 Q55 350 55 370 Q55 385 70 385 Q80 385 80 370 L85 320 Q90 280 90 250 L95 175 Z" className="fill-apple-gray-200 dark:fill-apple-gray-600 stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="1" />
+                        {/* Right Leg */}
+                        <path d="M125 175 L130 250 Q135 280 140 320 Q145 350 145 370 Q145 385 130 385 Q120 385 120 370 L115 320 Q110 280 110 250 L105 175 Z" className="fill-apple-gray-200 dark:fill-apple-gray-600 stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="1" />
+                      </svg>
+                    </div>
+                    <p className="text-center text-xs text-apple-gray-400 mt-4">
+                      Sin lesiones registradas actualmente
+                    </p>
+                  </div>
+
+                  {/* Injury History */}
+                  <div>
+                    <h4 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-4">
+                      Historial de Lesiones
+                    </h4>
+                    <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-6 text-center">
+                      <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-apple-gray-100 dark:bg-apple-gray-700 flex items-center justify-center">
+                        <svg className="w-6 h-6 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400">
+                        Sin datos de lesiones
+                      </p>
+                      <p className="text-xs text-apple-gray-400 mt-1">
+                        Los datos se cargarán próximamente
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ANTROPOMETRÍA TAB */}
+            {activeTab === 'Antropometría' && source === 'interno' && (
+              <div className="animate-fade-in" id="tab-content-antropometria">
+                <div className="mb-5">
+                  <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
+                    Datos Antropométricos
+                  </h3>
+                  <p className="text-xs text-apple-gray-400 mt-0.5">
+                    Mediciones físicas y composición corporal
+                  </p>
+                </div>
+
+                <div className="grid md:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-4 text-center">
+                    <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mb-1">Altura</p>
+                    <p className="text-2xl font-bold text-apple-gray-800 dark:text-white">
+                      {player.Altura || '—'} <span className="text-sm font-normal text-apple-gray-400">cm</span>
+                    </p>
+                  </div>
+                  <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-4 text-center">
+                    <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mb-1">Peso</p>
+                    <p className="text-2xl font-bold text-apple-gray-800 dark:text-white">
+                      — <span className="text-sm font-normal text-apple-gray-400">kg</span>
+                    </p>
+                  </div>
+                  <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-4 text-center">
+                    <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mb-1">IMC</p>
+                    <p className="text-2xl font-bold text-apple-gray-800 dark:text-white">—</p>
+                  </div>
+                </div>
+
+                <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-6 text-center">
+                  <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-apple-gray-100 dark:bg-apple-gray-700 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                    </svg>
+                  </div>
+                  <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400">
+                    Datos antropométricos completos próximamente
+                  </p>
+                  <p className="text-xs text-apple-gray-400 mt-1">
+                    Composición corporal, envergadura, mediciones de segmentos
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* FISIOTERAPIA TAB */}
+            {activeTab === 'Fisioterapia' && source === 'interno' && (
+              <div className="animate-fade-in" id="tab-content-fisioterapia">
+                <div className="mb-5">
+                  <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
+                    Fisioterapia
+                  </h3>
+                  <p className="text-xs text-apple-gray-400 mt-0.5">
+                    Tratamientos, sesiones y seguimiento de recuperación
+                  </p>
+                </div>
+
+                <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-8 text-center">
+                  <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-apple-gray-100 dark:bg-apple-gray-700 flex items-center justify-center">
+                    <svg className="w-7 h-7 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                    </svg>
+                  </div>
+                  <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400">
+                    Sin sesiones de fisioterapia registradas
+                  </p>
+                  <p className="text-xs text-apple-gray-400 mt-1">
+                    Los datos de tratamientos y recuperación se cargarán próximamente
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* NUTRICIÓN TAB */}
+            {activeTab === 'Nutrición' && source === 'interno' && (
+              <div className="animate-fade-in" id="tab-content-nutricion">
+                <div className="mb-5">
+                  <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
+                    Nutrición
+                  </h3>
+                  <p className="text-xs text-apple-gray-400 mt-0.5">
+                    Plan alimenticio, seguimiento y recomendaciones
+                  </p>
+                </div>
+
+                <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-8 text-center">
+                  <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-apple-gray-100 dark:bg-apple-gray-700 flex items-center justify-center">
+                    <svg className="w-7 h-7 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                  </div>
+                  <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400">
+                    Sin datos nutricionales registrados
+                  </p>
+                  <p className="text-xs text-apple-gray-400 mt-1">
+                    Planes de alimentación y seguimiento próximamente
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* NEUROCIENCIA TAB */}
+            {activeTab === 'Neurociencia' && source === 'interno' && (
+              <div className="animate-fade-in" id="tab-content-neurociencia">
+                <div className="mb-5">
+                  <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
+                    Neurociencia
+                  </h3>
+                  <p className="text-xs text-apple-gray-400 mt-0.5">
+                    Evaluaciones cognitivas y entrenamiento mental
+                  </p>
+                </div>
+
+                <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-8 text-center">
+                  <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-apple-gray-100 dark:bg-apple-gray-700 flex items-center justify-center">
+                    <svg className="w-7 h-7 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                  </div>
+                  <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400">
+                    Sin evaluaciones neurocognitivas
+                  </p>
+                  <p className="text-xs text-apple-gray-400 mt-1">
+                    Tests de reacción, toma de decisiones y concentración próximamente
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* PSICOLOGÍA TAB */}
+            {activeTab === 'Psicología' && source === 'interno' && (
+              <div className="animate-fade-in" id="tab-content-psicologia">
+                <div className="mb-5">
+                  <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
+                    Psicología
+                  </h3>
+                  <p className="text-xs text-apple-gray-400 mt-0.5">
+                    Evaluaciones psicológicas y bienestar emocional
+                  </p>
+                </div>
+
+                <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-8 text-center">
+                  <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-apple-gray-100 dark:bg-apple-gray-700 flex items-center justify-center">
+                    <svg className="w-7 h-7 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400">
+                    Sin evaluaciones psicológicas registradas
+                  </p>
+                  <p className="text-xs text-apple-gray-400 mt-1">
+                    Seguimiento emocional y bienestar mental próximamente
+                  </p>
+                </div>
+              </div>
+            )}
+            </div>
           </div>
         </div>
       </div>

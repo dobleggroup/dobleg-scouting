@@ -31,30 +31,19 @@ interface MetricConfig {
   description: string
 }
 
-// Colors matching the platform theme
-const COLORS = {
-  primary: '#22C55E',      // brand-green
-  secondary: '#10b981',    // emerald-500
-  accent: '#34d399',       // emerald-400
-  warning: '#f59e0b',      // amber-500
-  info: '#3b82f6',         // blue-500
-  purple: '#8b5cf6',       // purple-500
-  pink: '#ec4899',         // pink-500
-  cyan: '#06b6d4',         // cyan-500
-  lime: '#84cc16',         // lime-500
-  orange: '#f97316',       // orange-500
-}
+// Green color palette only
+const GREEN = '#22C55E' // brand-green
 
 const METRICS_CONFIG: MetricConfig[] = [
-  { key: 'Distancia', label: 'Distancia Total', shortLabel: 'Distancia', unit: 'm', color: COLORS.primary, description: 'Metros recorridos en el partido' },
-  { key: 'MetrosPorMin', label: 'Metros por Minuto', shortLabel: 'M/min', unit: 'm/min', color: COLORS.secondary, description: 'Intensidad de carrera' },
-  { key: 'HSR', label: 'High Speed Running', shortLabel: 'HSR', unit: 'm', color: COLORS.warning, description: 'Distancia a >21 km/h' },
-  { key: 'VelMax', label: 'Velocidad Máxima', shortLabel: 'Vel. Max', unit: 'km/h', color: COLORS.orange, description: 'Pico de velocidad alcanzado' },
-  { key: 'Sprints', label: 'Sprints', shortLabel: 'Sprints', unit: '', color: COLORS.purple, description: 'Cantidad de sprints realizados' },
-  { key: 'AltaIntensidad', label: '% Alta Intensidad', shortLabel: '% AI', unit: '%', color: COLORS.pink, description: 'Porcentaje de esfuerzo en alta intensidad' },
-  { key: 'PlayerLoad', label: 'Player Load', shortLabel: 'PL', unit: '', color: COLORS.cyan, description: 'Carga física acumulada' },
-  { key: 'Acc3', label: 'Aceleraciones >3m/s²', shortLabel: 'Acc>3', unit: '', color: COLORS.lime, description: 'Explosividad en arranques' },
-  { key: 'Dec3', label: 'Frenadas >3m/s²', shortLabel: 'Dec>3', unit: '', color: COLORS.info, description: 'Capacidad de frenado intenso' },
+  { key: 'Distancia', label: 'Distancia Total', shortLabel: 'Distancia', unit: 'm', color: GREEN, description: 'Metros recorridos en el partido' },
+  { key: 'MetrosPorMin', label: 'Metros por Minuto', shortLabel: 'M/min', unit: 'm/min', color: GREEN, description: 'Intensidad de carrera' },
+  { key: 'HSR', label: 'High Speed Running', shortLabel: 'HSR', unit: 'm', color: GREEN, description: 'Distancia a >21 km/h' },
+  { key: 'VelMax', label: 'Velocidad Máxima', shortLabel: 'Vel. Max', unit: 'km/h', color: GREEN, description: 'Pico de velocidad alcanzado' },
+  { key: 'Sprints', label: 'Sprints', shortLabel: 'Sprints', unit: '', color: GREEN, description: 'Cantidad de sprints realizados' },
+  { key: 'AltaIntensidad', label: '% Alta Intensidad', shortLabel: '% AI', unit: '%', color: GREEN, description: 'Porcentaje de esfuerzo en alta intensidad' },
+  { key: 'PlayerLoad', label: 'Player Load', shortLabel: 'PL', unit: '', color: GREEN, description: 'Carga física acumulada' },
+  { key: 'Acc3', label: 'Aceleraciones >3m/s²', shortLabel: 'Acc>3', unit: '', color: GREEN, description: 'Explosividad en arranques' },
+  { key: 'Dec3', label: 'Frenadas >3m/s²', shortLabel: 'Dec>3', unit: '', color: GREEN, description: 'Capacidad de frenado intenso' },
 ]
 
 const formatDate = (date: Date): string => {
@@ -169,13 +158,13 @@ export default function GPSTab({ gpsEntries, playerName }: GPSTabProps) {
       {/* Header Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { value: gpsEntries.length, label: 'Partidos', color: 'text-brand-green' },
-          { value: formatNumber(stats?.Distancia.avg || 0), label: 'Dist. prom.', unit: 'm', color: 'text-emerald-500' },
-          { value: formatNumber(stats?.VelMax.max || 0, 1), label: 'Vel. máx.', unit: 'km/h', color: 'text-amber-500' },
-          { value: formatNumber(stats?.Sprints.avg || 0, 1), label: 'Sprints prom.', color: 'text-purple-500' },
+          { value: gpsEntries.length, label: 'Partidos', unit: '' },
+          { value: formatNumber(stats?.Distancia.avg || 0), label: 'Dist. prom.', unit: 'm' },
+          { value: formatNumber(stats?.VelMax.max || 0, 1), label: 'Vel. máx.', unit: 'km/h' },
+          { value: formatNumber(stats?.Sprints.avg || 0, 1), label: 'Sprints prom.', unit: '' },
         ].map((stat, i) => (
           <div key={i} className="bg-white dark:bg-apple-gray-800 rounded-apple p-4 shadow-apple dark:shadow-apple-dark">
-            <div className={`text-2xl font-bold ${stat.color}`}>
+            <div className="text-2xl font-bold text-apple-gray-800 dark:text-white">
               {stat.value}
               {stat.unit && <span className="text-sm font-normal text-apple-gray-400 ml-1">{stat.unit}</span>}
             </div>
@@ -187,9 +176,9 @@ export default function GPSTab({ gpsEntries, playerName }: GPSTabProps) {
       {/* View Mode Tabs */}
       <div className="flex gap-1 bg-apple-gray-100 dark:bg-apple-gray-700/50 p-1 rounded-apple w-fit">
         {[
-          { id: 'evolution', label: 'Evolución', icon: '📈' },
-          { id: 'comparison', label: 'Comparación', icon: '📊' },
-          { id: 'summary', label: 'Resumen', icon: '🎯' },
+          { id: 'evolution', label: 'Evolución' },
+          { id: 'comparison', label: 'Comparación' },
+          { id: 'summary', label: 'Resumen' },
         ].map(tab => (
           <button
             key={tab.id}
@@ -200,7 +189,6 @@ export default function GPSTab({ gpsEntries, playerName }: GPSTabProps) {
                 : 'text-apple-gray-500 dark:text-apple-gray-400 hover:text-apple-gray-700 dark:hover:text-apple-gray-300'
             }`}
           >
-            <span className="mr-1.5">{tab.icon}</span>
             {tab.label}
           </button>
         ))}
@@ -208,94 +196,150 @@ export default function GPSTab({ gpsEntries, playerName }: GPSTabProps) {
 
       {/* Evolution View */}
       {viewMode === 'evolution' && (
-        <div className="bg-white dark:bg-apple-gray-800 rounded-apple-xl p-5 shadow-apple dark:shadow-apple-dark">
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold text-apple-gray-800 dark:text-white">Evolución de métricas</h3>
-            <p className="text-xs text-apple-gray-400 mt-0.5">Seleccioná las métricas a visualizar</p>
+        <div className="space-y-4">
+          {/* Metric Selector Card */}
+          <div className="bg-white dark:bg-apple-gray-800 rounded-apple-xl p-5 shadow-apple dark:shadow-apple-dark">
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold text-apple-gray-800 dark:text-white">Evolución de métricas</h3>
+              <p className="text-xs text-apple-gray-400 mt-0.5">Seleccioná las métricas para visualizar (cada una en su propio gráfico)</p>
+            </div>
+
+            {/* Metric Selector */}
+            <div className="flex flex-wrap gap-2">
+              {METRICS_CONFIG.map(m => (
+                <button
+                  key={m.key}
+                  onClick={() => toggleMetric(m.key)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all border ${
+                    selectedMetrics.includes(m.key)
+                      ? 'bg-brand-green text-white border-transparent shadow-sm'
+                      : 'bg-white dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 border-apple-gray-200 dark:border-apple-gray-600 hover:border-brand-green/50'
+                  }`}
+                  title={m.description}
+                >
+                  {m.shortLabel}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Metric Selector */}
-          <div className="flex flex-wrap gap-2 mb-5">
-            {METRICS_CONFIG.map(m => (
-              <button
-                key={m.key}
-                onClick={() => toggleMetric(m.key)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all border ${
-                  selectedMetrics.includes(m.key)
-                    ? 'text-white border-transparent shadow-sm'
-                    : 'bg-white dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 border-apple-gray-200 dark:border-apple-gray-600 hover:border-apple-gray-300'
-                }`}
-                style={selectedMetrics.includes(m.key) ? { backgroundColor: m.color } : {}}
-                title={m.description}
-              >
-                {m.shortLabel}
-              </button>
-            ))}
-          </div>
+          {/* Individual Charts for each selected metric */}
+          {selectedMetrics.length === 0 && (
+            <div className="bg-white dark:bg-apple-gray-800 rounded-apple-xl p-8 shadow-apple dark:shadow-apple-dark text-center">
+              <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400">
+                Seleccioná al menos una métrica para ver su evolución
+              </p>
+            </div>
+          )}
 
-          {/* Area Chart */}
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <defs>
-                  {selectedMetrics.map(key => {
-                    const config = METRICS_CONFIG.find(m => m.key === key)!
-                    return (
-                      <linearGradient key={key} id={`gradient-${key}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={config.color} stopOpacity={0.3} />
-                        <stop offset="95%" stopColor={config.color} stopOpacity={0} />
-                      </linearGradient>
-                    )
-                  })}
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" strokeOpacity={0.5} />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fill: '#86868B', fontSize: 11 }}
-                  axisLine={{ stroke: '#e5e7eb' }}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fill: '#86868B', fontSize: 11 }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#1D1D1F',
-                    border: 'none',
-                    borderRadius: '12px',
-                    boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
-                  }}
-                  labelStyle={{ color: '#fff', fontWeight: 600, marginBottom: 4 }}
-                  itemStyle={{ color: '#fff', fontSize: 12 }}
-                  formatter={(value: number, name: string) => {
-                    const config = METRICS_CONFIG.find(m => m.key === name)
-                    return [`${formatNumber(value, 1)} ${config?.unit || ''}`, config?.label || name]
-                  }}
-                  labelFormatter={(label, payload) => {
-                    const entry = payload?.[0]?.payload
-                    return entry ? `${entry.fullDate} vs ${entry.rival}` : label
-                  }}
-                />
-                {selectedMetrics.map(key => {
-                  const config = METRICS_CONFIG.find(m => m.key === key)!
-                  return (
-                    <Area
-                      key={key}
-                      type="monotone"
-                      dataKey={key}
-                      name={key}
-                      stroke={config.color}
-                      strokeWidth={2}
-                      fill={`url(#gradient-${key})`}
-                      dot={{ fill: config.color, r: 3, strokeWidth: 0 }}
-                      activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff' }}
-                    />
-                  )
-                })}
-              </AreaChart>
-            </ResponsiveContainer>
+          <div className="grid gap-4">
+            {selectedMetrics.map(metricKey => {
+              const config = METRICS_CONFIG.find(m => m.key === metricKey)!
+              const metricStats = stats?.[metricKey]
+
+              return (
+                <div
+                  key={metricKey}
+                  className="bg-white dark:bg-apple-gray-800 rounded-apple-xl p-5 shadow-apple dark:shadow-apple-dark"
+                >
+                  {/* Chart Header */}
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 rounded-full bg-brand-green" />
+                      <div>
+                        <h4 className="text-sm font-semibold text-apple-gray-800 dark:text-white">
+                          {config.label}
+                        </h4>
+                        <p className="text-xs text-apple-gray-400">{config.description}</p>
+                      </div>
+                    </div>
+                    {metricStats && (
+                      <div className="flex items-center gap-4 text-right">
+                        <div>
+                          <div className="text-xs text-apple-gray-400">Promedio</div>
+                          <div className="text-sm font-semibold text-apple-gray-800 dark:text-white tabular-nums">
+                            {formatNumber(metricStats.avg, 1)} {config.unit}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-apple-gray-400">Máximo</div>
+                          <div className="text-sm font-semibold text-apple-gray-800 dark:text-white tabular-nums">
+                            {formatNumber(metricStats.max, 1)} {config.unit}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => toggleMetric(metricKey)}
+                          className="ml-2 p-1.5 rounded-lg hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700 transition-colors"
+                          title="Quitar métrica"
+                        >
+                          <svg className="w-4 h-4 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Individual Chart */}
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id={`gps-gradient-${metricKey}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor={GREEN} stopOpacity={0.15} />
+                            <stop offset="95%" stopColor={GREEN} stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" strokeOpacity={0.3} vertical={false} />
+                        <XAxis
+                          dataKey="date"
+                          tick={{ fill: '#86868B', fontSize: 10 }}
+                          axisLine={{ stroke: '#e5e7eb' }}
+                          tickLine={false}
+                        />
+                        <YAxis
+                          tick={{ fill: '#86868B', fontSize: 10 }}
+                          axisLine={false}
+                          tickLine={false}
+                          width={45}
+                          tickFormatter={(val) => formatNumber(val)}
+                          domain={['auto', 'auto']}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#1D1D1F',
+                            border: 'none',
+                            borderRadius: '10px',
+                            boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+                            padding: '10px 14px',
+                          }}
+                          labelStyle={{ color: '#fff', fontWeight: 600, marginBottom: 4, fontSize: 12 }}
+                          itemStyle={{ color: '#fff', fontSize: 12 }}
+                          formatter={(value: number) => [
+                            `${formatNumber(value, 1)} ${config.unit}`,
+                            config.label
+                          ]}
+                          labelFormatter={(label, payload) => {
+                            const entry = payload?.[0]?.payload
+                            return entry ? `${entry.fullDate} vs ${entry.rival}` : label
+                          }}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey={metricKey}
+                          name={metricKey}
+                          stroke={GREEN}
+                          strokeWidth={2}
+                          fill={`url(#gps-gradient-${metricKey})`}
+                          dot={{ fill: GREEN, r: 3, strokeWidth: 0 }}
+                          activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff' }}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
@@ -342,9 +386,9 @@ export default function GPSTab({ gpsEntries, playerName }: GPSTabProps) {
                     return value
                   }}
                 />
-                <Bar dataKey="Distancia" fill={COLORS.primary} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="HSR" fill={COLORS.warning} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Sprints" fill={COLORS.purple} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Distancia" fill={GREEN} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="HSR" fill="#16a34a" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Sprints" fill="#15803d" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -377,8 +421,8 @@ export default function GPSTab({ gpsEntries, playerName }: GPSTabProps) {
                   <Radar
                     name="Rendimiento"
                     dataKey="value"
-                    stroke={COLORS.primary}
-                    fill={COLORS.primary}
+                    stroke={GREEN}
+                    fill={GREEN}
                     fillOpacity={0.25}
                     strokeWidth={2}
                   />
@@ -400,10 +444,7 @@ export default function GPSTab({ gpsEntries, playerName }: GPSTabProps) {
                 return (
                   <div key={m.key} className="flex items-center justify-between py-2.5 border-b border-apple-gray-100 dark:border-apple-gray-700/50 last:border-0">
                     <div className="flex items-center gap-2.5">
-                      <div
-                        className="w-2 h-2 rounded-full"
-                        style={{ backgroundColor: m.color }}
-                      />
+                      <div className="w-2 h-2 rounded-full bg-brand-green" />
                       <span className="text-sm text-apple-gray-700 dark:text-apple-gray-300">{m.shortLabel}</span>
                     </div>
                     <div className="flex items-center gap-4">
@@ -414,7 +455,7 @@ export default function GPSTab({ gpsEntries, playerName }: GPSTabProps) {
                         <div className="text-2xs text-apple-gray-400">prom.</div>
                       </div>
                       <div className="text-right">
-                        <div className="text-sm font-medium text-emerald-600 dark:text-emerald-400 tabular-nums">
+                        <div className="text-sm font-medium text-brand-green tabular-nums">
                           {formatNumber(s.max, 1)}
                         </div>
                         <div className="text-2xs text-apple-gray-400">máx.</div>
@@ -463,19 +504,19 @@ export default function GPSTab({ gpsEntries, playerName }: GPSTabProps) {
                   <td className="py-2.5 px-2 text-right text-apple-gray-600 dark:text-apple-gray-400 tabular-nums">
                     {entry.Minutos}'
                   </td>
-                  <td className="py-2.5 px-2 text-right font-semibold text-brand-green tabular-nums">
+                  <td className="py-2.5 px-2 text-right font-medium text-apple-gray-800 dark:text-white tabular-nums">
                     {formatNumber(entry.Distancia)}
                   </td>
-                  <td className="py-2.5 px-2 text-right text-emerald-600 dark:text-emerald-400 tabular-nums">
+                  <td className="py-2.5 px-2 text-right text-apple-gray-700 dark:text-apple-gray-300 tabular-nums">
                     {formatNumber(entry.MetrosPorMin, 1)}
                   </td>
-                  <td className="py-2.5 px-2 text-right text-amber-600 dark:text-amber-400 tabular-nums">
+                  <td className="py-2.5 px-2 text-right text-apple-gray-700 dark:text-apple-gray-300 tabular-nums">
                     {formatNumber(entry.HSR)}
                   </td>
-                  <td className="py-2.5 px-2 text-right text-orange-600 dark:text-orange-400 tabular-nums">
+                  <td className="py-2.5 px-2 text-right text-apple-gray-700 dark:text-apple-gray-300 tabular-nums">
                     {formatNumber(entry.VelMax, 1)}
                   </td>
-                  <td className="py-2.5 px-2 text-right text-purple-600 dark:text-purple-400 tabular-nums">
+                  <td className="py-2.5 px-2 text-right text-apple-gray-700 dark:text-apple-gray-300 tabular-nums">
                     {entry.Sprints}
                   </td>
                 </tr>

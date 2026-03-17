@@ -9,6 +9,7 @@ import FormationPage from '@/pages/FormationPage'
 import SimilarPlayersPage from '@/pages/SimilarPlayersPage'
 import OpportunitiesPage from '@/pages/OpportunitiesPage'
 import DashboardPage from '@/pages/DashboardPage'
+import ScoutingWorksPage from '@/pages/ScoutingWorksPage'
 import ScatterChartPage from '@/pages/ScatterChartPage'
 import ScoutEvaluationPage from '@/pages/ScoutEvaluationPage'
 import EvaluationsAdminPage from '@/pages/EvaluationsAdminPage'
@@ -25,7 +26,7 @@ export default function App() {
           <Route element={<Layout />}>
             <Route path="/" element={<ExternalScoutingPage />} />
             <Route path="/interno" element={<InternalScoutingPage />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/panel-interno" element={<DashboardPage />} />
             <Route path="/seguimiento" element={<MonitoringPage />} />
             <Route path="/oportunidades" element={<OpportunitiesPage />} />
             <Route path="/similares" element={<SimilarPlayersPage />} />
@@ -36,6 +37,7 @@ export default function App() {
             <Route path="/evaluar" element={<ScoutEvaluationPage />} />
             <Route path="/evaluaciones" element={<EvaluationsAdminPage />} />
             <Route path="/radar" element={<RadarAnalysisPage />} />
+            <Route path="/trabajos-scouting" element={<ScoutingWorksPage />} />
           </Route>
         </Routes>
         <PDFBuilderModal />

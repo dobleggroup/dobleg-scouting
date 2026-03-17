@@ -84,11 +84,16 @@ function enrichPlayer(
   ggScore: number | null,
   source: 'externo' | 'interno'
 ): EnrichedPlayer {
-  const rawValue = player['Valor de mercado (Transfermarkt)'] ?? ''
+  // Try multiple column names for market value (different CSV formats)
+  const rawValue = player['Valor de mercado (Transfermarkt)'] || player['Valor de mercado'] || ''
   const marketValueRaw = parseMarketValue(rawValue)
-  const contractDate = parseContractDate(player['Vencimiento contrato'] ?? '')
+
+  // Try multiple column names for contract date
+  const contractStr = player['Vencimiento contrato'] || player['Fecha fin de contrato'] || ''
+  const contractDate = parseContractDate(contractStr)
   const now = new Date()
   const monthsRemaining = contractDate ? monthsBetween(now, contractDate) : null
+
   // For internal players, use "Posición específica" as main position
   const posEspecifica = player['Posición específica'] ?? ''
   const posGeneral = player['Posición'] ?? ''
@@ -103,7 +108,7 @@ function enrichPlayer(
     Pie: player['Pie'] ?? '',
     Altura: player['Altura'] ?? '',
     'Valor de mercado (Transfermarkt)': rawValue,
-    'Vencimiento contrato': player['Vencimiento contrato'] ?? '',
+    'Vencimiento contrato': contractStr,
     'Partidos jugados': player['Partidos jugados'] ?? '',
     'Minutos jugados': player['Minutos jugados'] ?? '',
     Goles: player['Goles'] ?? '',

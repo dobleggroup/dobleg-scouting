@@ -354,10 +354,10 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-apple-gray-800 dark:text-white tracking-tight">
-          Dashboard Ejecutivo
+          Panel Interno
         </h1>
         <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
-          Scouting Interno · Doble G Sports Group
+          Jugadores Doble G Sports Group
         </p>
       </div>
 

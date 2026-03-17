@@ -618,6 +618,24 @@ export default function FormationPage() {
               </select>
             </div>
 
+            {/* Clear filters button */}
+            {(selectedLeagues.length > 0 || nationality || minAge !== 15 || maxAge !== 40) && (
+              <button
+                onClick={() => {
+                  setSelectedLeagues([])
+                  setNationality('')
+                  setMinAge(15)
+                  setMaxAge(40)
+                }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 hover:text-red-500 dark:hover:text-red-400 bg-apple-gray-100 dark:bg-apple-gray-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Limpiar filtros
+              </button>
+            )}
+
             <div>
               <label className="block text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-2">
                 Ligas {selectedLeagues.length > 0 && <span className="text-brand-green">({selectedLeagues.length})</span>}

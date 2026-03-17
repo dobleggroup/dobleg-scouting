@@ -9,8 +9,9 @@ import { PDFBuilderFloatingButton } from '@/components/pdf/AddToReportButton'
 const navLinks = [
   { to: '/', label: 'Scout Externo', icon: 'globe', exact: true },
   { to: '/interno', label: 'Scout Interno', icon: 'users' },
-  { to: '/dashboard', label: 'Dashboard', icon: 'chart' },
+  { to: '/panel-interno', label: 'Panel Interno', icon: 'chart' },
   { to: '/seguimiento', label: 'Seguimiento', icon: 'eye' },
+  { to: '/trabajos-scouting', label: 'Trabajos', icon: 'folder' },
   { to: '/evaluar', label: 'Reporte', icon: 'clipboard' },
 ]
 
@@ -36,6 +37,7 @@ function NavIcon({ icon, className = "w-5 h-5" }: { icon: string; className?: st
     scatter: <><circle cx="7" cy="17" r="2" strokeWidth={1.5} /><circle cx="12" cy="7" r="2" strokeWidth={1.5} /><circle cx="17" cy="12" r="2" strokeWidth={1.5} /><circle cx="7" cy="7" r="2" strokeWidth={1.5} /><circle cx="17" cy="17" r="2" strokeWidth={1.5} /></>,
     radar: <><circle cx="12" cy="12" r="9" strokeWidth={1.5} /><circle cx="12" cy="12" r="5" strokeWidth={1.5} /><line x1="12" y1="3" x2="12" y2="21" strokeWidth={1.5} /><line x1="3" y1="12" x2="21" y2="12" strokeWidth={1.5} /></>,
     clipboard: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />,
+    folder: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />,
   }
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">

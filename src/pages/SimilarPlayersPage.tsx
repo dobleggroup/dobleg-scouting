@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useData } from '@/context/DataContext'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -6,6 +6,8 @@ import EmptyState from '@/components/ui/EmptyState'
 import ScoreBar from '@/components/ui/ScoreBar'
 import { POSITION_MAP, SCORING_CONFIG } from '@/constants/scoring'
 import type { EnrichedPlayer } from '@/types'
+
+const STORAGE_KEY = 'similar-players-state'
 
 function getPlayerPosition(p: EnrichedPlayer): string {
   const rawPos = (p['Posición específica'] || p['Posición'])?.trim() ?? ''
@@ -86,9 +88,42 @@ export default function SimilarPlayersPage() {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [selectedPlayer, setSelectedPlayer] = useState<EnrichedPlayer | null>(null)
+  const [restored, setRestored] = useState(false)
 
   // Combine all players for search
   const allPlayers = useMemo(() => [...external, ...internal], [external, internal])
+
+  // Restore state from sessionStorage on mount
+  useEffect(() => {
+    if (restored || allPlayers.length === 0) return
+
+    try {
+      const saved = sessionStorage.getItem(STORAGE_KEY)
+      if (saved) {
+        const { searchText, playerName, playerTeam } = JSON.parse(saved)
+        if (searchText) setSearch(searchText)
+        if (playerName && playerTeam) {
+          const player = allPlayers.find(p => p.Jugador === playerName && p.Equipo === playerTeam)
+          if (player) setSelectedPlayer(player)
+        }
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+    setRestored(true)
+  }, [allPlayers, restored])
+
+  // Save state to sessionStorage when it changes
+  useEffect(() => {
+    if (!restored) return
+
+    const state = {
+      searchText: search,
+      playerName: selectedPlayer?.Jugador || null,
+      playerTeam: selectedPlayer?.Equipo || null,
+    }
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+  }, [search, selectedPlayer, restored])
 
   // Filter players for dropdown
   const searchResults = useMemo(() => {

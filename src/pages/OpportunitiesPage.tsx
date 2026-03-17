@@ -124,6 +124,11 @@ export default function OpportunitiesPage() {
   const [typeFilter, setTypeFilter] = useState<FilterType>('all')
   const [leagueFilter, setLeagueFilter] = useState<string>('all')
   const [positionFilter, setPositionFilter] = useState<string>('all')
+  const [minAge, setMinAge] = useState<number>(15)
+  const [maxAge, setMaxAge] = useState<number>(35)
+  const [minValue, setMinValue] = useState<number>(0)
+  const [maxValue, setMaxValue] = useState<number>(10_000_000)
+  const [maxContract, setMaxContract] = useState<number | null>(null)
 
   const allPlayers = useMemo(() => [...external, ...internal], [external, internal])
   const opportunities = useMemo(() => calculateOpportunities(allPlayers), [allPlayers])
@@ -161,8 +166,39 @@ export default function OpportunitiesPage() {
         return pos === positionFilter
       })
     }
+    // Age filter
+    result = result.filter(o => {
+      const age = o.player.ageNum
+      return age >= minAge && age <= maxAge
+    })
+    // Market value filter
+    result = result.filter(o => {
+      const val = o.player.marketValueRaw || 0
+      return val >= minValue && val <= maxValue
+    })
+    // Contract filter
+    if (maxContract !== null) {
+      result = result.filter(o => {
+        const months = o.player.monthsRemaining
+        return months !== null && months <= maxContract
+      })
+    }
     return result
-  }, [opportunities, typeFilter, leagueFilter, positionFilter])
+  }, [opportunities, typeFilter, leagueFilter, positionFilter, minAge, maxAge, minValue, maxValue, maxContract])
+
+  const hasActiveFilters = typeFilter !== 'all' || leagueFilter !== 'all' || positionFilter !== 'all' ||
+    minAge !== 15 || maxAge !== 35 || minValue !== 0 || maxValue !== 10_000_000 || maxContract !== null
+
+  const clearAllFilters = () => {
+    setTypeFilter('all')
+    setLeagueFilter('all')
+    setPositionFilter('all')
+    setMinAge(15)
+    setMaxAge(35)
+    setMinValue(0)
+    setMaxValue(10_000_000)
+    setMaxContract(null)
+  }
 
   const counts = useMemo(() => ({
     all: opportunities.length,
@@ -187,15 +223,16 @@ export default function OpportunitiesPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-4 mb-6">
-        {/* Type filter */}
-        <div className="flex flex-wrap gap-2">
+      <div className="card-apple p-4 mb-6 space-y-4">
+        {/* Presets row */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mr-2">Tipo:</span>
           <button
             onClick={() => setTypeFilter('all')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
               typeFilter === 'all'
                 ? 'bg-apple-gray-800 dark:bg-white text-white dark:text-apple-gray-800'
-                : 'bg-apple-gray-100 dark:bg-apple-gray-800 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-700'
+                : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600'
             }`}
           >
             Todas ({counts.all})
@@ -204,10 +241,10 @@ export default function OpportunitiesPage() {
             <button
               key={type}
               onClick={() => setTypeFilter(type)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                 typeFilter === type
                   ? 'bg-apple-gray-800 dark:bg-white text-white dark:text-apple-gray-800'
-                  : 'bg-apple-gray-100 dark:bg-apple-gray-800 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-700'
+                  : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600'
               }`}
             >
               {TYPE_LABELS[type]} ({counts[type]})
@@ -215,29 +252,125 @@ export default function OpportunitiesPage() {
           ))}
         </div>
 
-        {/* League filter */}
-        <select
-          value={leagueFilter}
-          onChange={e => setLeagueFilter(e.target.value)}
-          className="px-4 py-2 rounded-lg text-sm font-medium bg-apple-gray-100 dark:bg-apple-gray-800 text-apple-gray-700 dark:text-apple-gray-200 border-0 focus:ring-2 focus:ring-brand-green"
-        >
-          <option value="all">Todas las ligas</option>
-          {leagues.map(league => (
-            <option key={league} value={league}>{league}</option>
-          ))}
-        </select>
+        {/* Main filters row */}
+        <div className="flex flex-wrap items-end gap-6">
+          {/* Age filter - slider */}
+          <div className="min-w-[200px]">
+            <label className="block text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mb-2">
+              Edad: <span className="text-brand-green font-semibold">{minAge} - {maxAge} años</span>
+            </label>
+            <div className="space-y-2">
+              <input
+                type="range"
+                min="15"
+                max="35"
+                value={minAge}
+                onChange={e => setMinAge(Math.min(Number(e.target.value), maxAge - 1))}
+                className="w-full h-1.5 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-lg appearance-none cursor-pointer accent-brand-green"
+              />
+              <input
+                type="range"
+                min="15"
+                max="35"
+                value={maxAge}
+                onChange={e => setMaxAge(Math.max(Number(e.target.value), minAge + 1))}
+                className="w-full h-1.5 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-lg appearance-none cursor-pointer accent-brand-green"
+              />
+            </div>
+          </div>
 
-        {/* Position filter */}
-        <select
-          value={positionFilter}
-          onChange={e => setPositionFilter(e.target.value)}
-          className="px-4 py-2 rounded-lg text-sm font-medium bg-apple-gray-100 dark:bg-apple-gray-800 text-apple-gray-700 dark:text-apple-gray-200 border-0 focus:ring-2 focus:ring-brand-green"
-        >
-          <option value="all">Todas las posiciones</option>
-          {positions.map(pos => (
-            <option key={pos} value={pos}>{pos}</option>
-          ))}
-        </select>
+          {/* Market value filter - slider */}
+          <div className="min-w-[220px]">
+            <label className="block text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mb-2">
+              Valor: <span className="text-brand-green font-semibold">€{(minValue/1_000_000).toFixed(1)}M - €{(maxValue/1_000_000).toFixed(1)}M</span>
+            </label>
+            <div className="space-y-2">
+              <input
+                type="range"
+                min="0"
+                max="10000000"
+                step="100000"
+                value={minValue}
+                onChange={e => setMinValue(Math.min(Number(e.target.value), maxValue - 100000))}
+                className="w-full h-1.5 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-lg appearance-none cursor-pointer accent-brand-green"
+              />
+              <input
+                type="range"
+                min="0"
+                max="10000000"
+                step="100000"
+                value={maxValue}
+                onChange={e => setMaxValue(Math.max(Number(e.target.value), minValue + 100000))}
+                className="w-full h-1.5 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-lg appearance-none cursor-pointer accent-brand-green"
+              />
+            </div>
+          </div>
+
+          {/* Contract filter */}
+          <div className="min-w-[140px]">
+            <label className="block text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mb-1">
+              Contrato (meses)
+            </label>
+            <select
+              value={maxContract ?? 'all'}
+              onChange={e => setMaxContract(e.target.value === 'all' ? null : Number(e.target.value))}
+              className="w-full px-3 py-1.5 rounded-lg text-sm bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-700 dark:text-apple-gray-200 border-0 focus:ring-2 focus:ring-brand-green"
+            >
+              <option value="all">Cualquiera</option>
+              <option value="6">≤ 6 meses</option>
+              <option value="12">≤ 12 meses</option>
+              <option value="18">≤ 18 meses</option>
+              <option value="24">≤ 24 meses</option>
+            </select>
+          </div>
+
+          {/* League filter */}
+          <div className="min-w-[160px]">
+            <label className="block text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mb-1">
+              Liga
+            </label>
+            <select
+              value={leagueFilter}
+              onChange={e => setLeagueFilter(e.target.value)}
+              className="w-full px-3 py-1.5 rounded-lg text-sm bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-700 dark:text-apple-gray-200 border-0 focus:ring-2 focus:ring-brand-green"
+            >
+              <option value="all">Todas las ligas</option>
+              {leagues.map(league => (
+                <option key={league} value={league}>{league}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Position filter */}
+          <div className="min-w-[160px]">
+            <label className="block text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mb-1">
+              Posición
+            </label>
+            <select
+              value={positionFilter}
+              onChange={e => setPositionFilter(e.target.value)}
+              className="w-full px-3 py-1.5 rounded-lg text-sm bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-700 dark:text-apple-gray-200 border-0 focus:ring-2 focus:ring-brand-green"
+            >
+              <option value="all">Todas</option>
+              {positions.map(pos => (
+                <option key={pos} value={pos}>{pos}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Clear filters button */}
+          {hasActiveFilters && (
+            <button
+              onClick={clearAllFilters}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-apple-gray-500 dark:text-apple-gray-400 hover:text-red-500 dark:hover:text-red-400 bg-apple-gray-100 dark:bg-apple-gray-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Limpiar
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Opportunities grid */}

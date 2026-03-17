@@ -73,10 +73,14 @@ function parseSubjectiveRating(row: RawRow): number {
 
 export interface MasDatosEntry {
   Jugador: string
-  Equipo: string
-  Edad: string
-  Posición: string
+  'Nombre completo': string
+  Imagen: string
+  'Fecha fin de contrato': string
   'Valor de mercado': string
+  Equipo: string
+  Liga: string
+  Posición: string
+  Transfermkt: string
 }
 
 export interface SeguimientoMetricsPlayer {
@@ -255,15 +259,19 @@ export async function loadAllData(): Promise<AllRawData> {
       Imagen: r['Imagen'] ?? '',
     }))
 
-  // Parse Más Datos (additional market values)
+  // Parse Más Datos (market values, Liga, images, contracts for interno players)
   const masDatos: MasDatosEntry[] = masDatosRaw
     .filter(r => r['Jugador']?.trim())
     .map(r => ({
       Jugador: r['Jugador'] ?? '',
-      Equipo: r['Equipo'] ?? '',
-      Edad: r['Edad'] ?? '',
-      Posición: r['Posición'] ?? '',
+      'Nombre completo': r['Nombre completo'] ?? '',
+      Imagen: r['Imagen'] ?? '',
+      'Fecha fin de contrato': r['Fecha fin de contrato'] ?? '',
       'Valor de mercado': r['Valor de mercado'] ?? '',
+      Equipo: r['Equipo'] ?? '',
+      Liga: r['Liga'] ?? '',
+      Posición: r['Posición'] ?? '',
+      Transfermkt: r['Transfermkt'] ?? '',
     }))
 
   // Parse Market Value History

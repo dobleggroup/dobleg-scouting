@@ -196,16 +196,25 @@ export async function updateEvaluation(
   id: string,
   updates: Partial<NewEvaluation>
 ): Promise<boolean> {
-  const { error } = await supabase
+  console.log('[updateEvaluation] Updating evaluation:', { id, updates })
+
+  const { data, error, count } = await supabase
     .from('scout_evaluations')
     .update(updates)
     .eq('id', id)
+    .select()
 
   if (error) {
-    console.error('Error updating evaluation:', error)
+    console.error('[updateEvaluation] Error:', error)
     return false
   }
 
+  if (!data || data.length === 0) {
+    console.warn('[updateEvaluation] No rows updated - RLS may be blocking the update')
+    return false
+  }
+
+  console.log('[updateEvaluation] Success:', data)
   return true
 }
 
