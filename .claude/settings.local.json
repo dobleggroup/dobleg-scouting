@@ -36,7 +36,8 @@
       "Bash(cut:*)",
       "Bash(netlify status:*)",
       "Bash(npx netlify-cli:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(cd:*)"
     ]
   }
 }
