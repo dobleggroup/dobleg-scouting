@@ -35,7 +35,8 @@
       "Bash(cd C:/Users/marcos/Desktop/transfermarkt-api && PYTHONPATH=. py app/main.py)",
       "Bash(cut:*)",
       "Bash(netlify status:*)",
-      "Bash(npx netlify-cli:*)"
+      "Bash(npx netlify-cli:*)",
+      "Bash(ls:*)"
     ]
   }
 }
