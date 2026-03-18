@@ -1,4 +1,5 @@
 import { useMemo, useState, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useData } from '@/context/DataContext'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { ScatterChart, Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ReferenceLine, Label, LabelList } from 'recharts'
@@ -267,6 +268,7 @@ function generateAnalysis(
 
 export default function ScatterChartPage() {
   const { external, internal, loading } = useData()
+  const navigate = useNavigate()
   const chartRef = useRef<HTMLDivElement>(null)
   const [exporting, setExporting] = useState(false)
 
@@ -643,42 +645,54 @@ export default function ScatterChartPage() {
               </select>
             </div>
 
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-apple-gray-500 font-medium">Min. minutos:</label>
-              <input
-                type="number"
-                value={minMinutes}
-                onChange={e => setMinMinutes(parseInt(e.target.value) || 0)}
-                className="w-20 px-3 py-1.5 rounded-lg bg-apple-gray-100 dark:bg-apple-gray-700 border-0 text-sm"
-              />
+            {/* Minutes Slider */}
+            <div className="flex items-center gap-3">
+              <label className="text-xs text-apple-gray-500 font-medium whitespace-nowrap">Min. minutos:</label>
+              <div className="flex items-center gap-2 flex-1 max-w-[180px]">
+                <input
+                  type="range"
+                  min={0}
+                  max={2000}
+                  step={50}
+                  value={minMinutes}
+                  onChange={e => setMinMinutes(parseInt(e.target.value))}
+                  className="flex-1 h-1.5 bg-apple-gray-200 dark:bg-apple-gray-600 rounded-full appearance-none cursor-pointer accent-brand-green"
+                />
+                <span className="text-xs font-medium text-apple-gray-600 dark:text-apple-gray-300 w-12 text-right tabular-nums">{minMinutes}</span>
+              </div>
             </div>
 
-            {/* Age Range Slider - Compact */}
-            <div className="flex items-center gap-2">
+            {/* Age Range Dual Slider */}
+            <div className="flex items-center gap-3">
               <label className="text-xs text-apple-gray-500 font-medium">Edad:</label>
-              <input
-                type="number"
-                min={minAge}
-                max={ageRange[1] - 1}
-                value={ageRange[0]}
-                onChange={e => {
-                  const val = parseInt(e.target.value) || minAge
-                  setAgeRange([Math.min(val, ageRange[1] - 1), ageRange[1]])
-                }}
-                className="w-12 px-2 py-1 text-xs text-center rounded-lg bg-apple-gray-100 dark:bg-apple-gray-700 border-0"
-              />
-              <span className="text-xs text-apple-gray-400">-</span>
-              <input
-                type="number"
-                min={ageRange[0] + 1}
-                max={maxAge}
-                value={ageRange[1]}
-                onChange={e => {
-                  const val = parseInt(e.target.value) || maxAge
-                  setAgeRange([ageRange[0], Math.max(val, ageRange[0] + 1)])
-                }}
-                className="w-12 px-2 py-1 text-xs text-center rounded-lg bg-apple-gray-100 dark:bg-apple-gray-700 border-0"
-              />
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-apple-gray-600 dark:text-apple-gray-300 w-6 tabular-nums">{ageRange[0]}</span>
+                <div className="relative w-28 h-5 flex items-center">
+                  <input
+                    type="range"
+                    min={minAge}
+                    max={maxAge}
+                    value={ageRange[0]}
+                    onChange={e => {
+                      const val = parseInt(e.target.value)
+                      if (val < ageRange[1]) setAgeRange([val, ageRange[1]])
+                    }}
+                    className="absolute w-full h-1.5 bg-apple-gray-200 dark:bg-apple-gray-600 rounded-full appearance-none cursor-pointer accent-brand-green"
+                  />
+                  <input
+                    type="range"
+                    min={minAge}
+                    max={maxAge}
+                    value={ageRange[1]}
+                    onChange={e => {
+                      const val = parseInt(e.target.value)
+                      if (val > ageRange[0]) setAgeRange([ageRange[0], val])
+                    }}
+                    className="absolute w-full h-1.5 bg-transparent rounded-full appearance-none cursor-pointer accent-brand-green"
+                  />
+                </div>
+                <span className="text-xs font-medium text-apple-gray-600 dark:text-apple-gray-300 w-6 tabular-nums">{ageRange[1]}</span>
+              </div>
             </div>
           </div>
 
@@ -955,7 +969,7 @@ export default function ScatterChartPage() {
                 return (
                   <div
                     key={idx}
-                    className="flex items-center gap-3 p-2 bg-white dark:bg-apple-gray-800 rounded-xl"
+                    className="flex items-center gap-3 p-2 bg-white dark:bg-apple-gray-800 rounded-xl group"
                   >
                     <div
                       className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ring-2 ring-blue-500 ring-offset-2"
@@ -963,18 +977,39 @@ export default function ScatterChartPage() {
                     >
                       {idx + 1}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-apple-gray-800 dark:text-white truncate">{d.player.Jugador}</p>
-                      <p className="text-xs text-apple-gray-500 truncate">{d.player.Equipo}</p>
-                    </div>
                     <button
-                      onClick={() => togglePlayerSelection(d.id)}
-                      className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                      onClick={() => {
+                        const encoded = encodeURIComponent(d.player.Jugador)
+                        navigate(`/jugador/${encoded}?source=${d.player.source}`)
+                      }}
+                      className="flex-1 min-w-0 text-left hover:opacity-80 transition-opacity"
                     >
-                      <svg className="w-4 h-4 text-apple-gray-400 hover:text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
+                      <p className="text-sm font-semibold text-apple-gray-800 dark:text-white truncate group-hover:text-brand-green transition-colors">{d.player.Jugador}</p>
+                      <p className="text-xs text-apple-gray-500 truncate">{d.player.Equipo} · {d.player.ageNum} años</p>
                     </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          const encoded = encodeURIComponent(d.player.Jugador)
+                          navigate(`/jugador/${encoded}?source=${d.player.source}`)
+                        }}
+                        className="p-1.5 hover:bg-brand-green/10 rounded-lg transition-colors"
+                        title="Ver ficha"
+                      >
+                        <svg className="w-4 h-4 text-brand-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => togglePlayerSelection(d.id)}
+                        className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                        title="Desmarcar"
+                      >
+                        <svg className="w-4 h-4 text-apple-gray-400 hover:text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 )
               })}

@@ -133,7 +133,8 @@ function SingleChart({ playerData, metric, onRemove, availableMetrics, onMetricC
         </select>
 
         <div className="flex items-center gap-4">
-          <span className="text-xs text-gray-500 dark:text-gray-400">
+          <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
+            <span className="w-3 border-t border-dashed border-brand-green"></span>
             Prom: <span className="font-medium text-gray-700 dark:text-gray-300">{stats.avg.toFixed(1)}</span>
           </span>
           <span className="text-xs text-gray-500 dark:text-gray-400">

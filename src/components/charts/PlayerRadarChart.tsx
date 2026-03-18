@@ -14,6 +14,7 @@ interface PlayerRadarChartProps {
   compareColor?: string
   comparisonLeague?: string // 'all' for global average, or specific league name
   overridePosition?: string // Override player position (e.g., from seguimiento list)
+  customMetrics?: string[] // Override default position metrics
 }
 
 // Get posKey from a position string (handles multiple positions like "RCB , LCB")
@@ -129,7 +130,7 @@ function getPositionAverageFromPlayers(
 }
 
 export default function PlayerRadarChart({
-  player, allNormalized, allPlayers, comparePlayer, compareColor = '#3B82F6', comparisonLeague, overridePosition
+  player, allNormalized, allPlayers, comparePlayer, compareColor = '#3B82F6', comparisonLeague, overridePosition, customMetrics
 }: PlayerRadarChartProps) {
   // Use override position if provided (e.g., from seguimiento list), otherwise use player position
   // Try 'Posición específica' first as it has Wyscout codes
@@ -140,8 +141,9 @@ export default function PlayerRadarChart({
   // Calculate posKey from the raw position
   const posKey = getPosKeyFromPosition(rawPosition)
 
-  // Get metrics for this position
-  const metrics = RADAR_METRICS[posKey] ?? RADAR_METRICS['Defensor Central']
+  // Get metrics for this position (use custom if provided and not empty)
+  const defaultMetrics = RADAR_METRICS[posKey] ?? RADAR_METRICS['Defensor Central']
+  const metrics = (customMetrics && customMetrics.length > 0) ? customMetrics : defaultMetrics
 
   // Get player's normalized values (pass posKey explicitly)
   const playerValues = getPlayerNormalizedValues(player, allNormalized, allPlayers, metrics, posKey)
@@ -159,8 +161,25 @@ export default function PlayerRadarChart({
     ? getPlayerNormalizedValues(comparePlayer, allNormalized, allPlayers, metrics, posKey)
     : null
 
+  // Etiqueta corta que mantiene el indicador de tipo (% o /90)
+  const getLabel = (metric: string): string => {
+    const abbr = METRIC_ABBREVIATIONS[metric]
+    if (abbr) {
+      // Si hay abreviación, agregar el tipo si no lo tiene
+      if (metric.includes(', %') && !abbr.includes('%')) return abbr + ' %'
+      if (metric.includes('/90') && !abbr.includes('/90')) return abbr + '/90'
+      return abbr
+    }
+    // Sin abreviación, usar nombre original pero acortado si es necesario
+    if (metric.length > 20) {
+      const suffix = metric.includes(', %') ? ' %' : metric.includes('/90') ? '/90' : ''
+      return metric.substring(0, 16) + '…' + suffix
+    }
+    return metric
+  }
+
   const data: RadarDataPoint[] = metrics.map(metric => ({
-    subject: METRIC_ABBREVIATIONS[metric] ?? metric,
+    subject: getLabel(metric),
     fullMetric: metric,
     player: Math.round(playerValues[metric] ?? 0),
     average: Math.round(avgValues[metric] ?? 50),
@@ -218,6 +237,11 @@ export default function PlayerRadarChart({
             border: '1px solid #374151',
             borderRadius: '8px',
             fontSize: '12px',
+            maxWidth: '300px',
+          }}
+          labelFormatter={(label: string) => {
+            const point = data.find(d => d.subject === label)
+            return point?.fullMetric || label
           }}
           formatter={(value: number, name: string) => [`${value}`, name]}
         />

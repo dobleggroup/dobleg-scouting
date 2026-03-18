@@ -21,6 +21,189 @@ interface SearchCriteria {
   minScore?: number
 }
 
+interface SuggestedQuestion {
+  text: string
+  category: 'help' | 'search'
+}
+
+const SUGGESTED_QUESTIONS: SuggestedQuestion[] = [
+  { text: '¿Cómo busco un jugador?', category: 'help' },
+  { text: '¿Cómo veo las métricas de un jugador?', category: 'help' },
+  { text: '¿Qué es el Score GG?', category: 'help' },
+  { text: 'Busco un 9 goleador sub-23', category: 'search' },
+  { text: '¿Cómo comparo dos jugadores?', category: 'help' },
+  { text: 'Extremo gambeteador de Argentina', category: 'search' },
+]
+
+// Help responses for app navigation
+const HELP_RESPONSES: Record<string, string> = {
+  'buscar_jugador': `**¿Cómo buscar un jugador?**
+
+1. Andá a **Scouting Externo** o **Scouting Interno** en el menú lateral
+2. Usá la **barra de búsqueda** arriba para escribir el nombre
+3. También podés filtrar por **posición**, **liga** o **edad** usando los filtros
+
+💡 **Tip:** Hacé clic en cualquier jugador de la tabla para ver su ficha completa.`,
+
+  'metricas': `**¿Cómo ver las métricas de un jugador?**
+
+1. Buscá al jugador y hacé clic en su nombre
+2. En su ficha, andá a la pestaña **"Métricas"**
+3. Ahí vas a ver:
+   - **Gráfico radar** comparando vs promedio de la liga
+   - **Métricas detalladas** con percentiles
+   - Podés **personalizar las métricas** del radar
+
+💡 **Tip:** Pasá el mouse sobre el radar para ver los valores exactos.`,
+
+  'score_gg': `**¿Qué es el Score GG?**
+
+El **Score GG** es una puntuación de 0-100 que calcula el rendimiento general del jugador según su posición.
+
+📊 **Cómo se calcula:**
+- Compara las métricas clave del jugador vs otros de su posición
+- Cada posición tiene métricas diferentes (ej: goles para delanteros, duelos para defensores)
+
+🏷️ **Rangos:**
+- **80+** = Elite (top del ranking)
+- **55-79** = Buen nivel
+- **35-54** = Regular
+- **<35** = Por debajo del promedio`,
+
+  'comparar': `**¿Cómo comparar dos jugadores?**
+
+1. Andá a **"Comparación"** en el menú lateral
+2. Seleccioná el **primer jugador** en el dropdown izquierdo
+3. Seleccioná el **segundo jugador** en el dropdown derecho
+4. Vas a ver un radar superpuesto y una tabla comparativa
+
+💡 **Tip:** Podés comparar jugadores de distintas ligas y posiciones.`,
+
+  'seguimiento': `**¿Cómo funciona el Seguimiento?**
+
+La sección **Seguimiento** te permite crear listas de jugadores que querés monitorear.
+
+📋 **Funciones:**
+- Agregá jugadores a una lista personalizada
+- Definí la posición en la que lo estás evaluando
+- Agregá notas y comentarios
+- Seguí su evolución en el tiempo
+
+Para agregar un jugador, buscalo y usá el botón **"Agregar a seguimiento"**.`,
+
+  'fichas_internas': `**¿Qué tienen las fichas de jugadores internos?**
+
+Los jugadores **internos** (de tu club) tienen pestañas adicionales:
+
+📁 **Pestañas exclusivas:**
+- **Valor**: Historial de valor de mercado
+- **Rendimiento**: Evolución partido a partido
+- **Físico**: Datos GPS y físicos
+- **Salud**: Historial de lesiones
+- **Fisioterapia, Nutrición, Neurociencia, Psicología, Coaching**
+
+Los jugadores **externos** solo tienen General y Métricas.`,
+
+  'filtros': `**¿Cómo usar los filtros?**
+
+En las tablas de Scouting podés filtrar por:
+
+🔍 **Filtros disponibles:**
+- **Posición**: CB, LB, RB, CM, CAM, LW, RW, ST, etc.
+- **Liga**: Argentina, Colombia, Uruguay, etc.
+- **Edad**: Rango mínimo y máximo
+- **Minutos**: Filtrar por minutos jugados
+
+Los filtros se combinan entre sí para refinar tu búsqueda.`,
+
+  'exportar': `**¿Cómo exportar información?**
+
+Podés exportar fichas de jugadores a **PDF**:
+
+1. Abrí la ficha del jugador
+2. Hacé clic en el botón **"Exportar PDF"** arriba a la derecha
+3. Elegí el tema (claro/oscuro) y las secciones a incluir
+4. Descargá el PDF
+
+💡 También podés agregar jugadores a un **Informe** para exportar varios juntos.`,
+
+  'general': `**¡Hola! Soy tu asistente de la plataforma Scout.**
+
+Puedo ayudarte con:
+
+🔍 **Buscar jugadores** - Decime qué perfil buscás
+📊 **Explicarte métricas** - Score GG, radar, percentiles
+🧭 **Navegar la app** - Cómo usar cada sección
+📋 **Comparar jugadores** - Cómo funciona
+
+**Preguntame lo que necesites** o elegí una de las sugerencias de abajo.`
+}
+
+// Detect if the message is asking for help
+function detectHelpIntent(message: string): string | null {
+  const msg = message.toLowerCase()
+
+  // Greetings
+  if (/^(hola|hey|buenas|buen día|que tal|hi|hello)/.test(msg) && msg.length < 20) {
+    return 'general'
+  }
+
+  // How to search
+  if ((msg.includes('cómo') || msg.includes('como') || msg.includes('donde') || msg.includes('dónde')) &&
+      (msg.includes('busco') || msg.includes('buscar') || msg.includes('encuentro') || msg.includes('encontrar'))) {
+    if (msg.includes('jugador')) return 'buscar_jugador'
+  }
+
+  // Metrics
+  if (msg.includes('métrica') || msg.includes('metrica') || msg.includes('radar') ||
+      ((msg.includes('cómo') || msg.includes('como')) && msg.includes('veo') && !msg.includes('jugador'))) {
+    return 'metricas'
+  }
+
+  // Score GG
+  if (msg.includes('score') || msg.includes('gg') || msg.includes('puntuación') || msg.includes('puntaje') ||
+      msg.includes('puntuacion')) {
+    return 'score_gg'
+  }
+
+  // Compare
+  if (msg.includes('compar') || msg.includes('versus') || msg.includes(' vs ')) {
+    if (msg.includes('cómo') || msg.includes('como') || msg.includes('donde') || msg.includes('puedo')) {
+      return 'comparar'
+    }
+  }
+
+  // Seguimiento
+  if (msg.includes('seguimiento') || msg.includes('lista') || msg.includes('monitorear') || msg.includes('watchlist')) {
+    return 'seguimiento'
+  }
+
+  // Internal players
+  if (msg.includes('interno') || msg.includes('ficha') || msg.includes('pestaña') || msg.includes('tab')) {
+    if (msg.includes('qué tiene') || msg.includes('que tiene') || msg.includes('diferencia')) {
+      return 'fichas_internas'
+    }
+  }
+
+  // Filters
+  if (msg.includes('filtro') || msg.includes('filtrar')) {
+    return 'filtros'
+  }
+
+  // Export
+  if (msg.includes('exportar') || msg.includes('pdf') || msg.includes('descargar') || msg.includes('informe')) {
+    return 'exportar'
+  }
+
+  // Help / what can you do
+  if (msg.includes('ayuda') || msg.includes('help') || msg.includes('qué puedo') || msg.includes('que puedo') ||
+      msg.includes('qué hacés') || msg.includes('que haces') || msg.includes('funciones')) {
+    return 'general'
+  }
+
+  return null
+}
+
 // AI logic to parse user intent
 function parseUserIntent(message: string): { type: string; criteria: SearchCriteria } {
   const msg = message.toLowerCase()
@@ -260,9 +443,10 @@ export default function AIAnalystChat() {
     {
       id: '1',
       role: 'assistant',
-      content: '¡Hola! Soy tu **Analista IA**. Puedo ayudarte a encontrar jugadores según criterios específicos.\n\nPor ejemplo, podés preguntarme:\n- "Busco un 9 que gane de arriba y haga goles"\n- "Quiero un lateral derecho menor de 23 años"\n- "Extremo gambeteador con buen xA"\n\n¿Qué tipo de jugador estás buscando?'
+      content: '¡Hola! Soy tu **asistente de la plataforma Scout**.\n\nPuedo ayudarte a:\n🔍 **Buscar jugadores** según perfil específico\n🧭 **Navegar la app** y usar cada función\n📊 **Entender métricas** como Score GG, radar, etc.\n\n**¿En qué te puedo ayudar?**'
     }
   ])
+  const [showSuggestions, setShowSuggestions] = useState(true)
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -275,21 +459,38 @@ export default function AIAnalystChat() {
     scrollToBottom()
   }, [messages])
 
-  const handleSend = useCallback(() => {
-    if (!input.trim() || isTyping) return
+  const handleSend = useCallback((customMessage?: string) => {
+    const messageText = customMessage || input.trim()
+    if (!messageText || isTyping) return
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: input.trim()
+      content: messageText
     }
 
     setMessages(prev => [...prev, userMessage])
     setInput('')
     setIsTyping(true)
+    setShowSuggestions(false)
 
     // Simulate AI thinking
     setTimeout(() => {
+      // First check if it's a help question
+      const helpIntent = detectHelpIntent(userMessage.content)
+
+      if (helpIntent) {
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: HELP_RESPONSES[helpIntent] || HELP_RESPONSES['general']
+        }
+        setMessages(prev => [...prev, assistantMessage])
+        setIsTyping(false)
+        return
+      }
+
+      // Otherwise, treat as player search
       const { criteria } = parseUserIntent(userMessage.content)
       const results = searchPlayers(allPlayers, criteria)
       const response = generateResponse(criteria, results)
@@ -303,7 +504,7 @@ export default function AIAnalystChat() {
 
       setMessages(prev => [...prev, assistantMessage])
       setIsTyping(false)
-    }, 800)
+    }, 600)
   }, [input, isTyping, allPlayers])
 
   const handlePlayerClick = (player: EnrichedPlayer) => {
@@ -324,7 +525,7 @@ export default function AIAnalystChat() {
       <button
         onClick={toggleHidden}
         className="fixed bottom-4 right-4 w-10 h-10 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-full flex items-center justify-center text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-300 dark:hover:bg-apple-gray-600 transition-colors shadow-lg z-50"
-        title="Mostrar Analista IA"
+        title="Mostrar Asistente Scout"
       >
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
@@ -345,7 +546,7 @@ export default function AIAnalystChat() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
           </svg>
           <span className="absolute -top-8 right-0 bg-apple-gray-800 dark:bg-apple-gray-700 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-            Analista IA
+            Asistente Scout
           </span>
         </button>
       )}
@@ -361,7 +562,7 @@ export default function AIAnalystChat() {
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
               </svg>
-              <span className="font-semibold text-sm">Analista IA</span>
+              <span className="font-semibold text-sm">Asistente Scout</span>
             </div>
             <div className="flex items-center gap-1">
               <button
@@ -451,6 +652,28 @@ export default function AIAnalystChat() {
                   </div>
                 ))}
 
+                {/* Suggested questions */}
+                {showSuggestions && messages.length === 1 && (
+                  <div className="space-y-2">
+                    <p className="text-2xs text-apple-gray-400 uppercase tracking-wide font-medium">Preguntas sugeridas</p>
+                    <div className="flex flex-wrap gap-2">
+                      {SUGGESTED_QUESTIONS.map((q, i) => (
+                        <button
+                          key={i}
+                          onClick={() => handleSend(q.text)}
+                          className={`text-xs px-3 py-1.5 rounded-full border transition-all hover:scale-105 ${
+                            q.category === 'help'
+                              ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40'
+                              : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40'
+                          }`}
+                        >
+                          {q.category === 'help' ? '❓ ' : '🔍 '}{q.text}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {isTyping && (
                   <div className="flex justify-start">
                     <div className="bg-apple-gray-100 dark:bg-apple-gray-700 rounded-2xl rounded-bl-md px-4 py-3">
@@ -474,11 +697,11 @@ export default function AIAnalystChat() {
                     value={input}
                     onChange={e => setInput(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleSend()}
-                    placeholder="Describí el jugador que buscás..."
+                    placeholder="Preguntá lo que necesites..."
                     className="flex-1 px-4 py-2 bg-apple-gray-100 dark:bg-apple-gray-700 rounded-xl text-sm text-apple-gray-800 dark:text-white placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-green"
                   />
                   <button
-                    onClick={handleSend}
+                    onClick={() => handleSend()}
                     disabled={!input.trim() || isTyping}
                     className="w-10 h-10 bg-brand-green rounded-xl flex items-center justify-center text-white disabled:opacity-50 hover:bg-green-400 transition-colors"
                   >

@@ -13,7 +13,7 @@ import ExportPDFModal, { type PDFTheme } from '@/components/ui/ExportPDFModal'
 import { exportPlayerToPdfFull } from '@/utils/pdfExport'
 import AddToReportButton from '@/components/pdf/AddToReportButton'
 import { normalizeName } from '@/utils/scoring'
-import { POSITION_MAP, DISPLAY_POSITION_MAP, DISPLAY_METRICS, RADAR_METRICS } from '@/constants/scoring'
+import { POSITION_MAP, DISPLAY_POSITION_MAP, DISPLAY_METRICS, RADAR_METRICS, METRIC_ABBREVIATIONS } from '@/constants/scoring'
 import { fetchPlayerEvaluations, fetchEvaluationsByName, type ScoutEvaluation } from '@/services/scoutEvaluationService'
 import type { EnrichedPlayer, SubjectiveMetric } from '@/types'
 
@@ -574,6 +574,8 @@ export default function PlayerDetailPage() {
   const { external, internal, monitoring, normalized, evolution, subjectiveMetrics, marketValueHistory, gpsData, loading, error } = useData()
   const [activeTab, setActiveTab] = useState('General')
   const [comparisonLeague, setComparisonLeague] = useState<string>('all')
+  const [customRadarMetrics, setCustomRadarMetrics] = useState<string[]>([])
+  const [showMetricSelector, setShowMetricSelector] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
   const [showPlayerSelector, setShowPlayerSelector] = useState(false)
   const [playerSearchQuery, setPlayerSearchQuery] = useState('')
@@ -762,11 +764,24 @@ export default function PlayerDetailPage() {
     return percentiles
   }, [player, posKey, external, internal])
 
+  // Ligas con promedios cargados
+  const LEAGUES_WITH_AVERAGES = [
+    'Argentina', '2° Argentina', 'B Metro',
+    'Ecuador', 'Paraguay', 'Chile', '2° Chile',
+    'Uruguay', 'Brasil', 'Liga MX',
+    'Colombia', '2° Colombia'
+  ]
+
   const availableLeagues = useMemo(() => {
     const allPlayers = [...external, ...internal]
     const leagueSet = new Set<string>()
     for (const p of allPlayers) {
-      if (p.Liga) leagueSet.add(p.Liga)
+      if (p.Liga && LEAGUES_WITH_AVERAGES.some(l =>
+        l.toLowerCase() === p.Liga?.toLowerCase() ||
+        p.Liga?.toLowerCase().includes(l.toLowerCase())
+      )) {
+        leagueSet.add(p.Liga)
+      }
     }
     return [...leagueSet].sort()
   }, [external, internal])
@@ -794,17 +809,16 @@ export default function PlayerDetailPage() {
   // Tab configuration with icons
   const tabsConfig = [
     { id: 'General', label: 'General', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z', internal: false },
-    { id: 'Radar', label: 'Radar', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', internal: false },
+    { id: 'Métricas', label: 'Métricas', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', internal: false },
     { id: 'Valor', label: 'Valor', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', internal: true },
-    { id: 'Evolución', label: 'Evolución', icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6', internal: true },
+    { id: 'Rendimiento evolutivo', label: 'Rendimiento', icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6', internal: true },
     { id: 'Físico', label: 'Físico', icon: 'M13 10V3L4 14h7v7l9-11h-7z', internal: true },
-    { id: 'Métricas', label: 'Métricas', icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', internal: false },
     { id: 'Salud', label: 'Salud', icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z', internal: true },
-    { id: 'Antropometría', label: 'Antropo', icon: 'M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3', internal: true },
-    { id: 'Fisioterapia', label: 'Fisio', icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z', internal: true },
+    { id: 'Fisioterapia', label: 'Fisioterapia', icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z', internal: true },
     { id: 'Nutrición', label: 'Nutrición', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253', internal: true },
-    { id: 'Neurociencia', label: 'Neuro', icon: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z', internal: true },
-    { id: 'Psicología', label: 'Psico', icon: 'M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z', internal: true },
+    { id: 'Neurociencia', label: 'Neurociencia', icon: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z', internal: true },
+    { id: 'Psicología', label: 'Psicología', icon: 'M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z', internal: true },
+    { id: 'Coaching', label: 'Coaching', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z', internal: true },
   ]
 
   // Filter tabs based on source
@@ -1408,58 +1422,285 @@ export default function PlayerDetailPage() {
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
 
-            {/* RADAR TAB */}
-            {activeTab === 'Radar' && (
-              <div className="animate-fade-in" id="tab-content-radar">
-                <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-                  <div>
-                    <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
-                      Radar — {displayPosition}
+                {/* Posición en el campo */}
+                <div>
+                  <h3 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-3">
+                    Posición en el Campo
+                  </h3>
+                  {(() => {
+                    // Determinar si es lado derecho o izquierdo basándose en la posición específica
+                    const posLower = rawPosition.toLowerCase()
+                    const isRightSide = posLower.includes('rb') || posLower.includes('rcb') || posLower.includes('rw') || posLower.includes('rwf') || posLower.includes('rmf') || posLower.includes('derecho') || posLower.includes('right')
+                    const isLeftSide = posLower.includes('lb') || posLower.includes('lcb') || posLower.includes('lw') || posLower.includes('lwf') || posLower.includes('lmf') || posLower.includes('izquierdo') || posLower.includes('left')
+                    // Si no se especifica lado, mostrar ambos para posiciones de banda
+                    const showBothSides = !isRightSide && !isLeftSide
+
+                    return (
+                      <div className="bg-apple-gray-100 dark:bg-apple-gray-800/50 rounded-xl p-5 flex justify-center">
+                        <svg viewBox="0 0 380 260" className="w-full max-w-md h-auto">
+                          <defs>
+                            <linearGradient id="zoneGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                              <stop offset="0%" stopColor="#22C55E" stopOpacity="0.25"/>
+                              <stop offset="100%" stopColor="#22C55E" stopOpacity="0.08"/>
+                            </linearGradient>
+                          </defs>
+
+                          {/* Campo - fondo */}
+                          <rect x="15" y="15" width="350" height="230" rx="3" fill="none" stroke="currentColor" className="text-apple-gray-300 dark:text-apple-gray-600" strokeWidth="1.5"/>
+
+                          {/* Línea central */}
+                          <line x1="190" y1="15" x2="190" y2="245" stroke="currentColor" className="text-apple-gray-300 dark:text-apple-gray-600" strokeWidth="1"/>
+
+                          {/* Círculo central */}
+                          <circle cx="190" cy="130" r="35" fill="none" stroke="currentColor" className="text-apple-gray-300 dark:text-apple-gray-600" strokeWidth="1"/>
+                          <circle cx="190" cy="130" r="2.5" fill="currentColor" className="text-apple-gray-300 dark:text-apple-gray-600"/>
+
+                          {/* Área izquierda */}
+                          <rect x="15" y="55" width="52" height="150" fill="none" stroke="currentColor" className="text-apple-gray-300 dark:text-apple-gray-600" strokeWidth="1"/>
+                          <rect x="15" y="90" width="20" height="80" fill="none" stroke="currentColor" className="text-apple-gray-300 dark:text-apple-gray-600" strokeWidth="1"/>
+
+                          {/* Área derecha */}
+                          <rect x="313" y="55" width="52" height="150" fill="none" stroke="currentColor" className="text-apple-gray-300 dark:text-apple-gray-600" strokeWidth="1"/>
+                          <rect x="345" y="90" width="20" height="80" fill="none" stroke="currentColor" className="text-apple-gray-300 dark:text-apple-gray-600" strokeWidth="1"/>
+
+                          {/* === ZONAS POR POSICIÓN === */}
+
+                          {/* Defensor Central */}
+                          {posKey === 'Defensor Central' && (
+                            <rect x="55" y="70" width="70" height="120" rx="16" fill="url(#zoneGradient)"/>
+                          )}
+
+                          {/* Lateral - solo el lado correspondiente */}
+                          {posKey === 'Lateral' && (
+                            <>
+                              {(showBothSides || isLeftSide) && (
+                                <rect x="40" y="18" width="110" height="55" rx="14" fill="url(#zoneGradient)"/>
+                              )}
+                              {(showBothSides || isRightSide) && (
+                                <rect x="40" y="187" width="110" height="55" rx="14" fill="url(#zoneGradient)"/>
+                              )}
+                            </>
+                          )}
+
+                          {/* Volante central */}
+                          {posKey === 'Volante central' && (
+                            <rect x="95" y="65" width="105" height="130" rx="18" fill="url(#zoneGradient)"/>
+                          )}
+
+                          {/* Volante interno - zona más amplia hacia adelante */}
+                          {posKey === 'Volante interno' && (
+                            <rect x="155" y="55" width="115" height="150" rx="20" fill="url(#zoneGradient)"/>
+                          )}
+
+                          {/* Extremo - solo el lado correspondiente */}
+                          {posKey === 'Extremo' && (
+                            <>
+                              {(showBothSides || isLeftSide) && (
+                                <rect x="220" y="18" width="120" height="60" rx="14" fill="url(#zoneGradient)"/>
+                              )}
+                              {(showBothSides || isRightSide) && (
+                                <rect x="220" y="182" width="120" height="60" rx="14" fill="url(#zoneGradient)"/>
+                              )}
+                            </>
+                          )}
+
+                          {/* Delantero */}
+                          {posKey === 'Delantero' && (
+                            <rect x="265" y="60" width="85" height="140" rx="18" fill="url(#zoneGradient)"/>
+                          )}
+                        </svg>
+                      </div>
+                    )
+                  })()}
+                  <p className="text-center text-xs text-apple-gray-500 dark:text-apple-gray-400 mt-1">{displayPosition}</p>
+                </div>
+
+                {/* Preview de secciones - Solo para jugadores internos */}
+                {source === 'interno' && (
+                  <div className="mt-8">
+                    <h3 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                      </svg>
+                      Vista Rápida
                     </h3>
-                    <p className="text-xs text-apple-gray-400 mt-0.5">
-                      Comparando vs {comparisonLeague === 'all' ? 'promedio general' : `promedio de ${comparisonLeague}`}
-                    </p>
-                  </div>
 
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-apple-gray-500 dark:text-apple-gray-400">
-                      Comparar vs:
-                    </label>
-                    <select
-                      value={comparisonLeague}
-                      onChange={e => setComparisonLeague(e.target.value)}
-                      className="input-apple text-sm py-1.5 px-3 min-w-[160px]"
-                    >
-                      <option value="all">Todas las ligas</option>
-                      {availableLeagues.map(league => (
-                        <option key={league} value={league}>{league}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {/* Preview Métricas */}
+                      <button
+                        onClick={() => setActiveTab('Métricas')}
+                        className="group bg-white dark:bg-apple-gray-800/50 rounded-xl p-4 border border-apple-gray-100 dark:border-apple-gray-700 hover:border-brand-green dark:hover:border-brand-green transition-all hover:shadow-lg text-left"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">Métricas</span>
+                          <svg className="w-4 h-4 text-apple-gray-400 group-hover:text-brand-green transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                        <div className="space-y-2">
+                          {(DISPLAY_METRICS[posKey] ?? DISPLAY_METRICS['_default']).slice(2, 5).map((metric: string) => {
+                            const val = player[metric]
+                            const num = typeof val === 'number' ? val : parseFloat(String(val ?? '').replace(',', '.'))
+                            return (
+                              <div key={metric} className="flex justify-between text-sm">
+                                <span className="text-apple-gray-500 dark:text-apple-gray-400 truncate mr-2">{METRIC_ABBREVIATIONS[metric] || metric.replace('/90', '').substring(0, 18)}</span>
+                                <span className="font-semibold text-apple-gray-800 dark:text-white tabular-nums">
+                                  {isNaN(num) ? '—' : num.toFixed(metric.includes('%') ? 0 : 2)}
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <p className="text-2xs text-brand-green mt-3 group-hover:underline">Ver radar completo →</p>
+                      </button>
 
-                {!posKey ? (
-                  <EmptyState title="Posición no reconocida" description="No se puede generar el radar para esta posición." />
-                ) : (
-                  <PlayerRadarChart
-                    player={player}
-                    allNormalized={normalized}
-                    allPlayers={[...external, ...internal]}
-                    comparisonLeague={comparisonLeague}
-                    overridePosition={rawPosition}
-                  />
+                      {/* Preview Valor de Mercado */}
+                      <button
+                        onClick={() => setActiveTab('Valor')}
+                        className="group bg-white dark:bg-apple-gray-800/50 rounded-xl p-4 border border-apple-gray-100 dark:border-apple-gray-700 hover:border-brand-green dark:hover:border-brand-green transition-all hover:shadow-lg text-left"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">Valor</span>
+                          <svg className="w-4 h-4 text-apple-gray-400 group-hover:text-brand-green transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                        <div className="text-center py-2">
+                          <p className="text-3xl font-bold text-brand-green">{player.marketValueFormatted || '—'}</p>
+                          <p className="text-xs text-apple-gray-400 mt-1">Valor de mercado actual</p>
+                          {playerMarketValueHistory.length > 1 && (
+                            <p className="text-xs text-apple-gray-500 mt-2">
+                              {playerMarketValueHistory.length} registros históricos
+                            </p>
+                          )}
+                        </div>
+                        <p className="text-2xs text-brand-green mt-2 group-hover:underline">Ver evolución →</p>
+                      </button>
+
+                      {/* Preview Físico/GPS */}
+                      <button
+                        onClick={() => setActiveTab('Físico')}
+                        className="group bg-white dark:bg-apple-gray-800/50 rounded-xl p-4 border border-apple-gray-100 dark:border-apple-gray-700 hover:border-brand-green dark:hover:border-brand-green transition-all hover:shadow-lg text-left"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">Físico / GPS</span>
+                          <svg className="w-4 h-4 text-apple-gray-400 group-hover:text-brand-green transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                        {playerGpsData.length > 0 ? (() => {
+                          const lastGps = playerGpsData[playerGpsData.length - 1]
+                          const fechaStr = lastGps?.Fecha instanceof Date
+                            ? lastGps.Fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+                            : '—'
+                          return (
+                            <div className="space-y-2">
+                              <div className="flex justify-between text-sm">
+                                <span className="text-apple-gray-500 dark:text-apple-gray-400">Último partido</span>
+                                <span className="font-medium text-apple-gray-800 dark:text-white">{fechaStr}</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-apple-gray-500 dark:text-apple-gray-400">Distancia</span>
+                                <span className="font-semibold text-apple-gray-800 dark:text-white tabular-nums">
+                                  {lastGps?.Distancia?.toLocaleString() || '—'} m
+                                </span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-apple-gray-500 dark:text-apple-gray-400">Vel. máxima</span>
+                                <span className="font-semibold text-apple-gray-800 dark:text-white tabular-nums">
+                                  {lastGps?.VelMax?.toFixed(1) || '—'} km/h
+                                </span>
+                              </div>
+                            </div>
+                          )
+                        })() : (
+                          <div className="text-center py-3">
+                            <p className="text-sm text-apple-gray-400">Sin datos GPS</p>
+                          </div>
+                        )}
+                        <p className="text-2xs text-brand-green mt-3 group-hover:underline">Ver métricas físicas →</p>
+                      </button>
+
+                      {/* Preview Evolución */}
+                      <button
+                        onClick={() => setActiveTab('Evolución')}
+                        className="group bg-white dark:bg-apple-gray-800/50 rounded-xl p-4 border border-apple-gray-100 dark:border-apple-gray-700 hover:border-brand-green dark:hover:border-brand-green transition-all hover:shadow-lg text-left"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">Evolución</span>
+                          <svg className="w-4 h-4 text-apple-gray-400 group-hover:text-brand-green transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                        <div className="text-center py-2">
+                          {player.ggScore !== null ? (
+                            <>
+                              <p className="text-3xl font-bold text-apple-gray-800 dark:text-white">{player.ggScore.toFixed(1)}</p>
+                              <p className="text-xs text-apple-gray-400 mt-1">Score GG actual</p>
+                              {positionAverageScore && (
+                                <p className={`text-xs mt-2 font-medium ${player.ggScore >= positionAverageScore ? 'text-emerald-500' : 'text-orange-500'}`}>
+                                  {player.ggScore >= positionAverageScore ? '↑' : '↓'} {Math.abs(player.ggScore - positionAverageScore).toFixed(1)} vs promedio
+                                </p>
+                              )}
+                            </>
+                          ) : (
+                            <p className="text-sm text-apple-gray-400">Sin datos de evolución</p>
+                          )}
+                        </div>
+                        <p className="text-2xs text-brand-green mt-2 group-hover:underline">Ver evolución por partido →</p>
+                      </button>
+
+                      {/* Preview Salud */}
+                      <button
+                        onClick={() => setActiveTab('Salud')}
+                        className="group bg-white dark:bg-apple-gray-800/50 rounded-xl p-4 border border-apple-gray-100 dark:border-apple-gray-700 hover:border-brand-green dark:hover:border-brand-green transition-all hover:shadow-lg text-left"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">Salud</span>
+                          <svg className="w-4 h-4 text-apple-gray-400 group-hover:text-brand-green transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                        <div className="text-center py-2">
+                          <div className="w-12 h-12 mx-auto mb-2 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                            <svg className="w-6 h-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                          <p className="text-sm font-medium text-green-600 dark:text-green-400">Sin lesiones activas</p>
+                        </div>
+                        <p className="text-2xs text-brand-green mt-2 group-hover:underline">Ver historial de salud →</p>
+                      </button>
+
+                      {/* Preview Coaching */}
+                      <button
+                        onClick={() => setActiveTab('Coaching')}
+                        className="group bg-white dark:bg-apple-gray-800/50 rounded-xl p-4 border border-apple-gray-100 dark:border-apple-gray-700 hover:border-brand-green dark:hover:border-brand-green transition-all hover:shadow-lg text-left"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">Coaching</span>
+                          <svg className="w-4 h-4 text-apple-gray-400 group-hover:text-brand-green transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                        <div className="text-center py-2">
+                          <div className="flex justify-center gap-4 mb-2">
+                            <div>
+                              <p className="text-2xl font-bold text-apple-gray-800 dark:text-white">0</p>
+                              <p className="text-2xs text-apple-gray-400">Sesiones</p>
+                            </div>
+                            <div>
+                              <p className="text-2xl font-bold text-apple-gray-800 dark:text-white">0</p>
+                              <p className="text-2xs text-apple-gray-400">Objetivos</p>
+                            </div>
+                          </div>
+                        </div>
+                        <p className="text-2xs text-brand-green mt-2 group-hover:underline">Ver plan de desarrollo →</p>
+                      </button>
+                    </div>
+                  </div>
                 )}
-
-                <div className="mt-4 p-4 bg-apple-gray-50 dark:bg-apple-gray-800/50 rounded-lg">
-                  <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400 leading-relaxed">
-                    El gráfico muestra las métricas normalizadas del jugador (0-100) comparadas contra el promedio
-                    de jugadores de la misma posición ({posKey})
-                    {comparisonLeague !== 'all' ? ` en ${comparisonLeague}` : ' en toda la base de datos'}.
-                  </p>
-                </div>
               </div>
             )}
 
@@ -1491,11 +1732,14 @@ export default function PlayerDetailPage() {
             )}
 
             {/* EVOLUCIÓN TAB */}
-            {activeTab === 'Evolución' && source === 'interno' && (
+            {activeTab === 'Rendimiento evolutivo' && source === 'interno' && (
               <div className="animate-fade-in" id="tab-content-evolution">
-                <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-5">
-                  Evolución por partido
+                <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-1">
+                  Rendimiento por partido
                 </h3>
+                <p className="text-xs text-apple-gray-400 mb-5">
+                  La línea punteada indica el promedio del jugador
+                </p>
                 {playerJugadorSK ? (
                   <EvolutionChart evolution={evolution} playerSK={playerJugadorSK} />
                 ) : (
@@ -1508,20 +1752,147 @@ export default function PlayerDetailPage() {
               </div>
             )}
 
-            {/* MÉTRICAS TAB */}
+            {/* MÉTRICAS TAB - Radar + Métricas detalladas */}
             {activeTab === 'Métricas' && (
               <div className="animate-fade-in" id="tab-content-metrics">
-                <div className="mb-5">
-                  <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
-                    Métricas Detalladas — {posKey || 'General'}
-                  </h3>
-                  <p className="text-xs text-apple-gray-400 mt-0.5">
-                    Comparado vs jugadores de su posición con +300 minutos
-                  </p>
+                {/* Header con controles */}
+                <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
+                      Métricas — {displayPosition}
+                    </h3>
+                    <p className="text-xs text-apple-gray-400 mt-0.5">
+                      Radar: vs {comparisonLeague === 'all' ? 'promedio general' : `promedio de ${comparisonLeague}`}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-apple-gray-500 dark:text-apple-gray-400">
+                      Comparar radar vs:
+                    </label>
+                    <select
+                      value={comparisonLeague}
+                      onChange={e => setComparisonLeague(e.target.value)}
+                      className="input-apple text-sm py-1.5 px-3 min-w-[140px]"
+                    >
+                      <option value="all">Todas las ligas</option>
+                      {availableLeagues.map(league => (
+                        <option key={league} value={league}>{league}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
-                  {displayMetrics.map((metric, idx) => {
+                {/* Selector de métricas del radar */}
+                <div className="mb-3 flex items-center gap-2">
+                  <button
+                    onClick={() => setShowMetricSelector(!showMetricSelector)}
+                    className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-all ${
+                      showMetricSelector
+                        ? 'bg-brand-green/10 border-brand-green text-brand-green'
+                        : 'bg-apple-gray-50 dark:bg-apple-gray-800 border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-400 hover:border-brand-green'
+                    }`}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                    </svg>
+                    Personalizar métricas
+                  </button>
+                  {customRadarMetrics.length > 0 && (
+                    <button
+                      onClick={() => setCustomRadarMetrics([])}
+                      className="text-2xs text-apple-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      Restablecer ({customRadarMetrics.length} seleccionadas)
+                    </button>
+                  )}
+                </div>
+
+                {/* Panel de selección de métricas */}
+                {showMetricSelector && (
+                  <div className="mb-4 p-4 bg-apple-gray-50/80 dark:bg-apple-gray-800/50 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-medium text-apple-gray-600 dark:text-apple-gray-300">
+                        Seleccioná las métricas para el radar (máx. 12)
+                      </p>
+                      <span className="text-2xs text-apple-gray-400">
+                        {customRadarMetrics.length > 0 ? customRadarMetrics.length : (RADAR_METRICS[posKey] ?? []).length} métricas
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-64 overflow-y-auto">
+                      {(RADAR_METRICS[posKey] ?? RADAR_METRICS['Defensor Central'] ?? []).map((metric: string) => {
+                        const isSelected = customRadarMetrics.length === 0 || customRadarMetrics.includes(metric)
+                        const isDefault = customRadarMetrics.length === 0
+                        return (
+                          <label
+                            key={metric}
+                            className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all text-xs ${
+                              isSelected
+                                ? 'bg-brand-green/10 border border-brand-green/30'
+                                : 'bg-white dark:bg-apple-gray-700 border border-apple-gray-200 dark:border-apple-gray-600 opacity-50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                if (isDefault) {
+                                  // Primera selección: seleccionar solo esta métrica
+                                  setCustomRadarMetrics([metric])
+                                } else if (isSelected) {
+                                  // Deseleccionar
+                                  const newMetrics = customRadarMetrics.filter(m => m !== metric)
+                                  setCustomRadarMetrics(newMetrics)
+                                } else if (customRadarMetrics.length < 12) {
+                                  // Seleccionar
+                                  setCustomRadarMetrics([...customRadarMetrics, metric])
+                                }
+                              }}
+                              className="w-3.5 h-3.5 rounded border-apple-gray-300 text-brand-green focus:ring-brand-green"
+                            />
+                            <span className={`text-2xs ${isSelected ? 'text-apple-gray-700 dark:text-apple-gray-200' : 'text-apple-gray-500'}`}>
+                              {metric}
+                            </span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                    <p className="mt-2 text-2xs text-apple-gray-400">
+                      Tip: Las métricas con "%" son porcentajes, las que terminan en "/90" son por cada 90 minutos jugados
+                    </p>
+                  </div>
+                )}
+
+                {/* Gráfico Radar */}
+                <div className="bg-apple-gray-50/30 dark:bg-apple-gray-800/20 rounded-2xl p-4 mb-6">
+                  {!posKey ? (
+                    <EmptyState title="Posición no reconocida" description="No se puede generar el radar para esta posición." />
+                  ) : (
+                    <PlayerRadarChart
+                      player={player}
+                      allNormalized={normalized}
+                      allPlayers={[...external, ...internal]}
+                      comparisonLeague={comparisonLeague}
+                      overridePosition={rawPosition}
+                      customMetrics={customRadarMetrics.length > 0 ? customRadarMetrics : undefined}
+                    />
+                  )}
+                </div>
+
+                {/* Métricas Detalladas */}
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">
+                      Detalle de Métricas
+                    </h4>
+                    <p className="text-2xs text-apple-gray-400 mt-0.5">
+                      Percentiles vs jugadores de {posKey || 'su posición'} con +300 min (todas las ligas)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1">
+                  {displayMetrics.map((metric) => {
                     const isBasicStat = metric === 'Partidos jugados' || metric === 'Minutos jugados'
                     const percentile = metricPercentiles[metric]
 
@@ -1529,9 +1900,9 @@ export default function PlayerDetailPage() {
                       const val = player[metric]
                       const num = typeof val === 'number' ? val : parseFloat(String(val ?? '').replace(',', '.'))
                       return (
-                        <div key={metric} className="flex justify-between py-3 border-b border-apple-gray-100 dark:border-apple-gray-800/50">
-                          <span className="text-sm text-apple-gray-500 dark:text-apple-gray-400">{metric}</span>
-                          <span className="text-sm font-semibold text-apple-gray-800 dark:text-white tabular-nums">
+                        <div key={metric} className="flex justify-between items-center py-3 border-b border-apple-gray-100 dark:border-apple-gray-800/50">
+                          <span className="text-sm text-apple-gray-600 dark:text-apple-gray-300">{metric}</span>
+                          <span className="text-sm font-bold text-apple-gray-800 dark:text-white tabular-nums bg-apple-gray-100 dark:bg-apple-gray-700 px-3 py-1 rounded-lg">
                             {isNaN(num) ? '—' : num.toFixed(0)}
                           </span>
                         </div>
@@ -1560,7 +1931,7 @@ export default function PlayerDetailPage() {
             {/* SALUD TAB */}
             {activeTab === 'Salud' && source === 'interno' && (
               <div className="animate-fade-in" id="tab-content-salud">
-                <div className="mb-5">
+                <div className="mb-6">
                   <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
                     Historial de Salud
                   </h3>
@@ -1570,100 +1941,158 @@ export default function PlayerDetailPage() {
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-6">
-                  {/* Body Map */}
-                  <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-6">
-                    <h4 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-4">
+                  {/* Professional Body Map */}
+                  <div className="bg-gradient-to-b from-apple-gray-50 to-white dark:from-apple-gray-800/50 dark:to-apple-gray-900/30 rounded-2xl p-6 border border-apple-gray-100 dark:border-apple-gray-700/50">
+                    <h4 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-5 flex items-center gap-2">
+                      <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
                       Mapa Corporal
                     </h4>
-                    <div className="flex justify-center">
-                      <svg viewBox="0 0 200 400" className="w-48 h-auto">
-                        {/* Head */}
-                        <ellipse cx="100" cy="30" rx="25" ry="28" className="fill-apple-gray-200 dark:fill-apple-gray-600 stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="1" />
+                    <div className="flex justify-center py-4">
+                      <svg viewBox="0 0 120 280" className="w-40 h-auto drop-shadow-sm">
+                        <defs>
+                          <linearGradient id="bodyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" className="[stop-color:#e5e7eb] dark:[stop-color:#4b5563]" />
+                            <stop offset="100%" className="[stop-color:#d1d5db] dark:[stop-color:#374151]" />
+                          </linearGradient>
+                          <linearGradient id="muscleGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" className="[stop-color:#f3f4f6] dark:[stop-color:#6b7280]" />
+                            <stop offset="100%" className="[stop-color:#e5e7eb] dark:[stop-color:#4b5563]" />
+                          </linearGradient>
+                          <filter id="bodyShadow" x="-20%" y="-20%" width="140%" height="140%">
+                            <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.1"/>
+                          </filter>
+                        </defs>
+
+                        {/* Head - more anatomical */}
+                        <ellipse cx="60" cy="22" rx="16" ry="18" fill="url(#bodyGradient)" filter="url(#bodyShadow)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
+                        <ellipse cx="60" cy="20" rx="14" ry="15" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.3"/>
+
                         {/* Neck */}
-                        <rect x="90" y="55" width="20" height="15" className="fill-apple-gray-200 dark:fill-apple-gray-600" />
-                        {/* Torso */}
-                        <path d="M60 70 Q50 100 55 160 L75 165 L75 175 L125 175 L125 165 L145 160 Q150 100 140 70 Z" className="fill-apple-gray-200 dark:fill-apple-gray-600 stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="1" />
+                        <path d="M52 38 L52 48 Q52 52 56 52 L64 52 Q68 52 68 48 L68 38" fill="url(#bodyGradient)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
+
+                        {/* Shoulders & Upper torso */}
+                        <path d="M30 55 Q35 50 52 52 L68 52 Q85 50 90 55 L90 65 Q88 70 85 72 L35 72 Q32 70 30 65 Z" fill="url(#bodyGradient)" filter="url(#bodyShadow)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
+
+                        {/* Chest muscles */}
+                        <ellipse cx="48" cy="68" rx="10" ry="8" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.3"/>
+                        <ellipse cx="72" cy="68" rx="10" ry="8" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.3"/>
+
+                        {/* Torso / Core */}
+                        <path d="M35 72 L35 120 Q38 125 45 128 L75 128 Q82 125 85 120 L85 72" fill="url(#bodyGradient)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
+
+                        {/* Abs definition */}
+                        <rect x="50" y="78" width="20" height="6" rx="2" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.2"/>
+                        <rect x="50" y="88" width="20" height="6" rx="2" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.2"/>
+                        <rect x="50" y="98" width="20" height="6" rx="2" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.2"/>
+                        <rect x="50" y="108" width="20" height="6" rx="2" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.2"/>
+
                         {/* Left Arm */}
-                        <path d="M60 72 Q40 80 35 120 Q30 140 25 160 Q20 175 30 180 Q40 175 45 160 L55 120 Q58 90 60 72" className="fill-apple-gray-200 dark:fill-apple-gray-600 stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="1" />
+                        <path d="M30 55 Q22 58 18 75 L15 95 Q12 105 14 115 Q15 120 18 122 Q22 120 24 115 L28 95 Q30 80 33 70" fill="url(#bodyGradient)" filter="url(#bodyShadow)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
+                        {/* Left forearm */}
+                        <path d="M14 115 Q10 130 12 145 Q13 155 18 158 Q24 155 25 145 L24 130 Q24 122 24 115" fill="url(#bodyGradient)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
+                        {/* Left bicep */}
+                        <ellipse cx="22" cy="80" rx="6" ry="10" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.3"/>
+
                         {/* Right Arm */}
-                        <path d="M140 72 Q160 80 165 120 Q170 140 175 160 Q180 175 170 180 Q160 175 155 160 L145 120 Q142 90 140 72" className="fill-apple-gray-200 dark:fill-apple-gray-600 stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="1" />
-                        {/* Left Leg */}
-                        <path d="M75 175 L70 250 Q65 280 60 320 Q55 350 55 370 Q55 385 70 385 Q80 385 80 370 L85 320 Q90 280 90 250 L95 175 Z" className="fill-apple-gray-200 dark:fill-apple-gray-600 stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="1" />
-                        {/* Right Leg */}
-                        <path d="M125 175 L130 250 Q135 280 140 320 Q145 350 145 370 Q145 385 130 385 Q120 385 120 370 L115 320 Q110 280 110 250 L105 175 Z" className="fill-apple-gray-200 dark:fill-apple-gray-600 stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="1" />
+                        <path d="M90 55 Q98 58 102 75 L105 95 Q108 105 106 115 Q105 120 102 122 Q98 120 96 115 L92 95 Q90 80 87 70" fill="url(#bodyGradient)" filter="url(#bodyShadow)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
+                        {/* Right forearm */}
+                        <path d="M106 115 Q110 130 108 145 Q107 155 102 158 Q96 155 95 145 L96 130 Q96 122 96 115" fill="url(#bodyGradient)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
+                        {/* Right bicep */}
+                        <ellipse cx="98" cy="80" rx="6" ry="10" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.3"/>
+
+                        {/* Hip / Pelvis */}
+                        <path d="M45 128 Q40 132 38 140 L38 148 Q42 155 50 155 L70 155 Q78 155 82 148 L82 140 Q80 132 75 128" fill="url(#bodyGradient)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
+
+                        {/* Left Leg - Thigh */}
+                        <path d="M38 148 L36 180 Q34 200 35 215 L38 215 Q42 200 44 180 L50 155" fill="url(#bodyGradient)" filter="url(#bodyShadow)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
+                        {/* Left quadriceps */}
+                        <ellipse cx="42" cy="175" rx="7" ry="18" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.3"/>
+                        {/* Left Calf */}
+                        <path d="M35 215 L33 245 Q32 258 35 268 Q38 273 42 270 L45 258 Q46 245 44 230 L42 215" fill="url(#bodyGradient)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
+                        {/* Left calf muscle */}
+                        <ellipse cx="38" cy="235" rx="5" ry="12" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.3"/>
+
+                        {/* Right Leg - Thigh */}
+                        <path d="M82 148 L84 180 Q86 200 85 215 L82 215 Q78 200 76 180 L70 155" fill="url(#bodyGradient)" filter="url(#bodyShadow)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
+                        {/* Right quadriceps */}
+                        <ellipse cx="78" cy="175" rx="7" ry="18" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.3"/>
+                        {/* Right Calf */}
+                        <path d="M85 215 L87 245 Q88 258 85 268 Q82 273 78 270 L75 258 Q74 245 76 230 L78 215" fill="url(#bodyGradient)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
+                        {/* Right calf muscle */}
+                        <ellipse cx="82" cy="235" rx="5" ry="12" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.3"/>
+
+                        {/* TODO: Injury markers will be added here dynamically */}
+                        {/* Example injury markers (commented for future use):
+                        <circle cx="42" cy="175" r="6" fill="#f59e0b" fillOpacity="0.8" className="animate-pulse" /> <!-- Yellow - Minor -->
+                        <circle cx="82" cy="235" r="6" fill="#f97316" fillOpacity="0.8" className="animate-pulse" /> <!-- Orange - Moderate -->
+                        <circle cx="48" cy="68" r="6" fill="#ef4444" fillOpacity="0.8" className="animate-pulse" /> <!-- Red - Severe -->
+                        */}
                       </svg>
                     </div>
-                    <p className="text-center text-xs text-apple-gray-400 mt-4">
-                      Sin lesiones registradas actualmente
-                    </p>
+
+                    {/* Status badge */}
+                    <div className="flex justify-center mt-4">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
+                        Sin lesiones activas
+                      </span>
+                    </div>
+
+                    {/* Legend */}
+                    <div className="mt-5 pt-4 border-t border-apple-gray-100 dark:border-apple-gray-700/50">
+                      <p className="text-2xs text-apple-gray-400 uppercase tracking-wider mb-2">Leyenda de severidad</p>
+                      <div className="flex justify-center gap-4">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-yellow-400"></span>
+                          <span className="text-2xs text-apple-gray-500">Leve</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-orange-500"></span>
+                          <span className="text-2xs text-apple-gray-500">Moderada</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                          <span className="text-2xs text-apple-gray-500">Grave</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Injury History */}
-                  <div>
-                    <h4 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-4">
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
                       Historial de Lesiones
                     </h4>
-                    <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-6 text-center">
-                      <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-apple-gray-100 dark:bg-apple-gray-700 flex items-center justify-center">
-                        <svg className="w-6 h-6 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+
+                    <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-6 text-center border border-dashed border-apple-gray-200 dark:border-apple-gray-700">
+                      <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-gradient-to-br from-apple-gray-100 to-apple-gray-50 dark:from-apple-gray-700 dark:to-apple-gray-800 flex items-center justify-center">
+                        <svg className="w-7 h-7 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                         </svg>
                       </div>
-                      <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400">
-                        Sin datos de lesiones
+                      <p className="text-sm font-medium text-apple-gray-600 dark:text-apple-gray-300">
+                        Sin historial de lesiones
                       </p>
-                      <p className="text-xs text-apple-gray-400 mt-1">
-                        Los datos se cargarán próximamente
+                      <p className="text-xs text-apple-gray-400 mt-1.5 max-w-xs mx-auto">
+                        Las lesiones registradas aparecerán aquí con detalle de zona afectada, duración y tratamiento
                       </p>
                     </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
-            {/* ANTROPOMETRÍA TAB */}
-            {activeTab === 'Antropometría' && source === 'interno' && (
-              <div className="animate-fade-in" id="tab-content-antropometria">
-                <div className="mb-5">
-                  <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
-                    Datos Antropométricos
-                  </h3>
-                  <p className="text-xs text-apple-gray-400 mt-0.5">
-                    Mediciones físicas y composición corporal
-                  </p>
-                </div>
-
-                <div className="grid md:grid-cols-3 gap-4 mb-6">
-                  <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-4 text-center">
-                    <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mb-1">Altura</p>
-                    <p className="text-2xl font-bold text-apple-gray-800 dark:text-white">
-                      {player.Altura || '—'} <span className="text-sm font-normal text-apple-gray-400">cm</span>
-                    </p>
+                    {/* Quick Stats placeholder */}
+                    <div className="grid grid-cols-2 gap-3 mt-4">
+                      <div className="bg-white dark:bg-apple-gray-800/50 rounded-xl p-4 text-center border border-apple-gray-100 dark:border-apple-gray-700/50">
+                        <p className="text-2xl font-bold text-green-600 dark:text-green-400">0</p>
+                        <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mt-1">Lesiones este año</p>
+                      </div>
+                      <div className="bg-white dark:bg-apple-gray-800/50 rounded-xl p-4 text-center border border-apple-gray-100 dark:border-apple-gray-700/50">
+                        <p className="text-2xl font-bold text-apple-gray-800 dark:text-white">0</p>
+                        <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mt-1">Días perdidos</p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-4 text-center">
-                    <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mb-1">Peso</p>
-                    <p className="text-2xl font-bold text-apple-gray-800 dark:text-white">
-                      — <span className="text-sm font-normal text-apple-gray-400">kg</span>
-                    </p>
-                  </div>
-                  <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-4 text-center">
-                    <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mb-1">IMC</p>
-                    <p className="text-2xl font-bold text-apple-gray-800 dark:text-white">—</p>
-                  </div>
-                </div>
-
-                <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-6 text-center">
-                  <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-apple-gray-100 dark:bg-apple-gray-700 flex items-center justify-center">
-                    <svg className="w-6 h-6 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-                    </svg>
-                  </div>
-                  <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400">
-                    Datos antropométricos completos próximamente
-                  </p>
-                  <p className="text-xs text-apple-gray-400 mt-1">
-                    Composición corporal, envergadura, mediciones de segmentos
-                  </p>
                 </div>
               </div>
             )}
@@ -1776,6 +2205,97 @@ export default function PlayerDetailPage() {
                   <p className="text-xs text-apple-gray-400 mt-1">
                     Seguimiento emocional y bienestar mental próximamente
                   </p>
+                </div>
+              </div>
+            )}
+
+            {/* COACHING TAB */}
+            {activeTab === 'Coaching' && source === 'interno' && (
+              <div className="animate-fade-in" id="tab-content-coaching">
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
+                    Coaching
+                  </h3>
+                  <p className="text-xs text-apple-gray-400 mt-0.5">
+                    Desarrollo técnico-táctico y plan de crecimiento individual
+                  </p>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Objetivos */}
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-2xl p-6 border border-blue-100 dark:border-blue-800/30">
+                    <h4 className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Objetivos Actuales
+                    </h4>
+                    <div className="bg-white/60 dark:bg-apple-gray-800/40 rounded-xl p-5 text-center">
+                      <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400">
+                        Sin objetivos definidos
+                      </p>
+                      <p className="text-xs text-apple-gray-400 mt-1">
+                        Los objetivos de desarrollo se cargarán próximamente
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Plan de desarrollo */}
+                  <div className="bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-900/20 dark:to-green-900/20 rounded-2xl p-6 border border-emerald-100 dark:border-emerald-800/30">
+                    <h4 className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
+                      Plan de Desarrollo
+                    </h4>
+                    <div className="bg-white/60 dark:bg-apple-gray-800/40 rounded-xl p-5 text-center">
+                      <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400">
+                        Sin plan de desarrollo activo
+                      </p>
+                      <p className="text-xs text-apple-gray-400 mt-1">
+                        El plan individualizado se cargará próximamente
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sesiones y feedback */}
+                <div className="mt-6">
+                  <h4 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    Historial de Sesiones
+                  </h4>
+                  <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-6 text-center border border-dashed border-apple-gray-200 dark:border-apple-gray-700">
+                    <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-gradient-to-br from-apple-gray-100 to-apple-gray-50 dark:from-apple-gray-700 dark:to-apple-gray-800 flex items-center justify-center">
+                      <svg className="w-7 h-7 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-medium text-apple-gray-600 dark:text-apple-gray-300">
+                      Sin sesiones de coaching registradas
+                    </p>
+                    <p className="text-xs text-apple-gray-400 mt-1.5 max-w-sm mx-auto">
+                      Las sesiones individuales de coaching y feedback técnico-táctico aparecerán aquí
+                    </p>
+                  </div>
+                </div>
+
+                {/* Quick Stats */}
+                <div className="grid grid-cols-3 gap-3 mt-6">
+                  <div className="bg-white dark:bg-apple-gray-800/50 rounded-xl p-4 text-center border border-apple-gray-100 dark:border-apple-gray-700/50">
+                    <p className="text-2xl font-bold text-apple-gray-800 dark:text-white">0</p>
+                    <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mt-1">Sesiones</p>
+                  </div>
+                  <div className="bg-white dark:bg-apple-gray-800/50 rounded-xl p-4 text-center border border-apple-gray-100 dark:border-apple-gray-700/50">
+                    <p className="text-2xl font-bold text-apple-gray-800 dark:text-white">0</p>
+                    <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mt-1">Objetivos cumplidos</p>
+                  </div>
+                  <div className="bg-white dark:bg-apple-gray-800/50 rounded-xl p-4 text-center border border-apple-gray-100 dark:border-apple-gray-700/50">
+                    <p className="text-2xl font-bold text-apple-gray-800 dark:text-white">—</p>
+                    <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mt-1">Progreso</p>
+                  </div>
                 </div>
               </div>
             )}
