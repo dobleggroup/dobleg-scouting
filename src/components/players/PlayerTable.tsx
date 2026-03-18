@@ -5,6 +5,8 @@ import ContractBadge from '@/components/ui/ContractBadge'
 import ScoreBar from '@/components/ui/ScoreBar'
 import EmptyState from '@/components/ui/EmptyState'
 import { SELECTABLE_METRICS } from '@/components/filters/FilterSidebar'
+import { useData } from '@/context/DataContext'
+import { FILTER_POSITION_MAP } from '@/constants/scoring'
 
 interface PlayerTableProps {
   players: EnrichedPlayer[]
@@ -72,6 +74,7 @@ function formatMetricValue(value: unknown): string {
 
 export default function PlayerTable({ players, source, isLoading, selectedMetrics = [] }: PlayerTableProps) {
   const navigate = useNavigate()
+  const { positionAverages } = useData()
   const [sort, setSort] = useState<SortState>({ column: 'ggScore', direction: 'desc' })
   const [page, setPage] = useState(1)
 
@@ -248,7 +251,11 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
                   {/* Score GG */}
                   <td className="px-3 py-3">
                     <div className="flex justify-center">
-                      <ScoreBar score={player.ggScore} size="sm" />
+                      <ScoreBar
+                        score={player.ggScore}
+                        size="sm"
+                        posAvg={positionAverages[FILTER_POSITION_MAP[player['Posición']] ?? ''] ?? null}
+                      />
                     </div>
                   </td>
                 </tr>

@@ -2,6 +2,7 @@ interface ScoreBarProps {
   score: number | null
   size?: 'sm' | 'md' | 'lg'
   showLabel?: boolean
+  posAvg?: number | null
 }
 
 function getScoreColor(score: number): { text: string; bg: string; bar: string; glow: string; isElite?: boolean } {
@@ -58,19 +59,46 @@ export function getScoreBgClass(score: number | null): string {
   return 'bg-red-500/15'
 }
 
-export default function ScoreBar({ score, size = 'md', showLabel = true }: ScoreBarProps) {
+// Position-relative color: green if score >= posAvg, else degraded scale
+export function getRelativeScoreColorClass(score: number | null, posAvg: number | null): string {
+  if (score === null) return 'text-apple-gray-400'
+  if (score >= 80) return 'text-emerald-400'
+  if (posAvg !== null) {
+    if (score >= posAvg) return 'text-emerald-500'
+    if (score >= posAvg * 0.85) return 'text-amber-500'
+    if (score >= posAvg * 0.70) return 'text-orange-500'
+    return 'text-red-500'
+  }
+  return getScoreColorClass(score)
+}
+
+export function getRelativeScoreBgClass(score: number | null, posAvg: number | null): string {
+  if (score === null) return 'bg-apple-gray-400/10'
+  if (score >= 80) return 'bg-emerald-400/20'
+  if (posAvg !== null) {
+    if (score >= posAvg) return 'bg-emerald-500/15'
+    if (score >= posAvg * 0.85) return 'bg-amber-500/15'
+    if (score >= posAvg * 0.70) return 'bg-orange-500/15'
+    return 'bg-red-500/15'
+  }
+  return getScoreBgClass(score)
+}
+
+export default function ScoreBar({ score, size = 'md', showLabel = true, posAvg }: ScoreBarProps) {
   if (score === null) {
     return <span className="text-apple-gray-400 text-sm">—</span>
   }
 
   const colors = getScoreColor(score)
   const clampedScore = Math.max(0, Math.min(100, score))
+  const isElite = score >= 80
 
   if (size === 'sm') {
+    const textColor = posAvg != null ? getRelativeScoreColorClass(score, posAvg) : colors.text
     return (
-      <span className={`font-semibold text-sm tabular-nums ${colors.text} ${colors.isElite ? 'drop-shadow-[0_0_4px_rgba(52,211,153,0.5)]' : ''}`}>
+      <span className={`font-semibold text-sm tabular-nums ${textColor} ${isElite ? 'drop-shadow-[0_0_4px_rgba(52,211,153,0.5)]' : ''}`}>
         {score.toFixed(1)}
-        {colors.isElite && <span className="ml-0.5 text-2xs">★</span>}
+        {isElite && <span className="ml-0.5 text-2xs">★</span>}
       </span>
     )
   }

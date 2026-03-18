@@ -16,6 +16,7 @@ import {
   type PositionPlayer,
 } from '@/services/formationService'
 import type { EnrichedPlayer } from '@/types'
+import { getRelativeScoreColorClass } from '@/components/ui/ScoreBar'
 
 const FORMATIONS: Record<string, { name: string; positions: { key: string; x: number; y: number }[] }> = {
   '4-3-3': {
@@ -150,8 +151,42 @@ const POSITION_DISPLAY_NAME: Record<string, string> = {
   'ST2': 'Delantero',
 }
 
+// Formation-specific overrides: in 4-3-3 the center CM is only Volante Central,
+// the two flanking CMs are only Volante Interno. In 4-4-2 both CMs accept either.
+const FORMATION_POSITION_OVERRIDES: Record<string, Record<string, string[]>> = {
+  '4-3-3': {
+    'CM1': ['Volante Interno'],
+    'CM2': ['Volante Central'],
+    'CM3': ['Volante Interno'],
+  },
+}
+
+const FORMATION_DISPLAY_OVERRIDES: Record<string, Record<string, string>> = {
+  '4-3-3': {
+    'CM1': 'Vol. Interno Izq.',
+    'CM2': 'Volante Central',
+    'CM3': 'Vol. Interno Der.',
+  },
+}
+
+// Short labels shown on the pitch circle when no player is assigned
+const FORMATION_SHORT_LABEL_OVERRIDES: Record<string, Record<string, string>> = {
+  '4-3-3': {
+    'CM1': 'VI',
+    'CM2': 'VC',
+    'CM3': 'VI',
+  },
+}
+
+// Leagues that appear in our data but have limited/incomplete metrics
+function isLimitedDataLeague(league: string): boolean {
+  const keywords = ['bolivia', 'emirat', 'honduras', 'portugal', 'reserv']
+  return keywords.some(kw => league.toLowerCase().includes(kw))
+}
+
 interface PlayerSelectorProps {
   positionKey: string
+  formationType: string
   selectedLeagues: string[]
   nationality: string
   minAge: number
@@ -167,6 +202,7 @@ interface PlayerSelectorProps {
 
 function PlayerSelector({
   positionKey,
+  formationType,
   selectedLeagues,
   nationality,
   minAge,
@@ -182,9 +218,29 @@ function PlayerSelector({
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState<'search' | 'suggestions'>('suggestions')
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const { positionAverages } = useData()
 
-  const allowedPositions = POSITION_KEY_MAP[positionKey] || []
-  const displayName = POSITION_DISPLAY_NAME[positionKey] || positionKey
+  // Promedio de posición para un EnrichedPlayer
+  function getPosAvg(p: EnrichedPlayer): number | null {
+    const normPos = FILTER_POSITION_MAP[p['Posición']] ?? ''
+    return normPos ? (positionAverages[normPos] ?? null) : null
+  }
+
+  // Promedio de posición para los PositionPlayer de esta posición (usa allowedPositions)
+  function getPosAvgForAllowed(positions: string[]): number | null {
+    const avgs = positions.map(pos => positionAverages[pos]).filter((v): v is number => v != null)
+    if (!avgs.length) return null
+    return avgs.reduce((a, b) => a + b, 0) / avgs.length
+  }
+
+  const allowedPositions =
+    FORMATION_POSITION_OVERRIDES[formationType]?.[positionKey] ??
+    POSITION_KEY_MAP[positionKey] ??
+    []
+  const displayName =
+    FORMATION_DISPLAY_OVERRIDES[formationType]?.[positionKey] ??
+    POSITION_DISPLAY_NAME[positionKey] ??
+    positionKey
   const canAddMore = currentPlayers.length < 3
   const currentPosIds = new Set(currentPlayers.map(p => p.playerId))
 
@@ -250,7 +306,7 @@ function PlayerSelector({
         </p>
       </div>
       <div className="text-right flex-shrink-0">
-        <p className={`text-sm font-bold ${(p.ggScore ?? 0) >= 60 ? 'text-emerald-500' : (p.ggScore ?? 0) >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
+        <p className={`text-sm font-bold ${getRelativeScoreColorClass(p.ggScore ?? null, getPosAvg(p))}`}>
           {p.ggScore?.toFixed(1)}
         </p>
         <p className="text-2xs text-apple-gray-400">{p.marketValueFormatted}</p>
@@ -330,7 +386,7 @@ function PlayerSelector({
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`text-sm font-bold ${(p.ggScore ?? 0) >= 60 ? 'text-emerald-500' : (p.ggScore ?? 0) >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
+                    <span className={`text-sm font-bold ${getRelativeScoreColorClass(p.ggScore ?? null, getPosAvgForAllowed(allowedPositions))}`}>
                       {p.ggScore?.toFixed(1)}
                     </span>
                     <button
@@ -426,7 +482,7 @@ function PlayerSelector({
 }
 
 export default function FormationPage() {
-  const { external, internal, loading: dataLoading } = useData()
+  const { external, internal, loading: dataLoading, positionAverages } = useData()
   const { user, userDisplayName } = useAuth()
   const allPlayers = useMemo(() => [...external, ...internal], [external, internal])
 
@@ -641,22 +697,30 @@ export default function FormationPage() {
                 Ligas {selectedLeagues.length > 0 && <span className="text-brand-green">({selectedLeagues.length})</span>}
               </label>
               <div className="flex flex-wrap gap-1.5">
-                {leagues.map(l => (
-                  <button
-                    key={l}
-                    onClick={() => setSelectedLeagues(prev =>
-                      prev.includes(l) ? prev.filter(x => x !== l) : [...prev, l]
-                    )}
-                    className={`px-2.5 py-1.5 rounded-lg text-xs transition-all ${
-                      selectedLeagues.includes(l)
-                        ? 'bg-brand-green text-black font-medium'
-                        : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600'
-                    }`}
-                  >
-                    {l}
-                  </button>
-                ))}
+                {leagues.map(l => {
+                  const limited = isLimitedDataLeague(l)
+                  const active = selectedLeagues.includes(l)
+                  return (
+                    <button
+                      key={l}
+                      onClick={() => setSelectedLeagues(prev =>
+                        prev.includes(l) ? prev.filter(x => x !== l) : [...prev, l]
+                      )}
+                      title={limited ? 'Datos limitados para esta liga' : undefined}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs transition-all ${
+                        active
+                          ? 'bg-brand-green text-black font-medium'
+                          : limited
+                            ? 'border border-dashed border-apple-gray-300 dark:border-apple-gray-600 text-apple-gray-400 dark:text-apple-gray-500 hover:border-apple-gray-400 dark:hover:border-apple-gray-500 italic'
+                            : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600'
+                      }`}
+                    >
+                      {l}{limited && <span className="ml-0.5 not-italic text-apple-gray-400">*</span>}
+                    </button>
+                  )
+                })}
               </div>
+              <p className="text-[10px] text-apple-gray-400 dark:text-apple-gray-500 mt-1.5 italic">* datos limitados</p>
             </div>
 
             <div>
@@ -760,7 +824,9 @@ export default function FormationPage() {
                       {hasPlayers ? (
                         <span className="text-xl font-bold">{playersInPos.length}</span>
                       ) : (
-                        <span className="text-sm font-semibold">{pos.key}</span>
+                        <span className="text-sm font-semibold">
+                          {FORMATION_SHORT_LABEL_OVERRIDES[formation]?.[pos.key] ?? pos.key}
+                        </span>
                       )}
                     </div>
 
@@ -775,7 +841,11 @@ export default function FormationPage() {
                             <span className="font-semibold text-apple-gray-800 dark:text-white">
                               {p.playerName.split(' ').slice(-1)[0]}
                             </span>
-                            <span className={`ml-1.5 font-bold ${(p.ggScore ?? 0) >= 60 ? 'text-brand-green' : (p.ggScore ?? 0) >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
+                            <span className={`ml-1.5 font-bold ${getRelativeScoreColorClass(p.ggScore ?? null, (() => {
+                                const posKeys = FORMATION_POSITION_OVERRIDES[formation]?.[pos.key] ?? POSITION_KEY_MAP[pos.key] ?? []
+                                const avgs = posKeys.map((k: string) => positionAverages[k]).filter((v: number | undefined): v is number => v != null)
+                                return avgs.length ? avgs.reduce((a: number, b: number) => a + b, 0) / avgs.length : null
+                              })())}`}>
                               {p.ggScore?.toFixed(0)}
                             </span>
                           </div>
@@ -794,6 +864,7 @@ export default function FormationPage() {
       {selectedPos && (
         <PlayerSelector
           positionKey={selectedPos}
+          formationType={formation}
           selectedLeagues={selectedLeagues}
           nationality={nationality}
           minAge={minAge}

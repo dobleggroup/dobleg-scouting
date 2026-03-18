@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useData } from '@/context/DataContext'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
-import { getScoreColorClass, getScoreBgClass } from '@/components/ui/ScoreBar'
+import { getRelativeScoreColorClass, getRelativeScoreBgClass } from '@/components/ui/ScoreBar'
+import { FILTER_POSITION_MAP } from '@/constants/scoring'
 import type { EnrichedPlayer } from '@/types'
 
 interface Opportunity {
@@ -120,7 +121,7 @@ type FilterType = 'all' | 'contract' | 'undervalued' | 'young_talent' | 'bargain
 
 export default function OpportunitiesPage() {
   const navigate = useNavigate()
-  const { external, internal, loading } = useData()
+  const { external, internal, loading, positionAverages } = useData()
   const [typeFilter, setTypeFilter] = useState<FilterType>('all')
   const [leagueFilter, setLeagueFilter] = useState<string>('all')
   const [positionFilter, setPositionFilter] = useState<string>('all')
@@ -381,8 +382,10 @@ export default function OpportunitiesPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredOpportunities.map((opp, idx) => {
-            const scoreColor = getScoreColorClass(opp.player.ggScore ?? null)
-            const scoreBg = getScoreBgClass(opp.player.ggScore ?? null)
+            const normPos = FILTER_POSITION_MAP[opp.player['Posición']] ?? ''
+            const posAvg = normPos ? (positionAverages[normPos] ?? null) : null
+            const scoreColor = getRelativeScoreColorClass(opp.player.ggScore ?? null, posAvg)
+            const scoreBg = getRelativeScoreBgClass(opp.player.ggScore ?? null, posAvg)
 
             return (
               <div

@@ -7,7 +7,9 @@ import {
   getLeagueJumpOpportunities,
   analyzeContractOpportunity,
 } from '@/constants/leagues'
-import { getScoreColorClass, getScoreBgClass } from '@/components/ui/ScoreBar'
+import { getRelativeScoreColorClass, getRelativeScoreBgClass } from '@/components/ui/ScoreBar'
+import { FILTER_POSITION_MAP } from '@/constants/scoring'
+import { useData } from '@/context/DataContext'
 import type { EnrichedPlayer } from '@/types'
 
 interface LeagueAnalysisProps {
@@ -16,6 +18,12 @@ interface LeagueAnalysisProps {
 
 export default function LeagueAnalysis({ players }: LeagueAnalysisProps) {
   const navigate = useNavigate()
+  const { positionAverages } = useData()
+
+  function getPosAvg(posicion: string): number | null {
+    const normPos = FILTER_POSITION_MAP[posicion] ?? ''
+    return normPos ? (positionAverages[normPos] ?? null) : null
+  }
 
   // Analyze league distribution
   const leagueDistribution = useMemo(() => {
@@ -216,7 +224,7 @@ export default function LeagueAnalysis({ players }: LeagueAnalysisProps) {
                         <p className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">
                           {opp.player.Jugador}
                         </p>
-                        <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${getScoreBgClass(opp.player.ggScore ?? null)} ${getScoreColorClass(opp.player.ggScore ?? null)}`}>
+                        <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${getRelativeScoreBgClass(opp.player.ggScore ?? null, getPosAvg(opp.player['Posición']))} ${getRelativeScoreColorClass(opp.player.ggScore ?? null, getPosAvg(opp.player['Posición']))}`}>
                           {opp.player.ggScore?.toFixed(1)}
                         </span>
                       </div>

@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useData } from '@/context/DataContext'
-import { POSITION_MAP } from '@/constants/scoring'
-import { getScoreColorClass, getScoreBgClass } from '@/components/ui/ScoreBar'
+import { POSITION_MAP, FILTER_POSITION_MAP } from '@/constants/scoring'
+import { getRelativeScoreColorClass, getRelativeScoreBgClass } from '@/components/ui/ScoreBar'
 import type { EnrichedPlayer } from '@/types'
 
 interface Message {
@@ -431,7 +431,7 @@ function generateResponse(criteria: SearchCriteria, results: EnrichedPlayer[]): 
 
 export default function AIAnalystChat() {
   const navigate = useNavigate()
-  const { external, internal } = useData()
+  const { external, internal, positionAverages } = useData()
   const allPlayers = useMemo(() => [...external, ...internal], [external, internal])
 
   const [isOpen, setIsOpen] = useState(false)
@@ -612,8 +612,10 @@ export default function AIAnalystChat() {
                       {msg.players && msg.players.length > 0 && (
                         <div className="mt-3 space-y-2">
                           {msg.players.map((p, i) => {
-                            const scoreColor = getScoreColorClass(p.ggScore ?? null)
-                            const scoreBg = getScoreBgClass(p.ggScore ?? null)
+                            const normPos = FILTER_POSITION_MAP[p['Posición']] ?? ''
+                            const posAvg = normPos ? (positionAverages[normPos] ?? null) : null
+                            const scoreColor = getRelativeScoreColorClass(p.ggScore ?? null, posAvg)
+                            const scoreBg = getRelativeScoreBgClass(p.ggScore ?? null, posAvg)
                             const isElite = (p.ggScore ?? 0) >= 80
 
                             return (

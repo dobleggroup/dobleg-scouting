@@ -9,29 +9,50 @@ interface GaugeScoreProps {
   comparisonLabel?: string
 }
 
-// Get color based on score ranges
-function getScoreColor(score: number): string {
-  if (score >= 80) return '#10B981'  // emerald-500 - Elite
-  if (score >= 65) return '#22C55E'  // green-500 - Muy bueno
-  if (score >= 50) return '#84CC16'  // lime-500 - Bueno
-  if (score >= 35) return '#EAB308'  // yellow-500 - Promedio
+// Absolute color thresholds (fallback when no position average)
+function getScoreColorAbsolute(score: number): string {
+  if (score >= 80) return '#34D399'  // emerald-400 - Elite
+  if (score >= 55) return '#10B981'  // emerald-500 - Bueno
+  if (score >= 35) return '#F59E0B'  // amber-500 - Promedio
   if (score >= 20) return '#F97316'  // orange-500 - Bajo
   return '#EF4444'                   // red-500 - Crítico
 }
 
-function getScoreLabel(score: number): string {
+// Relative color: green if above position average (matches ScoreBar relative logic)
+function getScoreColor(score: number, posAvg?: number | null): string {
+  if (score >= 80) return '#34D399'
+  if (posAvg != null) {
+    if (score >= posAvg) return '#10B981'         // verde: sobre el promedio
+    if (score >= posAvg * 0.85) return '#F59E0B'  // amarillo: cerca del promedio
+    if (score >= posAvg * 0.70) return '#F97316'  // naranja: por debajo
+    return '#EF4444'                               // rojo: muy por debajo
+  }
+  return getScoreColorAbsolute(score)
+}
+
+function getScoreLabel(score: number, posAvg?: number | null): string {
   if (score >= 80) return 'Elite'
-  if (score >= 65) return 'Muy Bueno'
-  if (score >= 50) return 'Bueno'
+  if (posAvg != null) {
+    if (score >= posAvg) return 'Sobre el promedio'
+    if (score >= posAvg * 0.85) return 'Cerca del promedio'
+    if (score >= posAvg * 0.70) return 'Bajo el promedio'
+    return 'Muy bajo'
+  }
+  if (score >= 55) return 'Bueno'
   if (score >= 35) return 'Promedio'
   if (score >= 20) return 'Bajo'
   return 'Crítico'
 }
 
-function getScoreDescription(score: number): string {
+function getScoreDescription(score: number, posAvg?: number | null): string {
   if (score >= 80) return 'Rendimiento excepcional'
-  if (score >= 65) return 'Rendimiento destacado'
-  if (score >= 50) return 'Rendimiento sólido'
+  if (posAvg != null) {
+    if (score >= posAvg) return 'Por encima del promedio de su posición'
+    if (score >= posAvg * 0.85) return 'Cerca del promedio de su posición'
+    if (score >= posAvg * 0.70) return 'Por debajo del promedio de su posición'
+    return 'Rendimiento bajo en su posición'
+  }
+  if (score >= 55) return 'Rendimiento sólido'
   if (score >= 35) return 'Rendimiento regular'
   if (score >= 20) return 'Necesita mejorar'
   return 'Rendimiento bajo'
@@ -98,9 +119,9 @@ export default function GaugeScore({
   }
 
   const clampedValue = Math.max(0, Math.min(100, displayValue))
-  const color = getScoreColor(score)
-  const label = getScoreLabel(score)
-  const description = getScoreDescription(score)
+  const color = getScoreColor(score, comparisonScore)
+  const label = getScoreLabel(score, comparisonScore)
+  const description = getScoreDescription(score, comparisonScore)
 
   // Gauge dimensions based on size - cy positioned to leave room for score below arc
   const config = {
@@ -119,14 +140,13 @@ export default function GaugeScore({
     ? startDeg + (Math.max(0, Math.min(100, comparisonScore)) / 100) * 270
     : null
 
-  // Color gradient zones (very subtle background)
+  // Color gradient zones (very subtle background) — aligned with ScoreBar thresholds
   const zones = [
     { start: 0, end: 20, color: '#EF4444' },
     { start: 20, end: 35, color: '#F97316' },
-    { start: 35, end: 50, color: '#EAB308' },
-    { start: 50, end: 65, color: '#84CC16' },
-    { start: 65, end: 80, color: '#22C55E' },
-    { start: 80, end: 100, color: '#10B981' },
+    { start: 35, end: 55, color: '#F59E0B' },
+    { start: 55, end: 80, color: '#10B981' },
+    { start: 80, end: 100, color: '#34D399' },
   ]
 
   return (
@@ -249,21 +269,40 @@ export default function GaugeScore({
         {/* Comparison marker (if provided) */}
         {comparisonDeg !== null && (
           <>
-            {/* Comparison line */}
             {(() => {
-              const compInner = polarToCartesian(cx, cy, r - strokeW / 2 - 6, comparisonDeg)
-              const compOuter = polarToCartesian(cx, cy, r + strokeW / 2 + 6, comparisonDeg)
+              const compInner = polarToCartesian(cx, cy, r - strokeW / 2 - 10, comparisonDeg)
+              const compOuter = polarToCartesian(cx, cy, r + strokeW / 2 + 10, comparisonDeg)
+              const compDot = polarToCartesian(cx, cy, r + strokeW / 2 + 14, comparisonDeg)
               return (
-                <line
-                  x1={compInner.x}
-                  y1={compInner.y}
-                  x2={compOuter.x}
-                  y2={compOuter.y}
-                  stroke="#6B7280"
-                  strokeWidth={3}
-                  strokeLinecap="round"
-                  opacity={0.8}
-                />
+                <g>
+                  {/* Shadow/outline for contrast */}
+                  <line
+                    x1={compInner.x}
+                    y1={compInner.y}
+                    x2={compOuter.x}
+                    y2={compOuter.y}
+                    stroke="rgba(0,0,0,0.25)"
+                    strokeWidth={5}
+                    strokeLinecap="round"
+                  />
+                  {/* Main comparison line */}
+                  <line
+                    x1={compInner.x}
+                    y1={compInner.y}
+                    x2={compOuter.x}
+                    y2={compOuter.y}
+                    stroke="#E2E8F0"
+                    strokeWidth={3}
+                    strokeLinecap="round"
+                  />
+                  {/* Dot at outer tip */}
+                  <circle
+                    cx={compDot.x}
+                    cy={compDot.y}
+                    r={2.5}
+                    fill="#94A3B8"
+                  />
+                </g>
               )
             })()}
           </>

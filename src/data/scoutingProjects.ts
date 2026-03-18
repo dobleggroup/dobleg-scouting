@@ -11,6 +11,7 @@ export interface ScoutedPlayer {
   Comentario: string
   FichaTecnica: string
   destacado?: boolean
+  scoutLabel?: string
 }
 
 export interface ScoutingProject {
@@ -37,23 +38,14 @@ export const SUDAMERICANO_SUB15_2025: ScoutingProject = {
   year: 2025,
   category: 'Selecciones',
   status: 'completed',
+  coverImage: 'https://images.pexels.com/photos/1884574/pexels-photo-1884574.jpeg?w=1200&q=80',
   description: 'Trabajo de scouting en el Campeonato Sudamericano Sub-15 de la CONMEBOL. Se evaluaron los mejores talentos juveniles de Sudamérica.',
   dateRange: 'Octubre 2025',
   location: 'Paraguay',
   totalPlayers: 23,
   highlightedPlayers: 5,
   players: [
-    {
-      Jugador: 'Marco Villarreal',
-      Club: 'Caracas',
-      Edad: 15,
-      Nacionalidad: 'Venezuela',
-      Posicion: 'Volante central',
-      Rol: 'Volante central posicional',
-      Comentario: 'Destaca técnicamente. Buenos controles, buenos pases progresivos y agresivo en la marca.',
-      FichaTecnica: 'https://www.transfermarkt.es/marco-villarreal/profil/spieler/1464930',
-      destacado: true // VERDE
-    },
+    // ── ARQUERO ──────────────────────────────────────────────────────────────
     {
       Jugador: 'Luis Machín',
       Club: 'Nacional',
@@ -65,6 +57,7 @@ export const SUDAMERICANO_SUB15_2025: ScoutingProject = {
       FichaTecnica: '',
       destacado: false
     },
+    // ── DEFENSORES CENTRALES ─────────────────────────────────────────────────
     {
       Jugador: 'Geovane Silva',
       Club: 'Vitória',
@@ -85,29 +78,8 @@ export const SUDAMERICANO_SUB15_2025: ScoutingProject = {
       Rol: 'Defensor central iniciador',
       Comentario: 'Bien en el 1 vs 1. Agresivo y buena salida del fondo. Conduce.',
       FichaTecnica: '',
-      destacado: true // VERDE
-    },
-    {
-      Jugador: 'Nicolás Bernal',
-      Club: 'Atlético Nacional',
-      Edad: 15,
-      Nacionalidad: 'Colombia',
-      Posicion: 'Volante interno',
-      Rol: 'Volante interno ofensivo',
-      Comentario: 'Buena progresión con pases filtrados, conducciones o duelos 1 vs 1. Arriesga mucho.',
-      FichaTecnica: 'https://www.transfermarkt.es/nicolas-bernal/profil/spieler/1467479',
-      destacado: false
-    },
-    {
-      Jugador: 'Deverson García',
-      Club: 'Caracas',
-      Edad: 15,
-      Nacionalidad: 'Venezuela',
-      Posicion: 'Extremo',
-      Rol: 'Extremo desequilibrante',
-      Comentario: 'Buen 1 vs 1 ofensivo. Debe mejorar la toma de decisión y el control orientado para ganar tiempo / espacio.',
-      FichaTecnica: 'https://www.transfermarkt.es/deverson-garcia/profil/spieler/1464932',
-      destacado: false
+      destacado: true,
+      scoutLabel: 'Líbero Moderno'
     },
     {
       Jugador: 'Martín Navarrete',
@@ -132,6 +104,65 @@ export const SUDAMERICANO_SUB15_2025: ScoutingProject = {
       destacado: false
     },
     {
+      Jugador: 'Ruan Pablo',
+      Club: 'Palmeiras',
+      Edad: 15,
+      Nacionalidad: 'Brasil',
+      Posicion: 'Defensor central izquierdo',
+      Rol: 'Defensor central iniciador',
+      Comentario: 'Mucha técnica de pase corto y largo. Muy fuerte y rápido para defender.',
+      FichaTecnica: 'https://www.transfermarkt.es/ruan-pablo/profil/spieler/1466528',
+      destacado: true,
+      scoutLabel: 'Muralla Brasilera'
+    },
+    {
+      Jugador: 'Adrián Mosquera',
+      Club: 'BTL Sport Project',
+      Edad: 15,
+      Nacionalidad: 'Colombia',
+      Posicion: 'Defensor central izquierdo',
+      Rol: 'Defensor central clásico',
+      Comentario: 'Destaca defensivamente.',
+      FichaTecnica: 'https://www.transfermarkt.es/adrian-mosquera/profil/spieler/1467482',
+      destacado: false
+    },
+    // ── LATERALES ────────────────────────────────────────────────────────────
+    {
+      Jugador: 'León Palma',
+      Club: 'U Católica',
+      Edad: 15,
+      Nacionalidad: 'Chile',
+      Posicion: 'Lateral derecho',
+      Rol: 'Lateral derecho completo',
+      Comentario: 'Mucho ida y vuelta. Criterioso con la pelota.',
+      FichaTecnica: 'https://www.transfermarkt.es/leon-palma/profil/spieler/1471000',
+      destacado: false
+    },
+    {
+      Jugador: 'Weiner Martínez',
+      Club: 'Envigado',
+      Edad: 15,
+      Nacionalidad: 'Colombia',
+      Posicion: 'Lateral izquierdo',
+      Rol: 'Lateral izquierdo ofensivo',
+      Comentario: "Destaca en los duelos ofensivos. Buen porte. Rápido. Podría transformarse a 'extremo'.",
+      FichaTecnica: 'https://www.transfermarkt.es/weiner-martinez/profil/spieler/1467477',
+      destacado: false
+    },
+    // ── VOLANTE CENTRAL ──────────────────────────────────────────────────────
+    {
+      Jugador: 'Marco Villarreal',
+      Club: 'Caracas',
+      Edad: 15,
+      Nacionalidad: 'Venezuela',
+      Posicion: 'Volante central',
+      Rol: 'Volante central posicional',
+      Comentario: 'Destaca técnicamente. Buenos controles, buenos pases progresivos y agresivo en la marca.',
+      FichaTecnica: 'https://www.transfermarkt.es/marco-villarreal/profil/spieler/1464930',
+      destacado: true,
+      scoutLabel: 'Motor Táctico'
+    },
+    {
       Jugador: 'Samir Marmolejo',
       Club: 'DIM',
       Edad: 15,
@@ -140,6 +171,29 @@ export const SUDAMERICANO_SUB15_2025: ScoutingProject = {
       Rol: 'Volante central posicional',
       Comentario: 'Buena técnica y buen físico.',
       FichaTecnica: 'https://www.transfermarkt.es/samir-marmolejo/profil/spieler/1467476',
+      destacado: false
+    },
+    {
+      Jugador: 'Marvin Vásquez',
+      Club: 'Emelec',
+      Edad: 15,
+      Nacionalidad: 'Ecuador',
+      Posicion: 'Volante central',
+      Rol: 'Volante central defensivo',
+      Comentario: 'Tiene buena pegada y buena visión de juego, aunque destaca por su agresividad al marcar alto.',
+      FichaTecnica: 'https://www.transfermarkt.es/marvin-vasquez/profil/spieler/1461184',
+      destacado: false
+    },
+    // ── VOLANTE INTERNO ──────────────────────────────────────────────────────
+    {
+      Jugador: 'Nicolás Bernal',
+      Club: 'Atlético Nacional',
+      Edad: 15,
+      Nacionalidad: 'Colombia',
+      Posicion: 'Volante interno',
+      Rol: 'Volante interno ofensivo',
+      Comentario: 'Buena progresión con pases filtrados, conducciones o duelos 1 vs 1. Arriesga mucho.',
+      FichaTecnica: 'https://www.transfermarkt.es/nicolas-bernal/profil/spieler/1467479',
       destacado: false
     },
     {
@@ -154,6 +208,30 @@ export const SUDAMERICANO_SUB15_2025: ScoutingProject = {
       destacado: false
     },
     {
+      Jugador: 'Facundo Amaya',
+      Club: 'Boca Juniors',
+      Edad: 15,
+      Nacionalidad: 'Argentina',
+      Posicion: 'Volante interno',
+      Rol: 'Volante interno mixto',
+      Comentario: 'Buen pase. Su primera opción es dar el pase hacia adelante. Buen juego bajo presión.',
+      FichaTecnica: 'https://www.transfermarkt.es/facundo-amaya/profil/spieler/1427205',
+      destacado: true,
+      scoutLabel: 'Arquitecto del Juego'
+    },
+    // ── EXTREMOS ─────────────────────────────────────────────────────────────
+    {
+      Jugador: 'Deverson García',
+      Club: 'Caracas',
+      Edad: 15,
+      Nacionalidad: 'Venezuela',
+      Posicion: 'Extremo',
+      Rol: 'Extremo desequilibrante',
+      Comentario: 'Buen 1 vs 1 ofensivo. Debe mejorar la toma de decisión y el control orientado para ganar tiempo / espacio.',
+      FichaTecnica: 'https://www.transfermarkt.es/deverson-garcia/profil/spieler/1464932',
+      destacado: false
+    },
+    {
       Jugador: 'Cristian Arboleda',
       Club: 'Atlético Nacional',
       Edad: 15,
@@ -162,17 +240,6 @@ export const SUDAMERICANO_SUB15_2025: ScoutingProject = {
       Rol: 'Extremo desequilibrante',
       Comentario: 'Buen 1 vs 1 ofensivo. Mucha potencia y velocidad. Mostró buena definición.',
       FichaTecnica: 'https://www.transfermarkt.es/cristian-arboleda/profil/spieler/1467474',
-      destacado: false
-    },
-    {
-      Jugador: 'Marvin Vásquez',
-      Club: 'Emelec',
-      Edad: 15,
-      Nacionalidad: 'Ecuador',
-      Posicion: 'Volante central',
-      Rol: 'Volante central defensivo',
-      Comentario: 'Tiene buena pegada y buena visión de juego, aunque destaca por su agresividad al marcar alto.',
-      FichaTecnica: 'https://www.transfermarkt.es/marvin-vasquez/profil/spieler/1461184',
       destacado: false
     },
     {
@@ -187,39 +254,6 @@ export const SUDAMERICANO_SUB15_2025: ScoutingProject = {
       destacado: false
     },
     {
-      Jugador: 'Ruan Pablo',
-      Club: 'Palmeiras',
-      Edad: 15,
-      Nacionalidad: 'Brasil',
-      Posicion: 'Defensor central izquierdo',
-      Rol: 'Defensor central iniciador',
-      Comentario: 'Mucha técnica de pase corto y largo. Muy fuerte y rápido para defender.',
-      FichaTecnica: 'https://www.transfermarkt.es/ruan-pablo/profil/spieler/1466528',
-      destacado: true
-    },
-    {
-      Jugador: 'Weiner Martínez',
-      Club: 'Envigado',
-      Edad: 15,
-      Nacionalidad: 'Colombia',
-      Posicion: 'Lateral izquierdo',
-      Rol: 'Lateral izquierdo ofensivo',
-      Comentario: "Destaca en los duelos ofensivos. Buen porte. Rápido. Podría transformarse a 'extremo'.",
-      FichaTecnica: 'https://www.transfermarkt.es/weiner-martinez/profil/spieler/1467477',
-      destacado: false
-    },
-    {
-      Jugador: 'León Palma',
-      Club: 'U Católica',
-      Edad: 15,
-      Nacionalidad: 'Chile',
-      Posicion: 'Lateral derecho',
-      Rol: 'Lateral derecho completo',
-      Comentario: 'Mucho ida y vuelta. Criterioso con la pelota.',
-      FichaTecnica: 'https://www.transfermarkt.es/leon-palma/profil/spieler/1471000',
-      destacado: false
-    },
-    {
       Jugador: 'Ángel González',
       Club: 'Nacional Paraguay',
       Edad: 15,
@@ -231,6 +265,18 @@ export const SUDAMERICANO_SUB15_2025: ScoutingProject = {
       destacado: false
     },
     {
+      Jugador: 'José López',
+      Club: 'Monagas',
+      Edad: 15,
+      Nacionalidad: 'Venezuela',
+      Posicion: 'Extremo',
+      Rol: 'Extremo desequilibrante',
+      Comentario: 'Buena gambeta y buena asociación en corto.',
+      FichaTecnica: 'https://www.transfermarkt.es/jose-lopez/profil/spieler/1467482',
+      destacado: false
+    },
+    // ── ENGANCHE ─────────────────────────────────────────────────────────────
+    {
       Jugador: 'Mateo Rivero',
       Club: 'Argentinos Juniors',
       Edad: 15,
@@ -241,28 +287,7 @@ export const SUDAMERICANO_SUB15_2025: ScoutingProject = {
       FichaTecnica: 'https://www.transfermarkt.es/mateo-rivero/profil/spieler/1427203',
       destacado: false
     },
-    {
-      Jugador: 'Facundo Amaya',
-      Club: 'Boca Juniors',
-      Edad: 15,
-      Nacionalidad: 'Argentina',
-      Posicion: 'Volante interno',
-      Rol: 'Volante interno mixto',
-      Comentario: 'Buen pase. Su primera opción es dar el pase hacia adelante. Buen juego bajo presión.',
-      FichaTecnica: 'https://www.transfermarkt.es/facundo-amaya/profil/spieler/1427205',
-      destacado: true // VERDE
-    },
-    {
-      Jugador: 'Adrián Mosquera',
-      Club: 'BTL Sport Project',
-      Edad: 15,
-      Nacionalidad: 'Colombia',
-      Posicion: 'Defensor central izquierdo',
-      Rol: 'Defensor central clásico',
-      Comentario: 'Destaca defensivamente.',
-      FichaTecnica: 'https://www.transfermarkt.es/adrian-mosquera/profil/spieler/1467482',
-      destacado: false
-    },
+    // ── DELANTERO ────────────────────────────────────────────────────────────
     {
       Jugador: 'Bruno Cabral',
       Club: 'River Plate',
@@ -272,19 +297,9 @@ export const SUDAMERICANO_SUB15_2025: ScoutingProject = {
       Rol: 'Delantero completo',
       Comentario: 'Buen juego aéreo, buena definición, buenos apoyos y buenos desmarques de ruptura. Completo.',
       FichaTecnica: 'https://www.transfermarkt.es/bruno-cabral/profil/spieler/1427196',
-      destacado: true
+      destacado: true,
+      scoutLabel: 'Delantero Total'
     },
-    {
-      Jugador: 'José López',
-      Club: 'Monagas',
-      Edad: 15,
-      Nacionalidad: 'Venezuela',
-      Posicion: 'Extremo',
-      Rol: 'Extremo desequilibrante',
-      Comentario: 'Buena gambeta y buena asociación en corto.',
-      FichaTecnica: 'https://www.transfermarkt.es/jose-lopez/profil/spieler/1467482',
-      destacado: false
-    }
   ]
 }
 
@@ -296,6 +311,7 @@ export const LIBERTADORES_SUB20_2026: ScoutingProject = {
   year: 2026,
   category: 'Clubes',
   status: 'upcoming',
+  coverImage: 'https://images.pexels.com/photos/3621104/pexels-photo-3621104.jpeg?w=1200&q=80',
   description: 'Trabajo de scouting en la Copa Libertadores Sub-20 de la CONMEBOL.',
   dateRange: 'Abril - Mayo 2026',
   location: 'Por definir',

@@ -4,9 +4,9 @@ import { SCOUTING_PROJECTS, getNationalityFlag, getPositionColor, type ScoutingP
 // Project Card Component
 function ProjectCard({ project, onClick }: { project: ScoutingProject; onClick: () => void }) {
   const statusColors = {
-    completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-    'in-progress': 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-    upcoming: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+    completed: 'bg-white/20 text-white',
+    'in-progress': 'bg-white/20 text-white',
+    upcoming: 'bg-white/20 text-white'
   }
 
   const statusLabels = {
@@ -25,25 +25,26 @@ function ProjectCard({ project, onClick }: { project: ScoutingProject; onClick: 
           : 'hover:shadow-xl hover:border-brand-green dark:hover:border-brand-green hover:-translate-y-1'
       }`}
     >
-      {/* Header gradient */}
-      <div className="h-32 bg-gradient-to-br from-brand-green via-emerald-500 to-teal-600 relative">
-        <div className="absolute inset-0 bg-black/10" />
+      {/* Header — image or gradient fallback */}
+      <div className="h-44 relative overflow-hidden">
+        {project.coverImage ? (
+          <img
+            src={project.coverImage}
+            alt={project.title}
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+          />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-brand-green via-emerald-500 to-teal-600" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-black/10" />
         <div className="absolute bottom-4 left-5">
-          <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${statusColors[project.status]}`}>
+          <span className={`px-2.5 py-1 text-xs font-medium rounded-full backdrop-blur-sm ${statusColors[project.status]}`}>
             {statusLabels[project.status]}
           </span>
         </div>
-        <div className="absolute top-4 right-4 text-white/80 text-sm font-medium">
+        <div className="absolute top-4 right-4 text-white/90 text-sm font-semibold drop-shadow">
           {project.year}
         </div>
-        {/* Trophy icon for completed */}
-        {project.status === 'completed' && (
-          <div className="absolute top-4 left-4">
-            <svg className="w-8 h-8 text-white/90" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2C13.1 2 14 2.9 14 4H19C20.1 4 21 4.9 21 6V8C21 10.2 19.2 12 17 12C16.5 13.7 15.1 15 13.4 15.5L15 20H17V22H7V20H9L10.6 15.5C8.9 15 7.5 13.7 7 12C4.8 12 3 10.2 3 8V6C3 4.9 3.9 4 5 4H10C10 2.9 10.9 2 12 2M5 6V8C5 9.1 5.9 10 7 10V6H5M17 10C18.1 10 19 9.1 19 8V6H17V10Z"/>
-            </svg>
-          </div>
-        )}
       </div>
 
       {/* Content */}
@@ -155,7 +156,7 @@ function PlayerRow({ player, index }: { player: ScoutedPlayer; index: number }) 
 
         {/* Position badge */}
         <div className="hidden sm:flex items-center gap-2">
-          <span className={`px-2 py-0.5 text-xs font-medium text-white rounded ${getPositionColor(player.Posicion)}`}>
+          <span className="px-2 py-0.5 text-xs font-medium text-apple-gray-600 dark:text-apple-gray-300 bg-apple-gray-100 dark:bg-apple-gray-700 rounded">
             {player.Posicion}
           </span>
         </div>
@@ -204,6 +205,106 @@ function PlayerRow({ player, index }: { player: ScoutedPlayer; index: number }) 
   )
 }
 
+// Formation View — all scouted players mapped on pitch by zone
+function FormationView({ players }: { players: ScoutedPlayer[] }) {
+  const getInitials = (name: string) =>
+    name.split(' ').slice(0, 2).map(n => n[0].toUpperCase()).join('')
+
+  const getLastName = (name: string) => {
+    const parts = name.split(' ')
+    return parts.length > 1 ? parts[parts.length - 1] : name
+  }
+
+  const zones = [
+    {
+      key: 'attack',
+      label: 'Ataque',
+      players: players.filter(p => {
+        const pos = p.Posicion.toLowerCase()
+        return pos.includes('extremo') || pos.includes('delantero') || pos.includes('enganche')
+      }),
+    },
+    {
+      key: 'mid',
+      label: 'Mediocampo',
+      players: players.filter(p => {
+        const pos = p.Posicion.toLowerCase()
+        return pos.includes('volante') || pos.includes('interior') || pos.includes('medio')
+      }),
+    },
+    {
+      key: 'def',
+      label: 'Defensa',
+      players: players.filter(p => {
+        const pos = p.Posicion.toLowerCase()
+        return (pos.includes('defensor') || pos.includes('lateral') || pos.includes('central')) &&
+               !pos.includes('volante')
+      }),
+    },
+    {
+      key: 'gk',
+      label: 'Portería',
+      players: players.filter(p => {
+        const pos = p.Posicion.toLowerCase()
+        return pos.includes('arquero') || pos.includes('portero')
+      }),
+    },
+  ].filter(z => z.players.length > 0)
+
+  return (
+    <div className="rounded-xl overflow-hidden border border-apple-gray-200 dark:border-apple-gray-700 mb-6">
+      <div
+        style={{
+          background: 'repeating-linear-gradient(to bottom, #166534 0px, #166534 60px, #15803d 60px, #15803d 120px)',
+        }}
+      >
+        {/* Pitch lines overlay */}
+        <div className="relative px-6 py-4">
+          {/* Outer border */}
+          <div className="absolute inset-4 border border-white/15 rounded pointer-events-none" />
+          {zones.map((zone, i) => (
+            <div key={zone.key} className={i > 0 ? 'border-t border-white/10 pt-3 mt-1' : 'pt-1'}>
+              <p className="text-white/35 text-[9px] font-semibold uppercase tracking-widest mb-2 text-center select-none">
+                {zone.label}
+              </p>
+              <div className="flex flex-wrap justify-center gap-x-4 gap-y-3 pb-3">
+                {zone.players.map(player => (
+                  <div key={player.Jugador} className="flex flex-col items-center gap-1">
+                    <div
+                      className={`w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-bold shadow-lg select-none ${
+                        player.destacado
+                          ? 'bg-amber-400 text-white ring-2 ring-amber-200/50'
+                          : 'bg-white/15 text-white border border-white/30'
+                      }`}
+                    >
+                      {getInitials(player.Jugador)}
+                    </div>
+                    <span className="text-white/75 text-[9px] font-medium text-center leading-tight max-w-[52px] truncate drop-shadow select-none">
+                      {getLastName(player.Jugador)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* Legend */}
+      <div className="flex items-center gap-6 px-4 py-2.5 bg-apple-gray-50 dark:bg-apple-gray-800/80 border-t border-apple-gray-100 dark:border-apple-gray-700 text-xs text-apple-gray-500 dark:text-apple-gray-400">
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-full bg-amber-400" />
+          <span>Destacado</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-full border border-apple-gray-300 dark:border-apple-gray-600 bg-apple-gray-200 dark:bg-apple-gray-700" />
+          <span>Evaluado</span>
+        </div>
+        <span className="ml-auto">{players.length} jugadores</span>
+      </div>
+    </div>
+  )
+}
+
 // Project Detail View
 function ProjectDetail({ project, onBack }: { project: ScoutingProject; onBack: () => void }) {
   const [filter, setFilter] = useState<'all' | 'highlighted'>('all')
@@ -214,15 +315,6 @@ function ProjectDetail({ project, onBack }: { project: ScoutingProject; onBack: 
   const positions = useMemo(() => {
     const posSet = new Set(project.players.map(p => p.Posicion))
     return Array.from(posSet).sort()
-  }, [project.players])
-
-  // Get unique nationalities for stats
-  const nationalityStats = useMemo(() => {
-    const stats: Record<string, number> = {}
-    project.players.forEach(p => {
-      stats[p.Nacionalidad] = (stats[p.Nacionalidad] || 0) + 1
-    })
-    return Object.entries(stats).sort((a, b) => b[1] - a[1])
   }, [project.players])
 
   // Filtered players
@@ -266,46 +358,8 @@ function ProjectDetail({ project, onBack }: { project: ScoutingProject; onBack: 
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <div className="bg-white dark:bg-apple-gray-800 rounded-xl p-4 border border-apple-gray-200 dark:border-apple-gray-700">
-          <p className="text-2xl font-bold text-apple-gray-800 dark:text-white">{project.totalPlayers}</p>
-          <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400">Jugadores Evaluados</p>
-        </div>
-        <div className="bg-white dark:bg-apple-gray-800 rounded-xl p-4 border border-apple-gray-200 dark:border-apple-gray-700">
-          <p className="text-2xl font-bold text-emerald-500">{project.highlightedPlayers}</p>
-          <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400">Destacados</p>
-        </div>
-        <div className="bg-white dark:bg-apple-gray-800 rounded-xl p-4 border border-apple-gray-200 dark:border-apple-gray-700">
-          <p className="text-2xl font-bold text-apple-gray-800 dark:text-white">{positions.length}</p>
-          <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400">Posiciones</p>
-        </div>
-        <div className="bg-white dark:bg-apple-gray-800 rounded-xl p-4 border border-apple-gray-200 dark:border-apple-gray-700">
-          <p className="text-2xl font-bold text-apple-gray-800 dark:text-white">{nationalityStats.length}</p>
-          <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400">Nacionalidades</p>
-        </div>
-      </div>
-
-      {/* Nationalities breakdown */}
-      <div className="bg-white dark:bg-apple-gray-800 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 p-4 mb-6">
-        <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-3">
-          Distribución por Nacionalidad
-        </h3>
-        <div className="flex flex-wrap gap-2">
-          {nationalityStats.map(([nat, count]) => (
-            <div
-              key={nat}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-apple-gray-50 dark:bg-apple-gray-700/50 rounded-lg"
-            >
-              <span className="text-base">{getNationalityFlag(nat)}</span>
-              <span className="text-sm text-apple-gray-600 dark:text-apple-gray-300">{nat}</span>
-              <span className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 bg-apple-gray-200 dark:bg-apple-gray-600 px-1.5 rounded">
-                {count}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Formation — all scouted players */}
+      <FormationView players={project.players} />
 
       {/* Filters */}
       <div className="bg-white dark:bg-apple-gray-800 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 p-4 mb-4">

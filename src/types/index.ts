@@ -243,6 +243,7 @@ export interface AppData {
   subjectiveMetrics: SubjectiveMetric[]
   marketValueHistory: MarketValueHistoryEntry[]
   gpsData: GPSEntry[]
+  positionAverages: Record<string, number>
   loading: boolean
   error: string | null
   lastUpdated: Date | null

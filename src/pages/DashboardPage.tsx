@@ -2,7 +2,8 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useData } from '@/context/DataContext'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
-import { getScoreColorClass, getScoreBgClass } from '@/components/ui/ScoreBar'
+import { getRelativeScoreColorClass, getRelativeScoreBgClass } from '@/components/ui/ScoreBar'
+import { FILTER_POSITION_MAP } from '@/constants/scoring'
 import PortfolioValueChart from '@/components/charts/PortfolioValueChart'
 import LeagueAnalysis from '@/components/dashboard/LeagueAnalysis'
 import type { EnrichedPlayer, MonitoringPlayer } from '@/types'
@@ -50,11 +51,12 @@ interface PlayerRowProps {
   metric?: string
   metricValue?: string | number
   onClick: () => void
+  posAvg?: number | null
 }
 
-function PlayerRow({ player, metric, metricValue, onClick }: PlayerRowProps) {
-  const scoreColor = getScoreColorClass(player.ggScore ?? null)
-  const scoreBg = getScoreBgClass(player.ggScore ?? null)
+function PlayerRow({ player, metric, metricValue, onClick, posAvg }: PlayerRowProps) {
+  const scoreColor = getRelativeScoreColorClass(player.ggScore ?? null, posAvg ?? null)
+  const scoreBg = getRelativeScoreBgClass(player.ggScore ?? null, posAvg ?? null)
 
   return (
     <button
@@ -131,9 +133,10 @@ interface MonitoringRowProps {
   metricValue?: string | number
   onClick: () => void
   highlight?: 'green' | 'amber' | 'red'
+  posAvg?: number | null
 }
 
-function MonitoringRow({ player, metric, metricValue, onClick, highlight }: MonitoringRowProps) {
+function MonitoringRow({ player, metric, metricValue, onClick, highlight, posAvg }: MonitoringRowProps) {
   const displayName = player['Nombre jugador'] || player.Jugador
   const initials = displayName.split(' ').map(w => w[0]).slice(0, 2).join('')
   const image = player.metricsPlayer?.Imagen
@@ -169,7 +172,7 @@ function MonitoringRow({ player, metric, metricValue, onClick, highlight }: Moni
             <p className="text-2xs text-apple-gray-400">{metric}</p>
           </>
         ) : player.ggScore ? (
-          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getScoreBgClass(player.ggScore)} ${getScoreColorClass(player.ggScore)}`}>
+          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getRelativeScoreBgClass(player.ggScore, posAvg ?? null)} ${getRelativeScoreColorClass(player.ggScore, posAvg ?? null)}`}>
             {player.ggScore.toFixed(1)}
           </span>
         ) : null}
@@ -180,13 +183,76 @@ function MonitoringRow({ player, metric, metricValue, onClick, highlight }: Moni
 
 export default function DashboardPage() {
   const navigate = useNavigate()
-  const { internal, monitoring, marketValueHistory, loading } = useData()
+  const { internal, monitoring, marketValueHistory, positionAverages, loading } = useData()
+
+  function getPosAvg(posicion: string): number | null {
+    const normPos = FILTER_POSITION_MAP[posicion] ?? ''
+    return normPos ? (positionAverages[normPos] ?? null) : null
+  }
 
   // Filter only players with meaningful data
   const activePlayers = useMemo(() =>
     internal.filter(p => p.minutesPlayed >= 100 || p.ggScore !== null),
     [internal]
   )
+
+  // Score GG por posición (solo jugadores internos con score)
+  const positionScores = useMemo(() => {
+    const groups: Record<string, string> = {
+      'Defensor Central': 'Defensor Central',
+      'Lateral Derecho': 'Lateral',
+      'Lateral Izquierdo': 'Lateral',
+      'Lateral': 'Lateral',
+      'Volante Central': 'Volante Central',
+      'Volante Interno': 'Volante Interno',
+      'Extremo Derecho': 'Extremo',
+      'Extremo Izquierdo': 'Extremo',
+      'Extremo': 'Extremo',
+      'Delantero': 'Delantero',
+    }
+    const ORDER = ['Defensor Central', 'Lateral', 'Volante Central', 'Volante Interno', 'Extremo', 'Delantero']
+
+    // Promedio del interno por grupo
+    const acc: Record<string, { scores: number[]; count: number }> = {}
+    for (const p of internal) {
+      if (p.ggScore === null) continue
+      const normPos = FILTER_POSITION_MAP[p['Posición']] ?? ''
+      const group = groups[normPos]
+      if (!group) continue
+      if (!acc[group]) acc[group] = { scores: [], count: 0 }
+      acc[group].scores.push(p.ggScore)
+      acc[group].count++
+    }
+
+    // Promedio global (interno + externo) por grupo, para comparar color
+    const globalAcc: Record<string, number[]> = {}
+    for (const key of Object.keys(positionAverages)) {
+      const group = groups[key] ?? key
+      if (!ORDER.includes(group)) continue
+      if (!globalAcc[group]) globalAcc[group] = []
+      // positionAverages[key] es ya el promedio de esa posición → acumulo para promediar grupos
+    }
+    // Más simple: recalcular desde positionAverages agrupando claves
+    const globalAvgByGroup: Record<string, number> = {}
+    for (const [posKey, avg] of Object.entries(positionAverages)) {
+      const group = groups[posKey] ?? null
+      if (!group || !ORDER.includes(group)) continue
+      if (!globalAcc[group]) globalAcc[group] = []
+      globalAcc[group].push(avg)
+    }
+    for (const [group, avgs] of Object.entries(globalAcc)) {
+      globalAvgByGroup[group] = avgs.reduce((a, b) => a + b, 0) / avgs.length
+    }
+
+    return ORDER
+      .filter(g => acc[g])
+      .map(g => ({
+        label: g,
+        avg: acc[g].scores.reduce((a, b) => a + b, 0) / acc[g].scores.length,
+        count: acc[g].count,
+        globalAvg: globalAvgByGroup[g] ?? null,
+      }))
+  }, [internal, positionAverages])
 
 
   // Calculate KPIs
@@ -362,7 +428,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Main KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8 max-w-3xl mx-auto w-full">
         <StatCard
           label="Jugadores Representados"
           value={kpis.totalPlayers}
@@ -380,24 +446,53 @@ export default function DashboardPage() {
           subtitle="años"
           large
         />
-        <div className="bg-white dark:bg-apple-gray-800 rounded-xl p-5 border border-apple-gray-200 dark:border-apple-gray-700">
-          <p className="text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-1">
-            Score Promedio
-          </p>
-          <p className={`text-3xl font-bold ${
-            kpis.avgScore >= 55 ? 'text-brand-green' :
-            kpis.avgScore >= 45 ? 'text-emerald-500' :
-            kpis.avgScore >= 35 ? 'text-amber-500' : 'text-red-500'
-          }`}>
-            {kpis.avgScore.toFixed(1)}
-          </p>
-          <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-1">
-            {kpis.avgScore >= 55 ? 'Excelente' :
-             kpis.avgScore >= 45 ? 'Bueno' :
-             kpis.avgScore >= 35 ? 'Regular' : 'Bajo'} · GG Score
-          </p>
-        </div>
       </div>
+
+      {/* Score GG por Posición */}
+      {positionScores.length > 0 && (
+        <div className="bg-white dark:bg-apple-gray-800 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 p-5 mb-8">
+          <p className="text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-4">
+            Score GG por Posición · Interno
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {positionScores.map(({ label, avg, count, globalAvg }) => {
+              const colorClass =
+                avg >= 80 ? 'text-emerald-400' :
+                globalAvg !== null
+                  ? avg >= globalAvg ? 'text-emerald-500' :
+                    avg >= globalAvg * 0.85 ? 'text-amber-500' :
+                    avg >= globalAvg * 0.70 ? 'text-orange-500' : 'text-red-500'
+                  : avg >= 55 ? 'text-emerald-500' :
+                    avg >= 35 ? 'text-amber-500' : 'text-orange-500'
+              const barColor =
+                avg >= 80 ? 'bg-emerald-400' :
+                globalAvg !== null
+                  ? avg >= globalAvg ? 'bg-emerald-500' :
+                    avg >= globalAvg * 0.85 ? 'bg-amber-500' :
+                    avg >= globalAvg * 0.70 ? 'bg-orange-500' : 'bg-red-500'
+                  : avg >= 55 ? 'bg-emerald-500' :
+                    avg >= 35 ? 'bg-amber-500' : 'bg-orange-500'
+              return (
+                <div key={label} className="flex flex-col gap-1.5">
+                  <div className="flex items-end justify-between">
+                    <span className="text-xs text-apple-gray-500 dark:text-apple-gray-400 leading-tight">{label}</span>
+                    <span className="text-2xs text-apple-gray-400 tabular-nums">{count}j</span>
+                  </div>
+                  <div className={`text-2xl font-bold tabular-nums ${colorClass}`}>
+                    {avg.toFixed(1)}
+                  </div>
+                  <div className="h-1.5 bg-apple-gray-100 dark:bg-apple-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${barColor} rounded-full transition-all duration-500`}
+                      style={{ width: `${Math.min(100, avg)}%` }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Portfolio Value Evolution Section */}
       {marketValueHistory.length > 0 && (
@@ -602,7 +697,7 @@ export default function DashboardPage() {
                   <p className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">{p.Jugador}</p>
                   <p className="text-xs text-apple-gray-500 truncate">{p.Equipo}</p>
                 </button>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${getScoreBgClass(p.ggScore ?? null)} ${getScoreColorClass(p.ggScore ?? null)}`}>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${getRelativeScoreBgClass(p.ggScore ?? null, getPosAvg(p['Posición']))} ${getRelativeScoreColorClass(p.ggScore ?? null, getPosAvg(p['Posición']))}`}>
                   {p.ggScore?.toFixed(1)}
                 </span>
               </div>
@@ -662,6 +757,7 @@ export default function DashboardPage() {
                 <PlayerRow
                   key={i}
                   player={p}
+                  posAvg={getPosAvg(p['Posición'])}
                   onClick={() => navigateToPlayer(p)}
                 />
               ))}
@@ -702,7 +798,7 @@ export default function DashboardPage() {
                     <p className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">{p.Jugador}</p>
                     <p className="text-xs text-apple-gray-500 truncate">{p.Equipo} · {p.ageNum} años</p>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${getScoreBgClass(p.ggScore ?? null)} ${getScoreColorClass(p.ggScore ?? null)}`}>
+                      <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${getRelativeScoreBgClass(p.ggScore ?? null, getPosAvg(p['Posición']))} ${getRelativeScoreColorClass(p.ggScore ?? null, getPosAvg(p['Posición']))}`}>
                         {p.ggScore?.toFixed(1)}
                       </span>
                       <span className="text-xs text-apple-gray-500">{p.marketValueFormatted}</span>

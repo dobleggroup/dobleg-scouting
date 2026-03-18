@@ -1,5 +1,23 @@
 import { POSITION_MAP, SCORING_CONFIG } from '@/constants/scoring'
+import { getLeagueInfo } from '@/constants/leagues'
 import type { RawExternalPlayer, RawInternalPlayer, EnrichedPlayer } from '@/types'
+
+// League tier adjustment applied after normalizing score within position group
+// Tier 4 (Top Sudamérica = Argentina, Brasil, Colombia...) is the baseline (0)
+const LEAGUE_TIER_ADJUSTMENT: Record<number, number> = {
+  1: +10,  // Elite (Big 5 europeas)
+  2: +6,   // Top Europa
+  3: +3,   // Europa media / Norteamérica
+  4: 0,    // Top Sudamérica (baseline)
+  5: -2,   // Sudamérica media
+  6: -4,   // Desarrollo / segundas divisiones
+}
+
+function getLeagueAdjustment(liga: string): number {
+  const info = getLeagueInfo(liga)
+  if (!info) return 0
+  return LEAGUE_TIER_ADJUSTMENT[info.tier] ?? 0
+}
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
@@ -203,7 +221,12 @@ export function computeGGScores(
       score += normalized * (weight / 100)
     }
 
-    return enrichPlayer(player as Record<string, string>, Math.round(score * 10) / 10, source)
+    // Apply league tier adjustment (± points based on league quality)
+    const liga = (player as Record<string, string>)['Liga'] ?? ''
+    const leagueAdj = getLeagueAdjustment(liga)
+    const adjustedScore = Math.max(0, Math.min(100, score + leagueAdj))
+
+    return enrichPlayer(player as Record<string, string>, Math.round(adjustedScore * 10) / 10, source)
   })
 }
 

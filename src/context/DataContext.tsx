@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { loadAllData, type MasDatosEntry, type SeguimientoMetricsPlayer } from '@/services/csvService'
 import { computeGGScores, normalizeName, parseMarketValue, formatMarketValue, parseContractDate, monthsBetween, getNumericValue } from '@/utils/scoring'
-import { POSITION_MAP, SCORING_CONFIG } from '@/constants/scoring'
+import { POSITION_MAP, SCORING_CONFIG, FILTER_POSITION_MAP } from '@/constants/scoring'
 import type { AppData, EnrichedPlayer, EvolutionEntry, TransfermarktData, MonitoringPlayer, MarketValueHistoryEntry, GPSEntry } from '@/types'
 
 const DataContext = createContext<AppData | null>(null)
@@ -996,6 +996,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     subjectiveMetrics: [],
     marketValueHistory: [],
     gpsData: [],
+    positionAverages: {},
     loading: true,
     error: null,
     lastUpdated: null,
@@ -1084,6 +1085,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
           tmMap
         )
 
+        // Compute position averages for relative score coloring
+        const positionGroups: Record<string, number[]> = {}
+        for (const p of [...external, ...internal]) {
+          if (p.ggScore === null) continue
+          const rawPos = p['Posición'] || ''
+          const normPos = FILTER_POSITION_MAP[rawPos] ?? ''
+          if (!normPos) continue
+          if (!positionGroups[normPos]) positionGroups[normPos] = []
+          positionGroups[normPos].push(p.ggScore)
+        }
+        const positionAverages: Record<string, number> = {}
+        for (const [pos, scores] of Object.entries(positionGroups)) {
+          positionAverages[pos] = scores.reduce((a, b) => a + b, 0) / scores.length
+        }
+
         setData({
           external,
           internal,
@@ -1093,6 +1109,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           subjectiveMetrics: raw.subjectiveMetrics,
           marketValueHistory: raw.marketValueHistory,
           gpsData: raw.gpsData,
+          positionAverages,
           loading: false,
           error: null,
           lastUpdated: new Date(),

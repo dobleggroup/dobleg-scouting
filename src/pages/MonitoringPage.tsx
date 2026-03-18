@@ -9,6 +9,7 @@ import EmptyState from '@/components/ui/EmptyState'
 import ScoreBar from '@/components/ui/ScoreBar'
 import AuthModal from '@/components/auth/AuthModal'
 import { SELECTABLE_METRICS } from '@/components/filters/FilterSidebar'
+import { FILTER_POSITION_MAP } from '@/constants/scoring'
 // ScoreEvolutionMini removed - now showing status history instead
 import type { MonitoringPlayer, ManagementStatus } from '@/types'
 
@@ -267,7 +268,7 @@ function saveFilters(filters: MonitoringFilters): void {
 
 export default function MonitoringPage() {
   const navigate = useNavigate()
-  const { monitoring, loading, error } = useData()
+  const { monitoring, loading, error, positionAverages } = useData()
   const { user } = useAuth()
   const {
     getPlayerStatus,
@@ -864,7 +865,11 @@ export default function MonitoringPage() {
                           {/* Score */}
                           <td className="px-3 py-3">
                             {hasData && player.ggScore !== undefined && player.ggScore !== null ? (
-                              <ScoreBar score={player.ggScore} size="sm" />
+                              <ScoreBar
+                                score={player.ggScore}
+                                size="sm"
+                                posAvg={positionAverages[FILTER_POSITION_MAP[player['Posición']] ?? ''] ?? null}
+                              />
                             ) : (
                               <LowDataWarning />
                             )}
