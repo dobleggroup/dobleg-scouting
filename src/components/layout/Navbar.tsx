@@ -11,16 +11,18 @@ const navLinks = [
   { to: '/interno', label: 'Scout Interno', icon: 'users' },
   { to: '/panel-interno', label: 'Panel Interno', icon: 'chart' },
   { to: '/seguimiento', label: 'Seguimiento', icon: 'eye' },
+  { to: '/scouts-gg', label: 'Scouts GG', icon: 'shield' },
   { to: '/trabajos-scouting', label: 'Trabajos', icon: 'folder' },
   { to: '/evaluar', label: 'Reporte', icon: 'clipboard' },
 ]
 
 const talentSearchLinks = [
+  { to: '/analisis-completo', label: 'Análisis Completo', icon: 'search' },
   { to: '/oportunidades', label: 'Oportunidades', icon: 'star' },
   { to: '/similares', label: 'Similares', icon: 'search' },
   { to: '/comparacion', label: 'Comparaciones', icon: 'compare' },
   { to: '/formacion', label: 'Formaciones', icon: 'layout' },
-  { to: '/dispersion', label: 'Dispersion', icon: 'scatter' },
+  { to: '/dispersion', label: 'Dispersión', icon: 'scatter' },
   { to: '/radar', label: 'Detector', icon: 'radar' },
 ]
 
@@ -38,6 +40,7 @@ function NavIcon({ icon, className = "w-5 h-5" }: { icon: string; className?: st
     radar: <><circle cx="12" cy="12" r="9" strokeWidth={1.5} /><circle cx="12" cy="12" r="5" strokeWidth={1.5} /><line x1="12" y1="3" x2="12" y2="21" strokeWidth={1.5} /><line x1="3" y1="12" x2="21" y2="12" strokeWidth={1.5} /></>,
     clipboard: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />,
     folder: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />,
+    shield: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />,
   }
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -141,7 +144,7 @@ export default function Navbar() {
                     : 'text-apple-gray-600 dark:text-apple-gray-300 hover:text-apple-gray-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-apple-gray-700/50'
                 }`}
               >
-                Busqueda
+                Búsqueda de Talento
                 <svg className={`w-3.5 h-3.5 transition-transform ${showTalentMenu ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
@@ -296,7 +299,7 @@ export default function Navbar() {
           {/* Talent Search Section */}
           <div className="mt-4 pt-4 border-t border-apple-gray-200 dark:border-apple-gray-800">
             <p className="px-4 mb-2 text-xs font-semibold text-apple-gray-400 uppercase tracking-wider">
-              Busqueda de Talento
+              Búsqueda de Talento
             </p>
             <div className="space-y-1">
               {talentSearchLinks.map(link => (

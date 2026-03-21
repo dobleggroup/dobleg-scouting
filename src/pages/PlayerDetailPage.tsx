@@ -15,6 +15,7 @@ import AddToReportButton from '@/components/pdf/AddToReportButton'
 import { normalizeName } from '@/utils/scoring'
 import { POSITION_MAP, DISPLAY_POSITION_MAP, DISPLAY_METRICS, RADAR_METRICS, METRIC_ABBREVIATIONS } from '@/constants/scoring'
 import { fetchPlayerEvaluations, fetchEvaluationsByName, type ScoutEvaluation } from '@/services/scoutEvaluationService'
+import TrackingWidget from '@/components/tracking/TrackingWidget'
 import type { EnrichedPlayer, SubjectiveMetric } from '@/types'
 
 // ─── PLAYER COMMENTS SYSTEM ───────────────────────────────────────────────────
@@ -1207,6 +1208,14 @@ export default function PlayerDetailPage() {
 
           {/* Quick links & actions */}
           <div className="card-apple p-4 space-y-2">
+            {source !== 'interno' && (
+              <TrackingWidget
+                playerName={player.Jugador}
+                playerDbId={player.id || null}
+                playerClub={player.Equipo || undefined}
+                playerPosition={player['Posición'] || undefined}
+              />
+            )}
             {player.Transfermkt && (
               <a
                 href={player.Transfermkt}

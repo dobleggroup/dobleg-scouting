@@ -280,3 +280,79 @@ export interface MonitoringPlayerStatus {
   notes?: string
   lastUpdated: string  // ISO date string
 }
+
+// ─── SCOUT TRACKING SYSTEM ───────────────────────────────────────────────────
+
+export type ScoutPlayerPriority = 'alta' | 'normal' | 'baja'
+export type ScoutPlayerFoot = 'derecho' | 'izquierdo' | 'ambos'
+
+export type ScoutsGGStatus =
+  | 'en_seguimiento_gg'
+  | 'pre_seleccionado'
+  | 'contactado'
+  | 'reunion_pactada'
+  | 'en_negociacion'
+  | 'oferta_enviada'
+  | 'contratado'
+  | 'descartado'
+  | 'no_disponible'
+
+export type DatosTrackingStatus =
+  | 'en_seguimiento'
+  | 'contactado'
+  | 'en_negociacion'
+  | 'descartado'
+
+export interface ScoutPlayerFile {
+  name: string
+  url: string
+  size: number
+  uploaded_at: string
+  uploaded_by_name: string
+}
+
+export interface ScoutPlayer {
+  id: string
+  full_name: string
+  // Link to Wyscout DB player (when found via report or search)
+  player_db_id: string | null        // The "Jugador" field value from the DB (e.g. "L. Messi")
+  player_db_source: 'interno' | 'externo' | null  // Which DB this player is in
+  club: string | null
+  liga: string | null
+  edad: number | null
+  fecha_nacimiento: string | null
+  posicion: string | null
+  rol: string | null
+  nacionalidad: string | null
+  altura: number | null
+  pie: ScoutPlayerFoot | null
+  transfermarkt_url: string | null
+  agente: string | null
+  comentario: string | null
+  prioridad: ScoutPlayerPriority
+  fuente_deteccion: string | null
+  video_url: string | null
+  files: ScoutPlayerFile[]
+  in_datos_list: boolean
+  in_scouts_gg_list: boolean
+  added_by_datos: string | null
+  added_by_datos_name: string | null
+  added_by_scouts: string | null
+  added_by_scouts_name: string | null
+  created_at: string
+  updated_at: string
+  // Computed (not stored in DB, fetched separately)
+  scoutScore?: number | null        // Avg of scout evaluation scores
+  scoutEvalCount?: number           // Number of evaluations
+}
+
+export interface ScoutPlayerStatusRecord {
+  id: string
+  player_id: string
+  list_type: 'datos' | 'scouts_gg'
+  status: string
+  changed_by: string
+  changed_by_name: string
+  changed_at: string
+  notes: string | null
+}

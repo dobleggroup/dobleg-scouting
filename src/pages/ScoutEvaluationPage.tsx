@@ -3,6 +3,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { createEvaluation, fetchRecentEvaluations, type ScoutEvaluation, type PlayerSource } from '@/services/scoutEvaluationService'
 import { setPlayerStatus, fetchAllStatuses } from '@/services/monitoringService'
+import { addScoutPlayer } from '@/services/scoutPlayersService'
 import { smartSearch } from '@/lib/search'
 
 // Position options
@@ -20,6 +21,8 @@ const POSITIONS = [
 // Role options
 const ROLES = [
   'Arquero',
+  'Defensor central clásico',
+  'Defensor central iniciador',
   'Lateral ofensivo',
   'Lateral defensivo',
   'Lateral completo',
@@ -36,17 +39,21 @@ const ROLES = [
 
 // Score selector component - big and touch-friendly
 function ScoreSelector({
+  label,
   value,
   onChange,
+  required,
 }: {
+  label: string
   value: number | undefined
   onChange: (v: number) => void
+  required?: boolean
 }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-apple-gray-600 dark:text-apple-gray-400">
-          Rendimiento en el partido
+          {label} {required && <span className="text-brand-green">*</span>}
         </span>
         {value && (
           <span className={`text-2xl font-bold ${
@@ -181,6 +188,8 @@ export default function ScoutEvaluationPage() {
   const [competition, setCompetition] = useState('')
   const [rival, setRival] = useState('')
   const [score, setScore] = useState<number>()
+  const [tacticalScore, setTacticalScore] = useState<number>()
+  const [mentalScore, setMentalScore] = useState<number>()
   const [notes, setNotes] = useState('')
   const [recommendation, setRecommendation] = useState<'fichar' | 'seguir_observando' | 'descartar' | ''>('')
   const [playerSource, setPlayerSource] = useState<PlayerSource | null>(null)
@@ -297,7 +306,7 @@ export default function ScoutEvaluationPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!user || !score) return
+    if (!user || !score || !tacticalScore || !mentalScore) return
 
     setError('')
     setSubmitting(true)
@@ -316,7 +325,9 @@ export default function ScoutEvaluationPage() {
         match_date: matchDate,
         competition: competition || undefined,
         rival: rival || undefined,
-        technical_score: score, // Single match performance score
+        technical_score: score,
+        tactical_score: tacticalScore,
+        mental_score: mentalScore,
         notes: notes || undefined,
         recommendation: recommendation || undefined,
         source: playerSource || undefined,
@@ -345,6 +356,31 @@ export default function ScoutEvaluationPage() {
       setMonitoringStatuses(statusMap)
     }
 
+    // Auto-add to both Scout Tracking lists when a report is created.
+    // Internal (agency) players are NOT added — no sense tracking our own players.
+    // - If player was found in DB: link via player_db_id
+    // - If not found: add with just the typed name — they'll accumulate their own scout score
+    if (result && playerName.trim() && playerSource !== 'interno') {
+      const isLinkedToDb = !!selectedPlayerId && playerSource !== null
+      // 'seguimiento' and 'externo' both reference the external DB
+      const dbSource: 'externo' | undefined = playerSource ? 'externo' : undefined
+      await addScoutPlayer(
+        {
+          full_name: playerName.trim(),
+          // Link to Wyscout DB player if found — enables richer data display
+          ...(isLinkedToDb && { player_db_id: selectedPlayerId }),
+          ...(isLinkedToDb && dbSource && { player_db_source: dbSource }),
+          ...(team && { club: team }),
+          ...(position && { posicion: position }),
+          ...(role && { rol: role }),
+          fuente_deteccion: 'Reporte Scout',
+        },
+        'both',
+        user.id,
+        scoutName
+      )
+    }
+
     setSubmitting(false)
 
     if (result) {
@@ -357,6 +393,8 @@ export default function ScoutEvaluationPage() {
       setCompetition('')
       setRival('')
       setScore(undefined)
+      setTacticalScore(undefined)
+      setMentalScore(undefined)
       setNotes('')
       setRecommendation('')
       setPlayerSource(null)
@@ -371,7 +409,7 @@ export default function ScoutEvaluationPage() {
     }
   }
 
-  const isFormValid = playerName && matchDate && score && scoutName
+  const isFormValid = playerName && matchDate && score && tacticalScore && mentalScore && scoutName
 
   return (
     <div className="min-h-screen bg-apple-gray-50 dark:bg-apple-gray-900">
@@ -423,7 +461,6 @@ export default function ScoutEvaluationPage() {
               value={scoutName}
               onChange={setScoutName}
               options={availableScouts.map(s => s.name)}
-              placeholder="Selecciona scout..."
               required
             />
           </div>
@@ -449,7 +486,6 @@ export default function ScoutEvaluationPage() {
                   setShowPlayerDropdown(val.length >= 2)
                 }}
                 onFocus={() => setShowPlayerDropdown(playerSearch.length >= 2)}
-                placeholder="Nombre del jugador..."
                 required
                 className="w-full px-4 py-3 rounded-xl bg-apple-gray-50 dark:bg-apple-gray-800 border border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-800 dark:text-white placeholder-apple-gray-400 focus:outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/20 transition-all"
               />
@@ -523,7 +559,6 @@ export default function ScoutEvaluationPage() {
               label="Equipo"
               value={team}
               onChange={setTeam}
-              placeholder="Equipo del jugador"
             />
 
             <div className="grid grid-cols-2 gap-3">
@@ -532,14 +567,12 @@ export default function ScoutEvaluationPage() {
                 value={position}
                 onChange={setPosition}
                 options={POSITIONS}
-                placeholder="Seleccionar..."
               />
               <Select
                 label="Rol"
                 value={role}
                 onChange={setRole}
                 options={ROLES}
-                placeholder="Seleccionar..."
               />
             </div>
           </div>
@@ -563,23 +596,27 @@ export default function ScoutEvaluationPage() {
                 label="Rival"
                 value={rival}
                 onChange={setRival}
-                placeholder="Rival"
               />
               <Input
                 label="Competencia"
                 value={competition}
                 onChange={setCompetition}
-                placeholder="Competencia"
               />
             </div>
           </div>
 
-          {/* Score */}
-          <div className="bg-white dark:bg-apple-gray-800 rounded-2xl p-5 shadow-sm border border-apple-gray-100 dark:border-apple-gray-700">
-            <h2 className="text-sm font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-4">
-              Puntuación <span className="text-brand-green">*</span>
+          {/* Scores */}
+          <div className="bg-white dark:bg-apple-gray-800 rounded-2xl p-5 shadow-sm border border-apple-gray-100 dark:border-apple-gray-700 space-y-6">
+            <h2 className="text-sm font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">
+              Puntuaciones
             </h2>
-            <ScoreSelector value={score} onChange={setScore} />
+            <ScoreSelector label="Rendimiento general del jugador" value={score} onChange={setScore} required />
+            <div className="border-t border-apple-gray-100 dark:border-apple-gray-700/60 pt-6">
+              <ScoreSelector label="Valoración táctica" value={tacticalScore} onChange={setTacticalScore} required />
+            </div>
+            <div className="border-t border-apple-gray-100 dark:border-apple-gray-700/60 pt-6">
+              <ScoreSelector label="Valoración mental" value={mentalScore} onChange={setMentalScore} required />
+            </div>
           </div>
 
           {/* Observations */}
@@ -596,7 +633,6 @@ export default function ScoutEvaluationPage() {
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
                 rows={3}
-                placeholder="Fortalezas, debilidades, momentos destacados..."
                 className="w-full px-4 py-3 rounded-xl bg-apple-gray-50 dark:bg-apple-gray-800 border border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-800 dark:text-white placeholder-apple-gray-400 focus:outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/20 transition-all resize-none"
               />
             </div>

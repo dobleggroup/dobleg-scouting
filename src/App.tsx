@@ -14,6 +14,8 @@ import ScatterChartPage from '@/pages/ScatterChartPage'
 import ScoutEvaluationPage from '@/pages/ScoutEvaluationPage'
 import EvaluationsAdminPage from '@/pages/EvaluationsAdminPage'
 import RadarAnalysisPage from '@/pages/RadarAnalysisPage'
+import ScoutTrackingGGPage from '@/pages/ScoutTrackingGGPage'
+import BusquedaPage from '@/pages/BusquedaPage'
 import { PDFBuilderProvider } from '@/context/PDFBuilderContext'
 import PDFBuilderModal from '@/components/pdf/PDFBuilderModal'
 import { PDFAddedToast } from '@/components/pdf/AddToReportButton'
@@ -38,6 +40,8 @@ export default function App() {
             <Route path="/evaluaciones" element={<EvaluationsAdminPage />} />
             <Route path="/radar" element={<RadarAnalysisPage />} />
             <Route path="/trabajos-scouting" element={<ScoutingWorksPage />} />
+            <Route path="/scouts-gg" element={<ScoutTrackingGGPage />} />
+            <Route path="/analisis-completo" element={<BusquedaPage />} />
           </Route>
         </Routes>
         <PDFBuilderModal />

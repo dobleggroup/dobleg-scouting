@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { EnrichedPlayer, SortState } from '@/types'
 import ContractBadge from '@/components/ui/ContractBadge'
@@ -7,6 +7,7 @@ import EmptyState from '@/components/ui/EmptyState'
 import { SELECTABLE_METRICS } from '@/components/filters/FilterSidebar'
 import { useData } from '@/context/DataContext'
 import { FILTER_POSITION_MAP } from '@/constants/scoring'
+import { fetchTrackedPlayerNames } from '@/services/scoutPlayersService'
 
 interface PlayerTableProps {
   players: EnrichedPlayer[]
@@ -77,6 +78,21 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
   const { positionAverages } = useData()
   const [sort, setSort] = useState<SortState>({ column: 'ggScore', direction: 'desc' })
   const [page, setPage] = useState(1)
+  const [trackedNames, setTrackedNames] = useState<Map<string, { inDatos: boolean; inGG: boolean }>>(new Map())
+
+  useEffect(() => {
+    if (source !== 'externo') return
+    fetchTrackedPlayerNames().then(data => {
+      const map = new Map<string, { inDatos: boolean; inGG: boolean }>()
+      for (const p of data) {
+        map.set(p.full_name.toLowerCase().trim(), {
+          inDatos: p.in_datos_list,
+          inGG: p.in_scouts_gg_list,
+        })
+      }
+      setTrackedNames(map)
+    })
+  }, [source])
 
   // Build columns with dynamic metrics
   const columns = useMemo(() => {
@@ -145,8 +161,68 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
 
   return (
     <div className="space-y-3">
-      {/* Table */}
-      <div className="card-apple overflow-hidden">
+      {/* ── MOBILE CARD VIEW (< md) ── */}
+      <div className="md:hidden space-y-2">
+        {paginated.map((player, idx) => {
+          const posAvg = positionAverages[FILTER_POSITION_MAP[player['Posición']] ?? ''] ?? null
+          return (
+            <div
+              key={`m-${player.Jugador}-${idx}`}
+              onClick={() => handleRowClick(player)}
+              className="bg-white dark:bg-apple-gray-800 rounded-2xl border border-apple-gray-200 dark:border-apple-gray-700 p-3 cursor-pointer active:scale-[0.99] hover:border-brand-green/40 transition-all"
+            >
+              <div className="flex items-center gap-2.5">
+                {/* Avatar */}
+                {player.Imagen ? (
+                  <img src={player.Imagen} alt={player.Jugador}
+                    className="w-10 h-10 rounded-xl object-cover flex-shrink-0"
+                    onError={(e) => { e.currentTarget.style.display = 'none' }}
+                  />
+                ) : (
+                  <div className="w-10 h-10 bg-apple-gray-100 dark:bg-apple-gray-700 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <span className="text-sm font-semibold text-apple-gray-500">
+                      {player.Jugador.split(' ').map(w => w[0]).slice(0, 2).join('')}
+                    </span>
+                  </div>
+                )}
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-apple-gray-800 dark:text-white text-sm truncate">{player.Jugador}</span>
+                    {(() => {
+                      const t = trackedNames.get(player.Jugador.toLowerCase().trim())
+                      if (!t) return null
+                      return (
+                        <span className="flex-shrink-0 w-2 h-2 rounded-full bg-brand-green" title="En seguimiento" />
+                      )
+                    })()}
+                    <ContractBadge status={player.contractStatus} monthsRemaining={player.monthsRemaining} />
+                  </div>
+                  <p className="text-xs text-apple-gray-500 truncate mt-0.5">
+                    {[player.Liga, player.Equipo, player.Edad ? `${player.Edad}a` : null].filter(Boolean).join(' · ')}
+                  </p>
+                </div>
+                {/* Score */}
+                <div className="flex-shrink-0">
+                  <ScoreBar score={player.ggScore} size="sm" posAvg={posAvg} />
+                </div>
+              </div>
+              {/* Tags row */}
+              <div className="flex items-center gap-1.5 mt-2">
+                {player['Posición'] && (
+                  <span className="px-2 py-0.5 bg-apple-gray-100 dark:bg-apple-gray-700 rounded-md text-xs text-apple-gray-600 dark:text-apple-gray-300">
+                    {player['Posición']}
+                  </span>
+                )}
+                <span className="ml-auto text-xs font-medium text-brand-green">{player.marketValueFormatted}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* ── DESKTOP TABLE (≥ md) ── */}
+      <div className="hidden md:block card-apple overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm" id="player-table-export">
             <thead>
@@ -206,6 +282,11 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
                           <span className="font-medium text-apple-gray-800 dark:text-white group-hover:text-brand-green transition-colors truncate">
                             {player.Jugador}
                           </span>
+                          {(() => {
+                            const t = trackedNames.get(player.Jugador.toLowerCase().trim())
+                            if (!t) return null
+                            return <span className="w-1.5 h-1.5 rounded-full bg-brand-green flex-shrink-0 inline-block" title={`En seguimiento${t.inDatos && t.inGG ? ' (ambas listas)' : t.inDatos ? ' (Datos)' : ' (Scouts GG)'}`} />
+                          })()}
                           <ContractBadge
                             status={player.contractStatus}
                             monthsRemaining={player.monthsRemaining}
