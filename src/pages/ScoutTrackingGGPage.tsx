@@ -14,7 +14,7 @@ import {
 import AddPlayerModal from '@/components/tracking/AddPlayerModal'
 import LinkPlayerModal from '@/components/tracking/LinkPlayerModal'
 import FichaManualModal from '@/components/tracking/FichaManualModal'
-import type { ScoutPlayer, ScoutPlayerStatusRecord, ScoutsGGStatus } from '@/types'
+import type { ScoutPlayer, ScoutPlayerStatusRecord, ScoutsGGStatus, EnrichedPlayer } from '@/types'
 
 const ADMIN_EMAIL = 'marcoscucho99@gmail.com'
 
@@ -156,6 +156,27 @@ export default function ScoutTrackingGGPage() {
     for (const p of internal) map.set(p.Jugador, p.ggScore)
     return map
   }, [external, internal])
+
+  // Build a map: player_db_id (Jugador) → full EnrichedPlayer, for real data when linked
+  const dbPlayerMap = useMemo(() => {
+    const map = new Map<string, EnrichedPlayer>()
+    for (const p of external) map.set(p.Jugador, p)
+    for (const p of internal) map.set(p.Jugador, p)
+    return map
+  }, [external, internal])
+
+  // Returns effective display data: real DB values when linked, manual values otherwise
+  const getEffective = useCallback((player: ScoutPlayer) => {
+    const db = player.player_db_id ? dbPlayerMap.get(player.player_db_id) : null
+    return {
+      name:   db ? db.Jugador       : player.full_name,
+      club:   db ? db.Equipo        : (player.club   ?? null),
+      liga:   db ? db.Liga          : (player.liga   ?? null),
+      agente: db ? (db.Representante || null) : (player.agente ?? null),
+      edad:   db ? (db.ageNum != null ? String(db.ageNum) : db.Edad || null) : (player.edad != null ? String(player.edad) : null),
+      isLinked: !!db,
+    }
+  }, [dbPlayerMap])
 
   const [players, setPlayers] = useState<ScoutPlayer[]>([])
   const [statuses, setStatuses] = useState<Record<string, ScoutPlayerStatusRecord>>({})
@@ -433,6 +454,10 @@ export default function ScoutTrackingGGPage() {
                 <thead>
                   <tr className="border-b border-apple-gray-200 dark:border-apple-gray-700">
                     <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">Jugador</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">Edad</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">Club</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">Liga</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">Agente</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">Posición</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">Estado</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">Score Scouts</th>
@@ -448,7 +473,8 @@ export default function ScoutTrackingGGPage() {
                   {filtered.map(player => {
                     const statusRecord = statuses[player.id]
                     const currentStatus: ScoutsGGStatus = (statusRecord?.status as ScoutsGGStatus) || 'en_seguimiento_gg'
-                    const initials = player.full_name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
+                    const eff = getEffective(player)
+                    const initials = eff.name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
                     const files = player.files ?? []
                     const priorBorder = player.prioridad === 'alta'
                       ? 'border-l-rose-500'
@@ -489,7 +515,7 @@ export default function ScoutTrackingGGPage() {
                                       }
                                     }}
                                   >
-                                    {player.full_name}
+                                    {eff.name}
                                   </p>
                                   {!player.player_db_id && (
                                     <span title="Sin ficha vinculada" className="flex-shrink-0 text-apple-gray-300 dark:text-apple-gray-600">
@@ -510,9 +536,6 @@ export default function ScoutTrackingGGPage() {
                                     </button>
                                   )}
                                 </div>
-                                <p className="text-xs text-apple-gray-500 truncate">
-                                  {[player.club, player.liga, player.edad ? `${player.edad}a` : null].filter(Boolean).join(' · ')}
-                                </p>
                               </div>
                               <button
                                 onClick={e => { e.stopPropagation(); handleDelete(player.id) }}
@@ -524,6 +547,42 @@ export default function ScoutTrackingGGPage() {
                                 </svg>
                               </button>
                             </div>
+                          </td>
+
+                          {/* Edad */}
+                          <td className="px-4 py-3 text-sm text-apple-gray-700 dark:text-apple-gray-300 whitespace-nowrap">
+                            {eff.edad ? (
+                              <span>{eff.edad}<span className="text-xs text-apple-gray-400 ml-0.5">a</span></span>
+                            ) : (
+                              <span className="text-apple-gray-400">—</span>
+                            )}
+                          </td>
+
+                          {/* Club */}
+                          <td className="px-4 py-3 text-sm text-apple-gray-700 dark:text-apple-gray-300 max-w-[120px]">
+                            {eff.club ? (
+                              <span className="truncate block" title={eff.club}>{eff.club}</span>
+                            ) : (
+                              <span className="text-apple-gray-400">—</span>
+                            )}
+                          </td>
+
+                          {/* Liga */}
+                          <td className="px-4 py-3 text-sm text-apple-gray-500 dark:text-apple-gray-400 max-w-[120px]">
+                            {eff.liga ? (
+                              <span className="truncate block" title={eff.liga}>{eff.liga}</span>
+                            ) : (
+                              <span className="text-apple-gray-400">—</span>
+                            )}
+                          </td>
+
+                          {/* Agente */}
+                          <td className="px-4 py-3 text-sm text-apple-gray-600 dark:text-apple-gray-400 max-w-[140px]">
+                            {eff.agente ? (
+                              <span className="truncate block" title={eff.agente}>{eff.agente}</span>
+                            ) : (
+                              <span className="text-apple-gray-400">—</span>
+                            )}
                           </td>
 
                           {/* Posición */}
@@ -673,7 +732,7 @@ export default function ScoutTrackingGGPage() {
                         {/* File upload row */}
                         {fileUploadPlayerId === player.id && (
                           <tr key={`${player.id}-upload`} className="bg-apple-gray-50 dark:bg-apple-gray-800/50">
-                            <td colSpan={requiresAuth ? 7 : 8} className="px-4 py-2">
+                            <td colSpan={requiresAuth ? 11 : 12} className="px-4 py-2">
                               <input
                                 type="file"
                                 accept=".xlsx,.xls,.csv"
@@ -702,7 +761,8 @@ export default function ScoutTrackingGGPage() {
             {filtered.map(player => {
               const statusRecord = statuses[player.id]
               const currentStatus: ScoutsGGStatus = (statusRecord?.status as ScoutsGGStatus) || 'en_seguimiento_gg'
-              const initials = player.full_name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
+              const eff = getEffective(player)
+              const initials = eff.name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
               const files = player.files ?? []
               const priorBorder = player.prioridad === 'alta'
                 ? 'border-l-rose-500'
@@ -730,11 +790,14 @@ export default function ScoutTrackingGGPage() {
                           }
                         }}
                       >
-                        {player.full_name}
+                        {eff.name}
                       </p>
                       <p className="text-xs text-apple-gray-500">
-                        {[player.club, player.liga].filter(Boolean).join(' · ')}
+                        {[eff.club, eff.liga, eff.edad ? `${eff.edad}a` : null].filter(Boolean).join(' · ')}
                       </p>
+                      {eff.agente && (
+                        <p className="text-xs text-apple-gray-400 truncate">Agente: {eff.agente}</p>
+                      )}
                     </div>
                     {player.scoutScore !== null && player.scoutScore !== undefined && (
                       <span className={`text-sm font-bold tabular-nums flex-shrink-0 ${
