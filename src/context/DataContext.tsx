@@ -908,6 +908,7 @@ function scoreSeguimientoPlayer(
     Representante: player['Representante'] ?? '',
     Imagen: player['Imagen'] ?? '',
     ggScore: finalScore,
+    ggScorePercentile: null,
     source: 'externo',
     contractStatus: monthsRemaining === null ? 'ok' : monthsRemaining < 7 ? 'critical' : monthsRemaining < 13 ? 'warning' : 'ok',
     monthsRemaining,
@@ -1015,21 +1016,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const masDatosMap = buildMasDatosMap(raw.masDatos)
 
         // Compute scores using ALL players as baseline (internal + external together)
-        // This ensures consistent scoring across both sources
+        // This ensures consistent scoring and percentiles across both sources
         const allPlayers = [...raw.external, ...raw.internal]
         const allScored = computeGGScores(allPlayers, 'externo') // source is overwritten below
 
-        // Split back into external and internal, preserving scores
+        // Split back into external and internal, preserving scores AND percentiles
         const scoreMap = new Map(allScored.map(p => [p.Jugador + '|' + p.Equipo, p.ggScore]))
+        const percentileMap = new Map(allScored.map(p => [p.Jugador + '|' + p.Equipo, p.ggScorePercentile]))
 
         // Score and enrich external players with Transfermarkt data + Más Datos + Estimated values
-        const externalScored = computeGGScores(raw.external, 'externo', scoreMap)
+        const externalScored = computeGGScores(raw.external, 'externo', scoreMap, percentileMap)
         const external = externalScored
           .map(p => enrichWithTransfermarkt(p, tmMap))
           .map(p => enrichWithMasDatos(p, masDatosMap))
           .map(p => enrichWithEstimatedValue(p)) // Estimate for Colombia 2nd div
 
-        const internalScored = computeGGScores(raw.internal, 'interno', scoreMap)
+        const internalScored = computeGGScores(raw.internal, 'interno', scoreMap, percentileMap)
 
         // DEBUG: Log first interno player to check data
         if (raw.internal.length > 0) {

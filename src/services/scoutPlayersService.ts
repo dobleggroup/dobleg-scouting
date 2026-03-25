@@ -204,6 +204,21 @@ export async function fetchScoutScores(
   return avgResult
 }
 
+// Link (or unlink) a scout player to a DB player
+export async function linkScoutPlayerToDb(
+  id: string,
+  playerDbId: string | null,
+  playerDbSource: 'interno' | 'externo' | null
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('scout_players')
+    .update({ player_db_id: playerDbId, player_db_source: playerDbSource, updated_at: new Date().toISOString() })
+    .eq('id', id)
+
+  if (error) { console.error('Error linking scout player:', error); return false }
+  return true
+}
+
 // Update a scout player's profile
 export async function updateScoutPlayer(
   id: string,

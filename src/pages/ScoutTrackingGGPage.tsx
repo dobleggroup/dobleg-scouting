@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
+import { useData } from '@/context/DataContext'
 import {
   fetchScoutPlayers,
   fetchScoutPlayerStatuses,
@@ -11,7 +12,11 @@ import {
   removeScoutPlayerFile,
 } from '@/services/scoutPlayersService'
 import AddPlayerModal from '@/components/tracking/AddPlayerModal'
+import LinkPlayerModal from '@/components/tracking/LinkPlayerModal'
+import FichaManualModal from '@/components/tracking/FichaManualModal'
 import type { ScoutPlayer, ScoutPlayerStatusRecord, ScoutsGGStatus } from '@/types'
+
+const ADMIN_EMAIL = 'marcoscucho99@gmail.com'
 
 // ─── STATUS CONFIG ────────────────────────────────────────────────────────────
 
@@ -141,13 +146,26 @@ function StatusDropdown({
 
 export default function ScoutTrackingGGPage() {
   const { user, userDisplayName } = useAuth()
+  const { external, internal } = useData()
   const navigate = useNavigate()
+
+  // Build a map: player_db_id (Jugador) → ggScore, for fast lookup
+  const ggScoreMap = useMemo(() => {
+    const map = new Map<string, number | null>()
+    for (const p of external) map.set(p.Jugador, p.ggScore)
+    for (const p of internal) map.set(p.Jugador, p.ggScore)
+    return map
+  }, [external, internal])
 
   const [players, setPlayers] = useState<ScoutPlayer[]>([])
   const [statuses, setStatuses] = useState<Record<string, ScoutPlayerStatusRecord>>({})
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [fileUploadPlayerId, setFileUploadPlayerId] = useState<string | null>(null)
+  const [linkingPlayer, setLinkingPlayer] = useState<ScoutPlayer | null>(null)
+  const [fichaPlayer, setFichaPlayer] = useState<ScoutPlayer | null>(null)
+
+  const isAdmin = user?.email === ADMIN_EMAIL
 
   // Filters
   const [search, setSearch] = useState('')
@@ -418,6 +436,7 @@ export default function ScoutTrackingGGPage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">Posición</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">Estado</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">Score Scouts</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">Score GG</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">Agregado</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">Links</th>
                     {!requiresAuth && (
@@ -442,7 +461,13 @@ export default function ScoutTrackingGGPage() {
                         <tr
                           key={player.id}
                           className={`border-l-4 ${priorBorder} hover:bg-brand-green/5 dark:hover:bg-brand-green/10 transition-colors cursor-pointer group`}
-                          onClick={() => navigate(`/jugador/${encodeURIComponent(player.full_name)}?source=externo`)}
+                          onClick={() => {
+                            if (player.player_db_id) {
+                              navigate(`/jugador/${encodeURIComponent(player.player_db_id)}?source=${player.player_db_source || 'externo'}`)
+                            } else {
+                              setFichaPlayer(player)
+                            }
+                          }}
                         >
                           {/* Jugador */}
                           <td className="px-4 py-3">
@@ -451,13 +476,40 @@ export default function ScoutTrackingGGPage() {
                                 {initials}
                               </div>
                               <div className="min-w-0">
-                                <p
-                                  className="font-semibold text-apple-gray-900 dark:text-white truncate hover:text-brand-green transition-colors"
-                                  title={player.comentario || undefined}
-                                  onClick={e => { e.stopPropagation(); navigate(`/jugador/${encodeURIComponent(player.full_name)}?source=externo`) }}
-                                >
-                                  {player.full_name}
-                                </p>
+                                <div className="flex items-center gap-1.5">
+                                  <p
+                                    className="font-semibold truncate transition-colors text-apple-gray-900 dark:text-white hover:text-brand-green cursor-pointer"
+                                    title={player.comentario || undefined}
+                                    onClick={e => {
+                                      e.stopPropagation()
+                                      if (player.player_db_id) {
+                                        navigate(`/jugador/${encodeURIComponent(player.player_db_id)}?source=${player.player_db_source || 'externo'}`)
+                                      } else {
+                                        setFichaPlayer(player)
+                                      }
+                                    }}
+                                  >
+                                    {player.full_name}
+                                  </p>
+                                  {!player.player_db_id && (
+                                    <span title="Sin ficha vinculada" className="flex-shrink-0 text-apple-gray-300 dark:text-apple-gray-600">
+                                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728M5.636 5.636a9 9 0 000 12.728M9 10h.01M15 10h.01M9.172 14.172a4 4 0 015.656 0" />
+                                      </svg>
+                                    </span>
+                                  )}
+                                  {isAdmin && (
+                                    <button
+                                      onClick={e => { e.stopPropagation(); setLinkingPlayer(player) }}
+                                      title={player.player_db_id ? 'Cambiar vínculo' : 'Vincular a base de datos'}
+                                      className={`flex-shrink-0 p-0.5 rounded transition-colors opacity-0 group-hover:opacity-100 ${player.player_db_id ? 'text-brand-green hover:bg-brand-green/10' : 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20'}`}
+                                    >
+                                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                      </svg>
+                                    </button>
+                                  )}
+                                </div>
                                 <p className="text-xs text-apple-gray-500 truncate">
                                   {[player.club, player.liga, player.edad ? `${player.edad}a` : null].filter(Boolean).join(' · ')}
                                 </p>
@@ -524,6 +576,33 @@ export default function ScoutTrackingGGPage() {
                             ) : (
                               <span className="text-apple-gray-400">—</span>
                             )}
+                          </td>
+
+                          {/* Score GG (datos) */}
+                          <td className="px-4 py-3">
+                            {(() => {
+                              if (!player.player_db_id) {
+                                return (
+                                  <span className="text-apple-gray-400 dark:text-apple-gray-600 text-xs italic">
+                                    sin ficha en BD
+                                  </span>
+                                )
+                              }
+                              const gg = ggScoreMap.get(player.player_db_id)
+                              if (gg === undefined || gg === null) {
+                                return <span className="text-apple-gray-400 text-xs">—</span>
+                              }
+                              const color = gg >= 75 ? 'text-brand-green' : gg >= 55 ? 'text-emerald-500' : gg >= 40 ? 'text-amber-500' : 'text-red-500'
+                              const barColor = gg >= 75 ? 'bg-brand-green' : gg >= 55 ? 'bg-emerald-500' : gg >= 40 ? 'bg-amber-500' : 'bg-red-500'
+                              return (
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-sm font-bold tabular-nums ${color}`}>{gg.toFixed(1)}</span>
+                                  <div className="w-14 h-1.5 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-full overflow-hidden">
+                                    <div className={`h-full rounded-full ${barColor}`} style={{ width: `${gg}%` }} />
+                                  </div>
+                                </div>
+                              )
+                            })()}
                           </td>
 
                           {/* Agregado */}
@@ -594,7 +673,7 @@ export default function ScoutTrackingGGPage() {
                         {/* File upload row */}
                         {fileUploadPlayerId === player.id && (
                           <tr key={`${player.id}-upload`} className="bg-apple-gray-50 dark:bg-apple-gray-800/50">
-                            <td colSpan={requiresAuth ? 6 : 7} className="px-4 py-2">
+                            <td colSpan={requiresAuth ? 7 : 8} className="px-4 py-2">
                               <input
                                 type="file"
                                 accept=".xlsx,.xls,.csv"
@@ -643,7 +722,13 @@ export default function ScoutTrackingGGPage() {
                     <div className="flex-1 min-w-0">
                       <p
                         className="font-semibold text-sm truncate cursor-pointer hover:text-brand-green transition-colors"
-                        onClick={() => navigate(`/jugador/${encodeURIComponent(player.full_name)}?source=externo`)}
+                        onClick={() => {
+                          if (player.player_db_id) {
+                            navigate(`/jugador/${encodeURIComponent(player.player_db_id)}?source=${player.player_db_source || 'externo'}`)
+                          } else {
+                            setFichaPlayer(player)
+                          }
+                        }}
                       >
                         {player.full_name}
                       </p>
@@ -744,6 +829,37 @@ export default function ScoutTrackingGGPage() {
         defaultList="scouts_gg"
         onSuccess={load}
       />
+
+      {/* Link Player Modal (admin only, from row button) */}
+      {linkingPlayer && (
+        <LinkPlayerModal
+          player={linkingPlayer}
+          onClose={() => setLinkingPlayer(null)}
+          onLinked={updated => {
+            setPlayers(prev => prev.map(p =>
+              p.id === updated.id
+                ? { ...p, player_db_id: updated.player_db_id, player_db_source: updated.player_db_source }
+                : p
+            ))
+          }}
+        />
+      )}
+
+      {/* Ficha manual — for players not linked to DB */}
+      {fichaPlayer && (
+        <FichaManualModal
+          player={fichaPlayer}
+          onClose={() => setFichaPlayer(null)}
+          onLinked={updated => {
+            setPlayers(prev => prev.map(p =>
+              p.id === updated.id
+                ? { ...p, player_db_id: updated.player_db_id, player_db_source: updated.player_db_source }
+                : p
+            ))
+            setFichaPlayer(null)
+          }}
+        />
+      )}
     </div>
   )
 }

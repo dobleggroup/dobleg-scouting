@@ -16,6 +16,7 @@ import { normalizeName } from '@/utils/scoring'
 import { POSITION_MAP, DISPLAY_POSITION_MAP, DISPLAY_METRICS, RADAR_METRICS, METRIC_ABBREVIATIONS } from '@/constants/scoring'
 import { fetchPlayerEvaluations, fetchEvaluationsByName, type ScoutEvaluation } from '@/services/scoutEvaluationService'
 import TrackingWidget from '@/components/tracking/TrackingWidget'
+import BodyMapSVG from '@/components/health/BodyMapSVG'
 import type { EnrichedPlayer, SubjectiveMetric } from '@/types'
 
 // ─── PLAYER COMMENTS SYSTEM ───────────────────────────────────────────────────
@@ -1956,87 +1957,12 @@ export default function PlayerDetailPage() {
                       <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
                       Mapa Corporal
                     </h4>
-                    <div className="flex justify-center py-4">
-                      <svg viewBox="0 0 120 280" className="w-40 h-auto drop-shadow-sm">
-                        <defs>
-                          <linearGradient id="bodyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" className="[stop-color:#e5e7eb] dark:[stop-color:#4b5563]" />
-                            <stop offset="100%" className="[stop-color:#d1d5db] dark:[stop-color:#374151]" />
-                          </linearGradient>
-                          <linearGradient id="muscleGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                            <stop offset="0%" className="[stop-color:#f3f4f6] dark:[stop-color:#6b7280]" />
-                            <stop offset="100%" className="[stop-color:#e5e7eb] dark:[stop-color:#4b5563]" />
-                          </linearGradient>
-                          <filter id="bodyShadow" x="-20%" y="-20%" width="140%" height="140%">
-                            <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.1"/>
-                          </filter>
-                        </defs>
-
-                        {/* Head - more anatomical */}
-                        <ellipse cx="60" cy="22" rx="16" ry="18" fill="url(#bodyGradient)" filter="url(#bodyShadow)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
-                        <ellipse cx="60" cy="20" rx="14" ry="15" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.3"/>
-
-                        {/* Neck */}
-                        <path d="M52 38 L52 48 Q52 52 56 52 L64 52 Q68 52 68 48 L68 38" fill="url(#bodyGradient)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
-
-                        {/* Shoulders & Upper torso */}
-                        <path d="M30 55 Q35 50 52 52 L68 52 Q85 50 90 55 L90 65 Q88 70 85 72 L35 72 Q32 70 30 65 Z" fill="url(#bodyGradient)" filter="url(#bodyShadow)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
-
-                        {/* Chest muscles */}
-                        <ellipse cx="48" cy="68" rx="10" ry="8" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.3"/>
-                        <ellipse cx="72" cy="68" rx="10" ry="8" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.3"/>
-
-                        {/* Torso / Core */}
-                        <path d="M35 72 L35 120 Q38 125 45 128 L75 128 Q82 125 85 120 L85 72" fill="url(#bodyGradient)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
-
-                        {/* Abs definition */}
-                        <rect x="50" y="78" width="20" height="6" rx="2" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.2"/>
-                        <rect x="50" y="88" width="20" height="6" rx="2" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.2"/>
-                        <rect x="50" y="98" width="20" height="6" rx="2" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.2"/>
-                        <rect x="50" y="108" width="20" height="6" rx="2" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.2"/>
-
-                        {/* Left Arm */}
-                        <path d="M30 55 Q22 58 18 75 L15 95 Q12 105 14 115 Q15 120 18 122 Q22 120 24 115 L28 95 Q30 80 33 70" fill="url(#bodyGradient)" filter="url(#bodyShadow)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
-                        {/* Left forearm */}
-                        <path d="M14 115 Q10 130 12 145 Q13 155 18 158 Q24 155 25 145 L24 130 Q24 122 24 115" fill="url(#bodyGradient)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
-                        {/* Left bicep */}
-                        <ellipse cx="22" cy="80" rx="6" ry="10" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.3"/>
-
-                        {/* Right Arm */}
-                        <path d="M90 55 Q98 58 102 75 L105 95 Q108 105 106 115 Q105 120 102 122 Q98 120 96 115 L92 95 Q90 80 87 70" fill="url(#bodyGradient)" filter="url(#bodyShadow)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
-                        {/* Right forearm */}
-                        <path d="M106 115 Q110 130 108 145 Q107 155 102 158 Q96 155 95 145 L96 130 Q96 122 96 115" fill="url(#bodyGradient)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
-                        {/* Right bicep */}
-                        <ellipse cx="98" cy="80" rx="6" ry="10" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.3"/>
-
-                        {/* Hip / Pelvis */}
-                        <path d="M45 128 Q40 132 38 140 L38 148 Q42 155 50 155 L70 155 Q78 155 82 148 L82 140 Q80 132 75 128" fill="url(#bodyGradient)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
-
-                        {/* Left Leg - Thigh */}
-                        <path d="M38 148 L36 180 Q34 200 35 215 L38 215 Q42 200 44 180 L50 155" fill="url(#bodyGradient)" filter="url(#bodyShadow)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
-                        {/* Left quadriceps */}
-                        <ellipse cx="42" cy="175" rx="7" ry="18" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.3"/>
-                        {/* Left Calf */}
-                        <path d="M35 215 L33 245 Q32 258 35 268 Q38 273 42 270 L45 258 Q46 245 44 230 L42 215" fill="url(#bodyGradient)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
-                        {/* Left calf muscle */}
-                        <ellipse cx="38" cy="235" rx="5" ry="12" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.3"/>
-
-                        {/* Right Leg - Thigh */}
-                        <path d="M82 148 L84 180 Q86 200 85 215 L82 215 Q78 200 76 180 L70 155" fill="url(#bodyGradient)" filter="url(#bodyShadow)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
-                        {/* Right quadriceps */}
-                        <ellipse cx="78" cy="175" rx="7" ry="18" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.3"/>
-                        {/* Right Calf */}
-                        <path d="M85 215 L87 245 Q88 258 85 268 Q82 273 78 270 L75 258 Q74 245 76 230 L78 215" fill="url(#bodyGradient)" className="stroke-apple-gray-300 dark:stroke-apple-gray-500" strokeWidth="0.5"/>
-                        {/* Right calf muscle */}
-                        <ellipse cx="82" cy="235" rx="5" ry="12" fill="url(#muscleGradient)" className="stroke-apple-gray-200 dark:stroke-apple-gray-600" strokeWidth="0.3"/>
-
-                        {/* TODO: Injury markers will be added here dynamically */}
-                        {/* Example injury markers (commented for future use):
-                        <circle cx="42" cy="175" r="6" fill="#f59e0b" fillOpacity="0.8" className="animate-pulse" /> <!-- Yellow - Minor -->
-                        <circle cx="82" cy="235" r="6" fill="#f97316" fillOpacity="0.8" className="animate-pulse" /> <!-- Orange - Moderate -->
-                        <circle cx="48" cy="68" r="6" fill="#ef4444" fillOpacity="0.8" className="animate-pulse" /> <!-- Red - Severe -->
-                        */}
-                      </svg>
+                    <div className="py-2">
+                      <BodyMapSVG
+                        injuries={[]}
+                        interactive={false}
+                        className="w-full"
+                      />
                     </div>
 
                     {/* Status badge */}

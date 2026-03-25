@@ -15,12 +15,16 @@ import { playerNamesMatch } from '@/utils/nameUtils'
 // ScoreEvolutionMini removed - now showing status history instead
 import type { MonitoringPlayer, ManagementStatus, ScoutPlayer, ScoutPlayerStatusRecord, DatosTrackingStatus } from '@/types'
 import AddPlayerModal from '@/components/tracking/AddPlayerModal'
+import LinkPlayerModal from '@/components/tracking/LinkPlayerModal'
+import FichaManualModal from '@/components/tracking/FichaManualModal'
 import {
   fetchScoutPlayers,
   fetchScoutPlayerStatuses,
   setScoutPlayerStatus,
   removeScoutPlayerFromList,
 } from '@/services/scoutPlayersService'
+
+const ADMIN_EMAIL = 'marcoscucho99@gmail.com'
 
 import type { EnrichedPlayer } from '@/types'
 
@@ -329,6 +333,10 @@ export default function MonitoringPage() {
   const [manualPlayers, setManualPlayers] = useState<ScoutPlayer[]>([])
   const [manualStatuses, setManualStatuses] = useState<Record<string, ScoutPlayerStatusRecord>>({})
   const [showAddModal, setShowAddModal] = useState(false)
+  const [linkingPlayer, setLinkingPlayer] = useState<ScoutPlayer | null>(null)
+  const [fichaPlayer, setFichaPlayer] = useState<ScoutPlayer | null>(null)
+
+  const isAdmin = user?.email === ADMIN_EMAIL
 
   const loadManualPlayers = useCallback(async () => {
     const [players, statuses] = await Promise.all([
@@ -354,8 +362,11 @@ export default function MonitoringPage() {
   }, [handleManualStatusChange])
 
   const handleManualPlayerClick = useCallback((p: ScoutPlayer) => {
-    const id = encodeURIComponent(p.full_name)
-    navigate(`/jugador/${id}?source=externo`)
+    if (p.player_db_id) {
+      navigate(`/jugador/${encodeURIComponent(p.player_db_id)}?source=${p.player_db_source || 'externo'}`)
+    } else {
+      setFichaPlayer(p)
+    }
   }, [navigate])
 
   const handleManualDelete = useCallback(async (id: string) => {
@@ -916,7 +927,20 @@ export default function MonitoringPage() {
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-sm text-apple-gray-800 dark:text-white truncate mb-0.5">{p.full_name}</p>
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <p className="font-semibold text-sm text-apple-gray-800 dark:text-white truncate">{p.full_name}</p>
+                            {!p.player_db_id && isAdmin && (
+                              <button
+                                onClick={e => { e.stopPropagation(); setLinkingPlayer(p) }}
+                                title="Vincular a base de datos"
+                                className="flex-shrink-0 p-0.5 rounded text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
                           <p className="text-xs text-apple-gray-500 truncate mb-1.5">
                             {[club, liga, posicion, edad ? `${edad}a` : null].filter(Boolean).join(' · ') || '—'}
                           </p>
@@ -1138,7 +1162,27 @@ export default function MonitoringPage() {
                                   </div>
                                 )}
                                 <div className="min-w-0 flex-1">
-                                  <p className="font-medium text-apple-gray-800 dark:text-white group-hover:text-brand-green transition-colors truncate">{p.full_name}</p>
+                                  <div className="flex items-center gap-1.5">
+                                    <p className={`font-medium truncate transition-colors ${p.player_db_id ? 'text-apple-gray-800 dark:text-white group-hover:text-brand-green' : 'text-apple-gray-800 dark:text-white'}`}>{p.full_name}</p>
+                                    {!p.player_db_id && (
+                                      <span title="Sin ficha vinculada" className="flex-shrink-0 text-apple-gray-300 dark:text-apple-gray-600">
+                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728M5.636 5.636a9 9 0 000 12.728M9 10h.01M15 10h.01M9.172 14.172a4 4 0 015.656 0" />
+                                        </svg>
+                                      </span>
+                                    )}
+                                    {isAdmin && (
+                                      <button
+                                        onClick={e => { e.stopPropagation(); setLinkingPlayer(p) }}
+                                        title={p.player_db_id ? 'Cambiar vínculo' : 'Vincular a base de datos'}
+                                        className={`flex-shrink-0 p-0.5 rounded transition-colors opacity-0 group-hover:opacity-100 ${p.player_db_id ? 'text-brand-green hover:bg-brand-green/10' : 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20'}`}
+                                      >
+                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                        </svg>
+                                      </button>
+                                    )}
+                                  </div>
                                   <div className="flex items-center gap-1 text-xs text-apple-gray-500">
                                     {ext?.Nacionalidad && <span>{ext.Nacionalidad}</span>}
                                     {ext?.Nacionalidad && ext?.Edad && <span>|</span>}
@@ -1428,6 +1472,37 @@ export default function MonitoringPage() {
         defaultList="datos"
         onSuccess={loadManualPlayers}
       />
+
+      {/* Link Player Modal (admin only, from row button) */}
+      {linkingPlayer && (
+        <LinkPlayerModal
+          player={linkingPlayer}
+          onClose={() => setLinkingPlayer(null)}
+          onLinked={updated => {
+            setManualPlayers(prev => prev.map(p =>
+              p.id === updated.id
+                ? { ...p, player_db_id: updated.player_db_id, player_db_source: updated.player_db_source }
+                : p
+            ))
+          }}
+        />
+      )}
+
+      {/* Ficha manual — for players not linked to DB */}
+      {fichaPlayer && (
+        <FichaManualModal
+          player={fichaPlayer}
+          onClose={() => setFichaPlayer(null)}
+          onLinked={updated => {
+            setManualPlayers(prev => prev.map(p =>
+              p.id === updated.id
+                ? { ...p, player_db_id: updated.player_db_id, player_db_source: updated.player_db_source }
+                : p
+            ))
+            setFichaPlayer(null)
+          }}
+        />
+      )}
 
       {/* Mobile filter panel */}
       <MobileFilterPanel

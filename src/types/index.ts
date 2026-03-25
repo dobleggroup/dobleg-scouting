@@ -191,6 +191,7 @@ export interface EnrichedPlayer {
   Imagen: string
   // Enrichment
   ggScore: number | null
+  ggScorePercentile: number | null  // percentile within position group (0-100)
   source: 'externo' | 'interno'
   contractStatus: 'ok' | 'warning' | 'critical'
   monthsRemaining: number | null

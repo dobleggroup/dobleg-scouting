@@ -100,6 +100,7 @@ export function normalizeName(s: string): string {
 function enrichPlayer(
   player: Record<string, string>,
   ggScore: number | null,
+  ggScorePercentile: number | null,
   source: 'externo' | 'interno'
 ): EnrichedPlayer {
   // Try multiple column names for market value (different CSV formats)
@@ -139,6 +140,7 @@ function enrichPlayer(
     Representante: player['Representante'] ?? '',
     Imagen: player['Imagen'] ?? '',
     ggScore,
+    ggScorePercentile,
     source,
     contractStatus:
       monthsRemaining === null ? 'ok'
@@ -163,23 +165,44 @@ function getPositionKey(player: Record<string, string>): string | null {
   return POSITION_MAP[rawPos] ?? null
 }
 
+/**
+ * Rank-based normalization for a single value within a sorted array.
+ * Uses midpoint ranking to handle ties fairly.
+ * Returns 0-100; defaults to 50 when there is only 1 player in the group.
+ */
+function rankNormalize(value: number, sortedAsc: number[]): number {
+  const N = sortedAsc.length
+  if (N <= 1) return 50
+
+  let below = 0
+  let equal = 0
+  for (const v of sortedAsc) {
+    if (v < value) below++
+    else if (v === value) equal++
+  }
+  // Midpoint rank — treats all ties symmetrically
+  const rank = below + (equal - 1) / 2
+  return Math.max(0, Math.min(100, (rank / (N - 1)) * 100))
+}
+
 export function computeGGScores(
   players: (RawExternalPlayer | RawInternalPlayer)[],
   source: 'externo' | 'interno',
-  precomputedScores?: Map<string, number | null>
+  precomputedScores?: Map<string, number | null>,
+  precomputedPercentiles?: Map<string, number | null>
 ): EnrichedPlayer[] {
-  // If we have precomputed scores, just use those
+  // Fast path: scores already computed externally (second call in DataContext)
   if (precomputedScores) {
     return players.map(player => {
       const key = (player['Jugador'] ?? '') + '|' + (player['Equipo'] ?? '')
       const score = precomputedScores.get(key) ?? null
-      return enrichPlayer(player as Record<string, string>, score, source)
+      const percentile = precomputedPercentiles?.get(key) ?? null
+      return enrichPlayer(player as Record<string, string>, score, percentile, source)
     })
   }
 
-  // Group players by normalized position key
+  // ── Pass 0: group players by position ────────────────────────────────────
   const byPosition = new Map<string, (RawExternalPlayer | RawInternalPlayer)[]>()
-
   for (const p of players) {
     const posKey = getPositionKey(p as Record<string, string>)
     if (!posKey) continue
@@ -187,47 +210,80 @@ export function computeGGScores(
     byPosition.get(posKey)!.push(p)
   }
 
-  // Compute min/max per metric per position group
-  const positionStats = new Map<string, Map<string, { min: number; max: number }>>()
-
+  // ── Pass 1a: build sorted value arrays per metric per position ───────────
+  // These replace the old min/max stats — we store the sorted array so we can
+  // compute rank-based normalization in O(n) per player.
+  const positionSorted = new Map<string, Map<string, number[]>>()
   for (const [posKey, group] of byPosition) {
     const config = SCORING_CONFIG[posKey]
     if (!config) continue
-    const stats = new Map<string, { min: number; max: number }>()
-
+    const colSorted = new Map<string, number[]>()
     for (const { column } of config) {
       const values = group.map(p => getNumericValue(p as Record<string, string>, column))
-      stats.set(column, { min: Math.min(...values), max: Math.max(...values) })
+      colSorted.set(column, [...values].sort((a, b) => a - b))
     }
-    positionStats.set(posKey, stats)
+    positionSorted.set(posKey, colSorted)
   }
 
-  // Score each player
-  return players.map(player => {
-    const posKey = getPositionKey(player as Record<string, string>)
+  // ── Pass 1b: compute ggScore for every player ────────────────────────────
+  const playerKeys: string[] = new Array(players.length)
+  const playerPosKeys: string[] = new Array(players.length)
+  const rawScores: (number | null)[] = new Array(players.length).fill(null)
 
-    if (!posKey || !SCORING_CONFIG[posKey]) {
-      return enrichPlayer(player as Record<string, string>, null, source)
-    }
+  for (let i = 0; i < players.length; i++) {
+    const player = players[i]
+    const posKey = getPositionKey(player as Record<string, string>)
+    const key = (player['Jugador'] ?? '') + '|' + (player['Equipo'] ?? '')
+    playerKeys[i] = key
+    playerPosKeys[i] = posKey ?? ''
+
+    if (!posKey || !SCORING_CONFIG[posKey]) continue
 
     const config = SCORING_CONFIG[posKey]
-    const stats = positionStats.get(posKey)!
+    const colSorted = positionSorted.get(posKey)!
     let score = 0
 
     for (const { column, weight } of config) {
       const raw = getNumericValue(player as Record<string, string>, column)
-      const { min, max } = stats.get(column)!
-      const normalized = max > min ? ((raw - min) / (max - min)) * 100 : 50
-      score += normalized * (weight / 100)
+      const sorted = colSorted.get(column)!
+      score += rankNormalize(raw, sorted) * (weight / 100)
     }
 
-    // Apply league tier adjustment (± points based on league quality)
+    // League tier adjustment (additive, same as before)
     const liga = (player as Record<string, string>)['Liga'] ?? ''
     const leagueAdj = getLeagueAdjustment(liga)
-    const adjustedScore = Math.max(0, Math.min(100, score + leagueAdj))
+    rawScores[i] = Math.round(Math.max(0, Math.min(100, score + leagueAdj)) * 10) / 10
+  }
 
-    return enrichPlayer(player as Record<string, string>, Math.round(adjustedScore * 10) / 10, source)
-  })
+  // ── Pass 2: compute ggScorePercentile per position group ─────────────────
+  // Group indices by position, sort by ggScore, assign rank percentile.
+  const posIndices = new Map<string, number[]>()
+  for (let i = 0; i < players.length; i++) {
+    const posKey = playerPosKeys[i]
+    if (!posKey || rawScores[i] === null) continue
+    if (!posIndices.has(posKey)) posIndices.set(posKey, [])
+    posIndices.get(posKey)!.push(i)
+  }
+
+  const percentiles: (number | null)[] = new Array(players.length).fill(null)
+  for (const indices of posIndices.values()) {
+    // Sort the group's indices by their ggScore ascending
+    const sorted = [...indices].sort((a, b) => (rawScores[a] as number) - (rawScores[b] as number))
+    const N = sorted.length
+    sorted.forEach((origIdx, rank) => {
+      percentiles[origIdx] = N <= 1 ? 50 : Math.round((rank / (N - 1)) * 100 * 10) / 10
+    })
+  }
+
+  // ── Final: build enriched players ────────────────────────────────────────
+  return players.map((player, i) =>
+    enrichPlayer(
+      player as Record<string, string>,
+      rawScores[i],
+      percentiles[i],
+      source
+    )
+  )
 }
 
 // ─── NORMALIZATION FOR RADAR (internal players) ───────────────────────────────
