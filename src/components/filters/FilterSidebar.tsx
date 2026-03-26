@@ -103,7 +103,12 @@ export default function FilterSidebar({ players, filters, onChange, onReset }: F
   const toggleArrayItem = (key: 'positions' | 'leagues', item: string) => {
     const current = filters[key]
     const next = current.includes(item) ? current.filter(x => x !== item) : [...current, item]
-    onChange({ ...filters, [key]: next })
+    // Al quitar la última liga, limpiar el equipo seleccionado
+    if (key === 'leagues' && next.length === 0 && filters.teamSearch) {
+      onChange({ ...filters, [key]: next, teamSearch: '' })
+    } else {
+      onChange({ ...filters, [key]: next })
+    }
   }
 
   const toggleMetric = (metricKey: string) => {
@@ -164,6 +169,18 @@ export default function FilterSidebar({ players, filters, onChange, onReset }: F
       pies: [...pieSet].sort(),
     }
   }, [players])
+
+  // Equipos disponibles según las ligas seleccionadas
+  const teamsForLeagues = useMemo(() => {
+    if (filters.leagues.length === 0) return []
+    const teamSet = new Set<string>()
+    for (const p of players) {
+      if (filters.leagues.includes(p.Liga) && p.Equipo) {
+        teamSet.add(p.Equipo)
+      }
+    }
+    return [...teamSet].sort()
+  }, [players, filters.leagues])
 
   const activeFiltersCount = [
     filters.search,
@@ -251,14 +268,33 @@ export default function FilterSidebar({ players, filters, onChange, onReset }: F
           )}
 
           {/* Equipo search */}
-          <Section title="Equipo" defaultOpen={false}>
-            <input
-              type="text"
-              placeholder="Buscar equipo..."
-              value={filters.teamSearch}
-              onChange={e => update('teamSearch', e.target.value)}
-              className="input-apple text-sm"
-            />
+          <Section title="Equipo" defaultOpen={teamsForLeagues.length > 0 || !!filters.teamSearch}>
+            {teamsForLeagues.length > 0 ? (
+              <div className="space-y-1.5 max-h-48 overflow-y-auto scrollbar-thin pr-1">
+                {teamsForLeagues.map(team => (
+                  <button
+                    key={team}
+                    onClick={() => update('teamSearch', filters.teamSearch === team ? '' : team)}
+                    className={`w-full text-left px-2 py-1.5 rounded-lg text-xs transition-colors truncate ${
+                      filters.teamSearch === team
+                        ? 'bg-brand-green text-black font-medium'
+                        : 'text-apple-gray-600 dark:text-apple-gray-400 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700'
+                    }`}
+                    title={team}
+                  >
+                    {team}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <input
+                type="text"
+                placeholder="Buscar equipo..."
+                value={filters.teamSearch}
+                onChange={e => update('teamSearch', e.target.value)}
+                className="input-apple text-sm"
+              />
+            )}
           </Section>
 
           {/* Edad */}

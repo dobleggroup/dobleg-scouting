@@ -436,9 +436,12 @@ export default function MonitoringPage() {
     }
   }, [monitoring, getPlayerStatus])
 
-  const toggleFilter = (arr: string[], setArr: (v: string[]) => void, item: string) => {
-    setArr(arr.includes(item) ? arr.filter(x => x !== item) : [...arr, item])
+  const toggleFilter = (arr: string[], setArr: (v: string[]) => void, item: string, onClear?: () => void) => {
+    const next = arr.includes(item) ? arr.filter(x => x !== item) : [...arr, item]
+    setArr(next)
+    if (next.length === 0 && onClear) onClear()
   }
+
 
   // Compute which manual players are NOT in the Sheets monitoring array,
   // enriched with data from the external players dataset (scores, position, etc.)
@@ -455,6 +458,21 @@ export default function MonitoringPage() {
         return { ...mp, _extPlayer: extMatch ?? null }
       })
   }, [manualPlayers, monitoring, external])
+
+  // Clubes disponibles según las ligas seleccionadas
+  const clubsForLeagues = useMemo(() => {
+    if (ligaFilters.length === 0) return []
+    const clubSet = new Set<string>()
+    monitoring.forEach(p => {
+      if (ligaFilters.includes(p.Liga) && p.Club) clubSet.add(p.Club)
+    })
+    manualOnlyPlayers.forEach(mp => {
+      const liga = mp.liga || mp._extPlayer?.Liga || ''
+      const club = mp.club || mp._extPlayer?.Equipo || ''
+      if (ligaFilters.includes(liga) && club) clubSet.add(club)
+    })
+    return [...clubSet].sort()
+  }, [monitoring, manualOnlyPlayers, ligaFilters])
 
   // Filter and sort players
   const filtered = useMemo(() => {
@@ -754,7 +772,7 @@ export default function MonitoringPage() {
                       <input
                         type="checkbox"
                         checked={ligaFilters.includes(lg)}
-                        onChange={() => toggleFilter(ligaFilters, setLigaFilters, lg)}
+                        onChange={() => toggleFilter(ligaFilters, setLigaFilters, lg, () => setClubSearch(''))}
                         className="w-4 h-4 rounded border-apple-gray-300 dark:border-apple-gray-600 text-brand-green focus:ring-brand-green"
                       />
                       <span className="text-xs text-apple-gray-700 dark:text-apple-gray-300 truncate group-hover:text-apple-gray-900 dark:group-hover:text-white transition-colors" title={lg}>{lg}</span>
@@ -762,14 +780,33 @@ export default function MonitoringPage() {
                   ))}
                 </div>
               </FilterSection>
-              <FilterSection title="Club" defaultOpen={false}>
-                <input
-                  type="text"
-                  placeholder="Buscar club..."
-                  value={clubSearch}
-                  onChange={e => setClubSearch(e.target.value)}
-                  className="input-apple text-sm"
-                />
+              <FilterSection title="Club" defaultOpen={clubsForLeagues.length > 0 || !!clubSearch}>
+                {clubsForLeagues.length > 0 ? (
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto scrollbar-thin pr-1">
+                    {clubsForLeagues.map(club => (
+                      <button
+                        key={club}
+                        onClick={() => setClubSearch(clubSearch === club ? '' : club)}
+                        className={`w-full text-left px-2 py-1.5 rounded-lg text-xs transition-colors truncate ${
+                          clubSearch === club
+                            ? 'bg-brand-green text-black font-medium'
+                            : 'text-apple-gray-600 dark:text-apple-gray-400 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700'
+                        }`}
+                        title={club}
+                      >
+                        {club}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    placeholder="Buscar club..."
+                    value={clubSearch}
+                    onChange={e => setClubSearch(e.target.value)}
+                    className="input-apple text-sm"
+                  />
+                )}
               </FilterSection>
               <FilterSection title="Rol" defaultOpen={false}>
                 <select
@@ -1532,15 +1569,34 @@ export default function MonitoringPage() {
             <div className="space-y-2 max-h-40 overflow-y-auto scrollbar-thin pr-1">
               {ligas.map(lg => (
                 <label key={lg} className="flex items-center gap-2.5 cursor-pointer">
-                  <input type="checkbox" checked={ligaFilters.includes(lg)} onChange={() => toggleFilter(ligaFilters, setLigaFilters, lg)}
+                  <input type="checkbox" checked={ligaFilters.includes(lg)} onChange={() => toggleFilter(ligaFilters, setLigaFilters, lg, () => setClubSearch(''))}
                     className="w-4 h-4 rounded border-apple-gray-300 dark:border-apple-gray-600 text-brand-green focus:ring-brand-green" />
                   <span className="text-xs text-apple-gray-700 dark:text-apple-gray-300 truncate">{lg}</span>
                 </label>
               ))}
             </div>
           </FilterSection>
-          <FilterSection title="Club" defaultOpen={false}>
-            <input type="text" placeholder="Buscar club..." value={clubSearch} onChange={e => setClubSearch(e.target.value)} className="input-apple text-sm" />
+          <FilterSection title="Club" defaultOpen={clubsForLeagues.length > 0 || !!clubSearch}>
+            {clubsForLeagues.length > 0 ? (
+              <div className="space-y-1.5 max-h-48 overflow-y-auto scrollbar-thin pr-1">
+                {clubsForLeagues.map(club => (
+                  <button
+                    key={club}
+                    onClick={() => setClubSearch(clubSearch === club ? '' : club)}
+                    className={`w-full text-left px-2 py-1.5 rounded-lg text-xs transition-colors truncate ${
+                      clubSearch === club
+                        ? 'bg-brand-green text-black font-medium'
+                        : 'text-apple-gray-600 dark:text-apple-gray-400 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700'
+                    }`}
+                    title={club}
+                  >
+                    {club}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <input type="text" placeholder="Buscar club..." value={clubSearch} onChange={e => setClubSearch(e.target.value)} className="input-apple text-sm" />
+            )}
           </FilterSection>
           <FilterSection title="Rol" defaultOpen={false}>
             <select value={rolFilter} onChange={e => setRolFilter(e.target.value)} className="input-apple text-sm">
