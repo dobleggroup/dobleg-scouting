@@ -6,6 +6,7 @@ import { ScatterChart, Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import AddToReportButton from '@/components/pdf/AddToReportButton'
+import ScoutsGGBadge from '@/components/ui/ScoutsGGBadge'
 import type { EnrichedPlayer } from '@/types'
 
 // Color interpolation from red (bad) to yellow (medium) to green (good)
@@ -472,6 +473,7 @@ export default function ScatterChartPage() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <p className="font-bold text-apple-gray-800 dark:text-white truncate">{data.player.Jugador}</p>
+              <ScoutsGGBadge playerName={data.player.Jugador} />
               {isSelected && <span className="text-2xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-medium">MARCADO</span>}
             </div>
             <p className="text-xs text-apple-gray-500 truncate">{data.player.Equipo}</p>
@@ -984,7 +986,10 @@ export default function ScatterChartPage() {
                       }}
                       className="flex-1 min-w-0 text-left hover:opacity-80 transition-opacity"
                     >
-                      <p className="text-sm font-semibold text-apple-gray-800 dark:text-white truncate group-hover:text-brand-green transition-colors">{d.player.Jugador}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm font-semibold text-apple-gray-800 dark:text-white truncate group-hover:text-brand-green transition-colors">{d.player.Jugador}</p>
+                        <ScoutsGGBadge playerName={d.player.Jugador} />
+                      </div>
                       <p className="text-xs text-apple-gray-500 truncate">{d.player.Equipo} · {d.player.ageNum} años</p>
                     </button>
                     <div className="flex items-center gap-1">

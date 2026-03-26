@@ -372,6 +372,17 @@ export async function fetchScoutPlayerRecord(
 }
 
 // Fetch all tracked player names for list indicators (lightweight)
+export async function fetchScoutsGGPlayers(): Promise<Array<{
+  full_name: string
+  player_db_id: string | null
+}>> {
+  const { data } = await supabase
+    .from('scout_players')
+    .select('full_name, player_db_id')
+    .eq('in_scouts_gg_list', true)
+  return data || []
+}
+
 export async function fetchTrackedPlayerNames(): Promise<Array<{
   full_name: string
   in_datos_list: boolean

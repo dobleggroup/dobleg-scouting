@@ -5,6 +5,7 @@ import ComparisonView from '@/components/comparison/ComparisonView'
 import { exportComparisonToPdf } from '@/utils/pdfExport'
 import { smartSearch } from '@/lib/search'
 import AddToReportButton from '@/components/pdf/AddToReportButton'
+import ScoutsGGBadge from '@/components/ui/ScoutsGGBadge'
 import type { EnrichedPlayer } from '@/types'
 
 const PLAYER_COLORS = ['#22C55E', '#3B82F6', '#F59E0B']
@@ -101,7 +102,10 @@ function PlayerSearch({ players, selected, onSelect, color, label, leagues }: Pl
               </div>
             )}
             <div>
-              <p className="font-semibold text-apple-gray-800 dark:text-white text-sm">{selected.Jugador}</p>
+              <div className="flex items-center gap-1.5">
+                <p className="font-semibold text-apple-gray-800 dark:text-white text-sm">{selected.Jugador}</p>
+                <ScoutsGGBadge playerName={selected.Jugador} />
+              </div>
               <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400">{selected.Equipo} · {selected['Posición']}</p>
             </div>
           </div>
@@ -174,7 +178,10 @@ function PlayerSearch({ players, selected, onSelect, color, label, leagues }: Pl
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">{p.Jugador}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">{p.Jugador}</span>
+                          <ScoutsGGBadge playerName={p.Jugador} />
+                        </div>
                         <div className="text-xs text-apple-gray-500 dark:text-apple-gray-400 truncate">
                           {p.Equipo} · {p['Posición']}
                         </div>

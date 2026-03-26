@@ -17,6 +17,7 @@ import { POSITION_MAP, DISPLAY_POSITION_MAP, DISPLAY_METRICS, RADAR_METRICS, MET
 import { fetchPlayerEvaluations, fetchEvaluationsByName, type ScoutEvaluation } from '@/services/scoutEvaluationService'
 import TrackingWidget from '@/components/tracking/TrackingWidget'
 import BodyMapSVG from '@/components/health/BodyMapSVG'
+import ScoutsGGBadge from '@/components/ui/ScoutsGGBadge'
 import type { EnrichedPlayer, SubjectiveMetric } from '@/types'
 
 // ─── PLAYER COMMENTS SYSTEM ───────────────────────────────────────────────────
@@ -983,8 +984,9 @@ export default function PlayerDetailPage() {
                     onClick={() => setShowPlayerSelector(!showPlayerSelector)}
                     className="group flex items-center gap-1.5 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/50 -ml-2 px-2 py-1 rounded-lg transition-colors"
                   >
-                    <h1 className="text-xl font-bold text-apple-gray-800 dark:text-white tracking-tight">
+                    <h1 className="text-xl font-bold text-apple-gray-800 dark:text-white tracking-tight flex items-center gap-2">
                       {player.Jugador}
+                      <ScoutsGGBadge playerName={player.Jugador} variant="pill" />
                     </h1>
                     <svg
                       className={`w-4 h-4 text-apple-gray-400 group-hover:text-apple-gray-600 dark:group-hover:text-apple-gray-300 transition-transform ${showPlayerSelector ? 'rotate-180' : ''}`}

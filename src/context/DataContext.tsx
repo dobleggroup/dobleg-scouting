@@ -1026,30 +1026,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
         // Score and enrich external players with Transfermarkt data + Más Datos + Estimated values
         const externalScored = computeGGScores(raw.external, 'externo', scoreMap, percentileMap)
-        const external = externalScored
-          .map(p => enrichWithTransfermarkt(p, tmMap))
-          .map(p => enrichWithMasDatos(p, masDatosMap))
-          .map(p => enrichWithEstimatedValue(p)) // Estimate for Colombia 2nd div
+        const external = externalScored.map(p =>
+          enrichWithEstimatedValue(enrichWithMasDatos(enrichWithTransfermarkt(p, tmMap), masDatosMap))
+        )
 
         const internalScored = computeGGScores(raw.internal, 'interno', scoreMap, percentileMap)
-
-        // DEBUG: Log first interno player to check data
-        if (raw.internal.length > 0) {
-          const firstPlayer = raw.internal[0]
-          console.log('[DEBUG interno] Jugador:', firstPlayer['Jugador'])
-          console.log('[DEBUG interno] Valor de mercado:', firstPlayer['Valor de mercado'])
-          console.log('[DEBUG interno] Valor TM:', firstPlayer['Valor de mercado (Transfermarkt)'])
-          console.log('[DEBUG interno] Liga:', firstPlayer['Liga'])
-          console.log('[DEBUG interno] Keys:', Object.keys(firstPlayer).slice(0, 15).join(', '))
-        }
-        if (internalScored.length > 0) {
-          console.log('[DEBUG scored] Jugador:', internalScored[0].Jugador)
-          console.log('[DEBUG scored] marketValueRaw:', internalScored[0].marketValueRaw)
-          console.log('[DEBUG scored] Liga:', internalScored[0].Liga)
-          // Calculate total
-          const totalValue = internalScored.reduce((sum, p) => sum + (p.marketValueRaw || 0), 0)
-          console.log('[DEBUG scored] TOTAL PORTFOLIO:', totalValue, '=', (totalValue/1000000).toFixed(1) + 'M')
-        }
 
         // Enrich internal players with:
         // 1. Transfermarkt data using their TM link (valor de mercado, contrato, imagen)

@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import html2canvas from 'html2canvas'
 import { usePDFBuilder, type PDFElement } from '@/context/PDFBuilderContext'
 
 interface AddToReportButtonProps {
@@ -41,6 +40,7 @@ export default function AddToReportButton({
       const el = document.getElementById(captureId)
       if (el) {
         try {
+          const { default: html2canvas } = await import('html2canvas')
           const canvas = await html2canvas(el, {
             scale: 0.4, // Lower scale for thumbnail
             useCORS: true,

@@ -1,13 +1,13 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { EnrichedPlayer, SortState } from '@/types'
 import ContractBadge from '@/components/ui/ContractBadge'
 import ScoreBar from '@/components/ui/ScoreBar'
 import EmptyState from '@/components/ui/EmptyState'
+import ScoutsGGBadge from '@/components/ui/ScoutsGGBadge'
 import { SELECTABLE_METRICS } from '@/components/filters/FilterSidebar'
 import { useData } from '@/context/DataContext'
 import { FILTER_POSITION_MAP } from '@/constants/scoring'
-import { fetchTrackedPlayerNames } from '@/services/scoutPlayersService'
 
 interface PlayerTableProps {
   players: EnrichedPlayer[]
@@ -78,21 +78,6 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
   const { positionAverages } = useData()
   const [sort, setSort] = useState<SortState>({ column: 'ggScore', direction: 'desc' })
   const [page, setPage] = useState(1)
-  const [trackedNames, setTrackedNames] = useState<Map<string, { inDatos: boolean; inGG: boolean }>>(new Map())
-
-  useEffect(() => {
-    if (source !== 'externo') return
-    fetchTrackedPlayerNames().then(data => {
-      const map = new Map<string, { inDatos: boolean; inGG: boolean }>()
-      for (const p of data) {
-        map.set(p.full_name.toLowerCase().trim(), {
-          inDatos: p.in_datos_list,
-          inGG: p.in_scouts_gg_list,
-        })
-      }
-      setTrackedNames(map)
-    })
-  }, [source])
 
   // Build columns with dynamic metrics
   const columns = useMemo(() => {
@@ -189,13 +174,7 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-semibold text-apple-gray-800 dark:text-white text-sm truncate">{player.Jugador}</span>
-                    {(() => {
-                      const t = trackedNames.get(player.Jugador.toLowerCase().trim())
-                      if (!t) return null
-                      return (
-                        <span className="flex-shrink-0 w-2 h-2 rounded-full bg-brand-green" title="En seguimiento" />
-                      )
-                    })()}
+                    <ScoutsGGBadge playerName={player.Jugador} />
                     <ContractBadge status={player.contractStatus} monthsRemaining={player.monthsRemaining} />
                   </div>
                   <p className="text-xs text-apple-gray-500 truncate mt-0.5">
@@ -282,11 +261,7 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
                           <span className="font-medium text-apple-gray-800 dark:text-white group-hover:text-brand-green transition-colors truncate">
                             {player.Jugador}
                           </span>
-                          {(() => {
-                            const t = trackedNames.get(player.Jugador.toLowerCase().trim())
-                            if (!t) return null
-                            return <span className="w-1.5 h-1.5 rounded-full bg-brand-green flex-shrink-0 inline-block" title={`En seguimiento${t.inDatos && t.inGG ? ' (ambas listas)' : t.inDatos ? ' (Datos)' : ' (Scouts GG)'}`} />
-                          })()}
+                          <ScoutsGGBadge playerName={player.Jugador} />
                           <ContractBadge
                             status={player.contractStatus}
                             monthsRemaining={player.monthsRemaining}

@@ -6,6 +6,7 @@ import { ThemeProvider } from './context/ThemeContext.tsx'
 import { DataProvider } from './context/DataContext.tsx'
 import { AuthProvider } from './context/AuthContext.tsx'
 import { ErrorBoundary } from './components/ErrorBoundary.tsx'
+import { ScoutsGGProvider } from './context/ScoutsGGContext.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -13,7 +14,9 @@ createRoot(document.getElementById('root')!).render(
       <ThemeProvider>
         <AuthProvider>
           <DataProvider>
-            <App />
+            <ScoutsGGProvider>
+              <App />
+            </ScoutsGGProvider>
           </DataProvider>
         </AuthProvider>
       </ThemeProvider>

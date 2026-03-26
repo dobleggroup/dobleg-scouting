@@ -174,12 +174,24 @@ function rankNormalize(value: number, sortedAsc: number[]): number {
   const N = sortedAsc.length
   if (N <= 1) return 50
 
-  let below = 0
-  let equal = 0
-  for (const v of sortedAsc) {
-    if (v < value) below++
-    else if (v === value) equal++
+  // Binary search for first index >= value (lowerBound)
+  let lo = 0, hi = N
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1
+    if (sortedAsc[mid] < value) lo = mid + 1
+    else hi = mid
   }
+  const below = lo
+
+  // Binary search for first index > value (upperBound)
+  let lo2 = lo, hi2 = N
+  while (lo2 < hi2) {
+    const mid = (lo2 + hi2) >>> 1
+    if (sortedAsc[mid] <= value) lo2 = mid + 1
+    else hi2 = mid
+  }
+  const equal = lo2 - lo
+
   // Midpoint rank — treats all ties symmetrically
   const rank = below + (equal - 1) / 2
   return Math.max(0, Math.min(100, (rank / (N - 1)) * 100))

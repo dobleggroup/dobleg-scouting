@@ -43,7 +43,30 @@ function resolveAliases(rows: RawRow[]): RawRow[] {
   })
 }
 
+const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutos
+
+function parseCSVText(text: string): RawRow[] {
+  const result = Papa.parse<RawRow>(text, {
+    header: true,
+    skipEmptyLines: true,
+    transformHeader: (h) => h.trim(),
+  })
+  return result.data.map(trimHeaders)
+}
+
 async function fetchCSV(url: string): Promise<RawRow[]> {
+  // Intentar desde caché primero
+  const cacheKey = 'csv_' + url.slice(-60)
+  try {
+    const cached = sessionStorage.getItem(cacheKey)
+    if (cached) {
+      const { text, ts } = JSON.parse(cached) as { text: string; ts: number }
+      if (Date.now() - ts < CACHE_TTL_MS) {
+        return parseCSVText(text)
+      }
+    }
+  } catch { /* ignorar errores de caché */ }
+
   try {
     const response = await fetch(url)
     if (!response.ok) {
@@ -51,12 +74,10 @@ async function fetchCSV(url: string): Promise<RawRow[]> {
       return []
     }
     const text = await response.text()
-    const result = Papa.parse<RawRow>(text, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (h) => h.trim(),
-    })
-    return result.data.map(trimHeaders)
+    try {
+      sessionStorage.setItem(cacheKey, JSON.stringify({ text, ts: Date.now() }))
+    } catch { /* sessionStorage lleno, ignorar */ }
+    return parseCSVText(text)
   } catch (error) {
     console.warn(`Failed to load CSV: ${url}`, error)
     return []
