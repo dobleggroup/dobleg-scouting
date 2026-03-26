@@ -8,6 +8,14 @@ import type {
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
+// Normaliza nombres de liga con caracteres corruptos del Sheet
+// El símbolo ° (U+00B0) a veces se corrompe en la exportación CSV de Google Sheets
+function normalizeLiga(liga: string): string {
+  if (!liga) return liga
+  // Reemplaza caracteres no alfanuméricos/no-espacios entre un dígito y un espacio (ej: "2◆◆ Argentina" → "2° Argentina")
+  return liga.replace(/(\d)[^\w\s]+(\s)/g, '$1°$2').trim()
+}
+
 function trimHeaders(row: RawRow): RawRow {
   const trimmed: RawRow = {}
   for (const [key, value] of Object.entries(row)) {
@@ -134,7 +142,7 @@ export async function loadAllData(): Promise<AllRawData> {
       Jugador: r['Jugador'] ?? '',
       'Nombre jugador': r['Nombre jugador'] ?? '',
       Club: r['Club'] ?? '',
-      Liga: r['Liga'] ?? '',
+      Liga: normalizeLiga(r['Liga'] ?? ''),
       Nacionalidad: r['Nacionalidad'] ?? '',
       'Fecha de nacimiento': r['Fecha de nacimiento'] ?? '',
       Edad: r['Edad'] ?? '',
@@ -154,7 +162,7 @@ export async function loadAllData(): Promise<AllRawData> {
       const player: SeguimientoMetricsPlayer = {
         Jugador: r['Jugador'] ?? '',
         Equipo: r['Equipo'] ?? '',
-        Liga: r['Liga'] ?? '',
+        Liga: normalizeLiga(r['Liga'] ?? ''),
         'Posición': r['Posición'] ?? r['Posición específica'] ?? '',
         'Posición específica': r['Posición específica'] ?? '',
         Edad: r['Edad'] ?? '',
@@ -176,7 +184,7 @@ export async function loadAllData(): Promise<AllRawData> {
     .map(r => {
       const obj: NormalizedPlayer = {
         Jugador: r['Jugador'] ?? '',
-        Liga: r['Liga'] ?? '',
+        Liga: normalizeLiga(r['Liga'] ?? ''),
         Equipo: r['Equipo'] ?? '',
         'Posición': r['Posición'] ?? '',
         'Posición específica': r['Posición específica'] ?? '',
@@ -248,7 +256,7 @@ export async function loadAllData(): Promise<AllRawData> {
     .map(r => ({
       Jugador: r['Jugador'] ?? '',
       Equipo: r['Equipo'] ?? r['equipo_csv'] ?? '',
-      Liga: r['Liga'] ?? r['liga_csv'] ?? '',
+      Liga: normalizeLiga(r['Liga'] ?? r['liga_csv'] ?? ''),
       nombre_tm: r['nombre_tm'] ?? '',
       equipo_csv: r['equipo_csv'] ?? '',
       liga_csv: r['liga_csv'] ?? '',
@@ -269,7 +277,7 @@ export async function loadAllData(): Promise<AllRawData> {
       'Fecha fin de contrato': r['Fecha fin de contrato'] ?? '',
       'Valor de mercado': r['Valor de mercado'] ?? '',
       Equipo: r['Equipo'] ?? '',
-      Liga: r['Liga'] ?? '',
+      Liga: normalizeLiga(r['Liga'] ?? ''),
       Posición: r['Posición'] ?? '',
       Transfermkt: r['Transfermkt'] ?? '',
     }))
