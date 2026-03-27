@@ -12,6 +12,7 @@ import AuthModal from '@/components/auth/AuthModal'
 import { SELECTABLE_METRICS } from '@/components/filters/FilterSidebar'
 import { FILTER_POSITION_MAP } from '@/constants/scoring'
 import { playerNamesMatch } from '@/utils/nameUtils'
+import { fuzzyMatch } from '@/lib/search'
 // ScoreEvolutionMini removed - now showing status history instead
 import type { MonitoringPlayer, ManagementStatus, ScoutPlayer, ScoutPlayerStatusRecord, DatosTrackingStatus } from '@/types'
 import AddPlayerModal from '@/components/tracking/AddPlayerModal'
@@ -479,11 +480,10 @@ export default function MonitoringPage() {
     let result = monitoring.filter(p => {
       // Text search
       if (search) {
-        const s = search.toLowerCase()
         if (
-          !p.Jugador.toLowerCase().includes(s) &&
-          !p['Nombre jugador'].toLowerCase().includes(s) &&
-          !(p.Club?.toLowerCase().includes(s))
+          !fuzzyMatch(search, p.Jugador) &&
+          !fuzzyMatch(search, p['Nombre jugador'] || '') &&
+          !fuzzyMatch(search, p.Club || '')
         ) return false
       }
       // Position filter

@@ -125,6 +125,14 @@ export default function PortfolioValueChart({ data, players, onPlayerClick }: Po
     return Array.from(playerData.keys())
   }, [playerData])
 
+  // Sum of current market values for players WITHOUT history entries (fills gap vs KPI)
+  const playersWithoutHistoryValue = useMemo(() => {
+    const namesWithHistory = new Set(Array.from(playerData.keys()).map(n => n.trim().toLowerCase()))
+    return players
+      .filter(p => !namesWithHistory.has((p.Jugador || '').trim().toLowerCase()))
+      .reduce((sum, p) => sum + (p.marketValueRaw || 0), 0)
+  }, [playerData, players])
+
   // Calculate portfolio total over time
   const portfolioTimeline = useMemo(() => {
     // Get all unique dates
@@ -135,7 +143,9 @@ export default function PortfolioValueChart({ data, players, onPlayerClick }: Po
     // For each date, calculate cumulative portfolio value
     const timeline: { date: string; dateNum: number; total: number; [key: string]: number | string }[] = []
 
-    for (const date of allDates) {
+    for (let i = 0; i < allDates.length; i++) {
+      const date = allDates[i]
+      const isLastPoint = i === allDates.length - 1
       const point: { date: string; dateNum: number; total: number; [key: string]: number | string } = {
         date: date.toLocaleDateString('es-AR', { month: 'short', year: '2-digit' }),
         dateNum: date.getTime(),
@@ -152,11 +162,16 @@ export default function PortfolioValueChart({ data, players, onPlayerClick }: Po
         }
       }
 
+      // On the last point, add players without history so total matches the KPI
+      if (isLastPoint) {
+        point.total += playersWithoutHistoryValue
+      }
+
       timeline.push(point)
     }
 
     return timeline
-  }, [data, playerData])
+  }, [data, playerData, playersWithoutHistoryValue])
 
   // Calculate player trends and stats
   const playerStats = useMemo(() => {
@@ -217,10 +232,10 @@ export default function PortfolioValueChart({ data, players, onPlayerClick }: Po
   )
 
   // Current portfolio total
+  // Current total = sum of ALL internal players' current market value (matches KPI)
   const currentTotal = useMemo(() => {
-    if (portfolioTimeline.length === 0) return 0
-    return portfolioTimeline[portfolioTimeline.length - 1].total
-  }, [portfolioTimeline])
+    return players.reduce((sum, p) => sum + (p.marketValueRaw || 0), 0)
+  }, [players])
 
   // Historical portfolio total (first entry)
   const historicalTotal = useMemo(() => {

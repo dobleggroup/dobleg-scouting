@@ -8,6 +8,63 @@ import {
 import { useData } from '@/context/DataContext'
 import type { EnrichedPlayer } from '@/types'
 
+// ─── Copy-as-PNG button ───────────────────────────────────────────────────────
+
+function CopyBtn({ targetId, filename = 'grafico' }: { targetId: string; filename?: string }) {
+  const [st, setSt] = useState<'idle' | 'busy' | 'done'>('idle')
+
+  async function handle() {
+    const el = document.getElementById(targetId)
+    if (!el) return
+    setSt('busy')
+    try {
+      const { default: html2canvas } = await import('html2canvas')
+      const isDark = document.documentElement.classList.contains('dark')
+      const canvas = await html2canvas(el, {
+        scale: 2.5,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: isDark ? '#111111' : '#ffffff',
+        onclone: (doc) => {
+          if (isDark) doc.documentElement.classList.add('dark')
+          else doc.documentElement.classList.remove('dark')
+        },
+      })
+      canvas.toBlob(async (blob) => {
+        if (!blob) { setSt('idle'); return }
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+        } catch {
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url; a.download = `${filename}.png`; a.click()
+          URL.revokeObjectURL(url)
+        }
+        setSt('done')
+        setTimeout(() => setSt('idle'), 2200)
+      })
+    } catch { setSt('idle') }
+  }
+
+  return (
+    <button
+      onClick={handle}
+      disabled={st === 'busy'}
+      title="Copiar gráfico como PNG (para pegar en Canva u otros)"
+      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600 transition-colors disabled:opacity-40 select-none"
+    >
+      {st === 'busy' ? (
+        <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10" strokeWidth="3" strokeOpacity="0.25" /><path d="M12 2a10 10 0 0 1 10 10" strokeWidth="3" /></svg>
+      ) : st === 'done' ? (
+        <svg className="w-3 h-3 text-brand-green" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+      ) : (
+        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+      )}
+      <span>{st === 'done' ? 'Copiado' : 'Copiar PNG'}</span>
+    </button>
+  )
+}
+
 // ─── Leagues excluded from pool (no quality external data) ────────────────────
 
 function isExcludedLeague(liga: string | null | undefined): boolean {
@@ -189,6 +246,7 @@ export default function BusquedaPage() {
   const dropdownRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const [exporting, setExporting] = useState(false)
+  const [exportingCanva, setExportingCanva] = useState(false)
 
   // Cascading search filters
   const [searchLigaFilter, setSearchLigaFilter] = useState('')
@@ -199,6 +257,7 @@ export default function BusquedaPage() {
   const [sourceFilter, setSourceFilter] = useState<'todos' | 'externo' | 'interno'>('todos')
   const [ligaFilter, setLigaFilter] = useState('')
   const [samePosition, setSamePosition] = useState(true)
+  const [compareLeague2, setCompareLeague2] = useState('')
 
   // Active metrics (shared by bar + radar)
   const [activeMetrics, setActiveMetrics] = useState<string[]>([])
@@ -283,6 +342,16 @@ export default function BusquedaPage() {
     return Array.from(set).sort()
   }, [external, internal])
 
+  // Second comparison league pool
+  const pool2 = useMemo<EnrichedPlayer[]>(() => {
+    if (!selectedPlayer || !compareLeague2) return []
+    let base: EnrichedPlayer[] = [...external, ...internal].filter(p => p.Liga === compareLeague2)
+    if (samePosition) base = base.filter(p => p['Posición'] === selectedPlayer['Posición'])
+    return base.filter(p => !isExcludedLeague(p.Liga))
+  }, [selectedPlayer, compareLeague2, external, internal, samePosition])
+
+  const pool2Label = compareLeague2 || ''
+
   // ─── League score context ─────────────────────────────────────────────────────
 
   const leagueScoreContext = useMemo(() => {
@@ -360,20 +429,25 @@ export default function BusquedaPage() {
       const m = findMetric(key)
       const playerVal = getMetricValue(selectedPlayer, key)
       const poolVals = pool.map(p => getMetricValue(p, key)).filter((v): v is number => v !== null)
+      const pool2Vals = pool2.map(p => getMetricValue(p, key)).filter((v): v is number => v !== null)
       const avg = poolVals.length ? poolVals.reduce((a, b) => a + b, 0) / poolVals.length : null
-      const minV = poolVals.length ? Math.min(...poolVals) : 0
-      const maxV = poolVals.length ? Math.max(...poolVals) : 1
+      const avg2 = pool2Vals.length ? pool2Vals.reduce((a, b) => a + b, 0) / pool2Vals.length : null
+      const allVals = [...poolVals, ...pool2Vals, ...(playerVal !== null ? [playerVal] : [])]
+      const minV = allVals.length ? Math.min(...allVals) : 0
+      const maxV = allVals.length ? Math.max(...allVals) : 1
       const range = maxV - minV || 1
       const norm = (v: number | null) => v === null ? 0 : Math.max(0, Math.min(100, ((v - minV) / range) * 100))
       return {
         name: m?.label ?? key,
         jugador: norm(playerVal),
         promedio: avg !== null ? norm(avg) : 0,
+        ...(compareLeague2 && avg2 !== null ? { promedio2: norm(avg2) } : {}),
         jugadorRaw: playerVal !== null ? parseFloat(playerVal.toFixed(2)) : null,
         promedioRaw: avg !== null ? parseFloat(avg.toFixed(2)) : null,
+        promedio2Raw: avg2 !== null ? parseFloat(avg2.toFixed(2)) : null,
       }
     })
-  }, [selectedPlayer, pool, activeMetrics])
+  }, [selectedPlayer, pool, pool2, activeMetrics, compareLeague2])
 
   const barWins = barData.filter(d => (d.jugadorRaw ?? 0) > (d.promedioRaw ?? 0)).length
   const barLosses = barData.filter(d => (d.jugadorRaw ?? 0) < (d.promedioRaw ?? 0)).length
@@ -460,6 +534,7 @@ export default function BusquedaPage() {
     setQuery(c.name)
     setShowDropdown(false)
     setLigaFilter(c.player.Liga || '')
+    setCompareLeague2('')
     setSourceFilter('todos')
     setSamePosition(true)
     const posDefaults = POSITION_DEFAULT_METRICS[c.player['Posición']]
@@ -489,37 +564,111 @@ export default function BusquedaPage() {
   function removeScatterMetric(idx: number) { setScatterMetrics(prev => prev.filter((_, i) => i !== idx)) }
   function updateScatterMetric(idx: number, key: string) { setScatterMetrics(prev => prev.map((k, i) => i === idx ? key : k)) }
 
-  // ─── PDF export ───────────────────────────────────────────────────────────────
+  // ─── PDF export (react-pdf) ───────────────────────────────────────────────────
 
   async function exportToPDF() {
-    if (!contentRef.current || !selectedPlayer) return
+    if (!selectedPlayer) return
     setExporting(true)
     try {
-      const html2canvas = (await import('html2canvas')).default
-      const { jsPDF } = await import('jspdf')
-      const el = contentRef.current
-      const canvas = await html2canvas(el, {
-        scale: 1.8,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        width: el.offsetWidth,
-        height: el.scrollHeight,
-        windowWidth: el.offsetWidth,
-        windowHeight: el.scrollHeight,
-      })
-      const pdf = new jsPDF('p', 'mm', 'a4')
-      const pdfW = pdf.internal.pageSize.getWidth()
-      const pdfH = pdf.internal.pageSize.getHeight()
-      const imgH = (canvas.height * pdfW) / canvas.width
-      const imgData = canvas.toDataURL('image/jpeg', 0.88)
-      let left = imgH, pos = 0
-      pdf.addImage(imgData, 'JPEG', 0, pos, pdfW, imgH)
-      left -= pdfH
-      while (left > 0) { pos -= pdfH; pdf.addPage(); pdf.addImage(imgData, 'JPEG', 0, pos, pdfW, imgH); left -= pdfH }
-      pdf.save(`Análisis_${selectedPlayer.Jugador.replace(/\s+/g, '_')}.pdf`)
+      const [{ pdf }, pdfMod] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/pdf/AnalisisCompletoPDF'),
+      ])
+      const AnalisisCompletoPDF = pdfMod.default
+      // Build element using React.createElement to avoid JSX context issues
+      const { createElement } = await import('react')
+      const props = {
+        player: selectedPlayer,
+        barData,
+        radarData,
+        rankings,
+        conclusions,
+        poolLabel: ligaFilter || 'Pool general',
+        pool2Label: compareLeague2 || undefined,
+        leagueContext: leagueScoreContext,
+      }
+      const doc = createElement(AnalisisCompletoPDF, props)
+      const blob = await pdf(doc as Parameters<typeof pdf>[0]).toBlob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Informe_${selectedPlayer.Jugador.replace(/[^a-zA-ZáéíóúñÁÉÍÓÚÑ\s]/g, '').replace(/\s+/g, '_')}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
     } catch (e) { console.error('PDF export error:', e) }
     finally { setExporting(false) }
+  }
+
+  // ─── Canva card export ────────────────────────────────────────────────────────
+
+  async function exportInformeCanva() {
+    if (!selectedPlayer) return
+    setExportingCanva(true)
+    try {
+      const [{ default: html2canvas }, { createRoot }, { createElement }, { default: CanvaCard }] = await Promise.all([
+        import('html2canvas'),
+        import('react-dom/client'),
+        import('react'),
+        import('@/components/pdf/InformeCanvaCard'),
+      ])
+
+      // Render at full opacity so html2canvas captures correctly — removed briefly from view via z-index layering
+      const container = document.createElement('div')
+      container.style.cssText = 'position:fixed;top:0;left:0;width:1120px;height:630px;z-index:99999;pointer-events:none;'
+      document.body.appendChild(container)
+
+      const root = createRoot(container)
+      root.render(createElement(CanvaCard, {
+        player: selectedPlayer,
+        barData,
+        poolLabel: ligaFilter || 'Pool general',
+        pool2Label: compareLeague2 || undefined,
+        leagueContext: leagueScoreContext,
+      }))
+
+      // Let React paint fully
+      await new Promise(r => setTimeout(r, 200))
+
+      const canvas = await html2canvas(container, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#0f0f11',
+        width: 1120,
+        height: 630,
+      })
+
+      root.unmount()
+      document.body.removeChild(container)
+
+      const baseName = `Informe_Canva_${selectedPlayer.Jugador.replace(/[^a-zA-ZáéíóúñÁÉÍÓÚÑ\s]/g, '').replace(/\s+/g, '_')}`
+      const dataUrl = canvas.toDataURL('image/png')
+
+      // 1. Copy PNG to clipboard
+      const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/png'))
+      if (blob) {
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+        } catch { /* clipboard blocked — no problem, we still download */ }
+
+        // Download PNG
+        const pngUrl = URL.createObjectURL(blob)
+        const pngLink = document.createElement('a')
+        pngLink.href = pngUrl; pngLink.download = `${baseName}.png`; pngLink.click()
+        URL.revokeObjectURL(pngUrl)
+      }
+
+      // 2. Download PDF with the card image embedded
+      const { jsPDF } = await import('jspdf')
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [1120, 630], hotfixes: ['px_scaling'] })
+      pdf.addImage(dataUrl, 'PNG', 0, 0, 1120, 630)
+      pdf.save(`${baseName}.pdf`)
+
+      setExportingCanva(false)
+    } catch (e) {
+      console.error('Canva export error:', e)
+      setExportingCanva(false)
+    }
   }
 
   // ─── Click outside ────────────────────────────────────────────────────────────
@@ -562,20 +711,39 @@ export default function BusquedaPage() {
           </p>
         </div>
         {selectedPlayer && (
-          <button
-            onClick={exportToPDF}
-            disabled={exporting}
-            className="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-700 dark:text-apple-gray-200 text-sm font-medium hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {exporting ? (
-              <div className="w-4 h-4 border-2 border-apple-gray-400 border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            )}
-            {exporting ? 'Generando...' : 'Exportar PDF'}
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Canva card export */}
+            <button
+              onClick={exportInformeCanva}
+              disabled={exportingCanva}
+              title="Genera una imagen PNG estilo informe para pegar en Canva"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-green/10 border border-brand-green/30 text-brand-green text-sm font-medium hover:bg-brand-green/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exportingCanva ? (
+                <div className="w-4 h-4 border-2 border-brand-green border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              )}
+              {exportingCanva ? 'Generando...' : 'Copiar informe Canva'}
+            </button>
+            {/* PDF export */}
+            <button
+              onClick={exportToPDF}
+              disabled={exporting}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-700 dark:text-apple-gray-200 text-sm font-medium hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exporting ? (
+                <div className="w-4 h-4 border-2 border-apple-gray-400 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              )}
+              {exporting ? 'Generando...' : 'Exportar PDF'}
+            </button>
+          </div>
         )}
       </div>
 
@@ -727,28 +895,52 @@ export default function BusquedaPage() {
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs text-apple-gray-500 dark:text-apple-gray-400">Liga</label>
+                  <label className="text-xs text-apple-gray-500 dark:text-apple-gray-400">Liga principal</label>
                   <select value={ligaFilter} onChange={e => setLigaFilter(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs border border-apple-gray-200 dark:border-apple-gray-700 bg-white dark:bg-apple-gray-800 text-apple-gray-700 dark:text-apple-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green">
                     <option value="">Todas las ligas</option>
                     {availableLeagues.map(l => <option key={l} value={l}>{l}</option>)}
                   </select>
                 </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-apple-gray-500 dark:text-apple-gray-400">
+                    Comparar también vs
+                    <span className="ml-1 text-blue-400 dark:text-blue-400">(2ª liga)</span>
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <select
+                      value={compareLeague2}
+                      onChange={e => setCompareLeague2(e.target.value)}
+                      className="px-3 py-1.5 rounded-lg text-xs border border-apple-gray-200 dark:border-apple-gray-700 bg-white dark:bg-apple-gray-800 text-apple-gray-700 dark:text-apple-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400/40 focus:border-blue-400"
+                    >
+                      <option value="">Sin comparación extra</option>
+                      {availableLeagues.filter(l => l !== ligaFilter).map(l => <option key={l} value={l}>{l}</option>)}
+                    </select>
+                    {compareLeague2 && (
+                      <button onClick={() => setCompareLeague2('')} className="text-apple-gray-400 hover:text-apple-gray-600 dark:hover:text-apple-gray-200 transition-colors p-1">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={samePosition} onChange={e => setSamePosition(e.target.checked)} className="w-4 h-4 rounded border-apple-gray-300 text-brand-green focus:ring-brand-green" />
                   <span className="text-xs text-apple-gray-700 dark:text-apple-gray-300">Solo misma posición</span>
                 </label>
-                <div className="ml-auto text-xs text-apple-gray-400 dark:text-apple-gray-500">
-                  {pool.length} jugadores en el pool
-                  {smartMinutes > 0 && <span className="ml-1 text-brand-green/70"> · mín. {smartMinutes}' jugados</span>}
+                <div className="ml-auto text-xs text-apple-gray-400 dark:text-apple-gray-500 text-right">
+                  <div>{pool.length} jugadores en pool{smartMinutes > 0 && <span className="ml-1 text-brand-green/70"> · mín. {smartMinutes}'</span>}</div>
+                  {compareLeague2 && <div className="text-blue-400 dark:text-blue-400 mt-0.5">{pool2.length} en {compareLeague2}</div>}
                 </div>
               </div>
             </div>
 
             {/* Rankings */}
-            <div className="mt-6 bg-white dark:bg-apple-gray-800 rounded-2xl border border-apple-gray-200 dark:border-apple-gray-700 p-6 shadow-sm">
-              <div className="flex items-baseline gap-2 mb-1">
-                <h2 className="text-base font-semibold text-apple-gray-900 dark:text-white">Posicionamiento en el grupo</h2>
-                <span className="text-xs text-apple-gray-400 dark:text-apple-gray-500">entre {rankingPool.length} jugadores</span>
+            <div id="chart-rankings-section" className="mt-6 bg-white dark:bg-apple-gray-800 rounded-2xl border border-apple-gray-200 dark:border-apple-gray-700 p-6 shadow-sm">
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <div className="flex items-baseline gap-2">
+                  <h2 className="text-base font-semibold text-apple-gray-900 dark:text-white">Posicionamiento en el grupo</h2>
+                  <span className="text-xs text-apple-gray-400 dark:text-apple-gray-500">entre {rankingPool.length} jugadores</span>
+                </div>
+                <CopyBtn targetId="chart-rankings-section" filename={`rankings_${selectedPlayer.Jugador.replace(/\s+/g,'_')}`} />
               </div>
               <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400 mb-5">
                 Métricas donde {selectedPlayer.Jugador} se ubica en los primeros puestos. Incluye su valor real y el promedio del grupo.
@@ -854,8 +1046,11 @@ export default function BusquedaPage() {
                 <>
                   {/* Radar */}
                   {activeMetrics.length >= 3 && (
-                    <div className="mb-10">
-                      <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-200 mb-1">Radar vs promedio</h3>
+                    <div className="mb-10" id="chart-radar-section">
+                      <div className="flex items-center justify-between mb-1">
+                        <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-200">Radar vs promedio</h3>
+                        <CopyBtn targetId="chart-radar-section" filename={`radar_${selectedPlayer.Jugador.replace(/\s+/g,'_')}`} />
+                      </div>
                       <div className="flex items-center gap-5 mb-4">
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full bg-brand-green" />
@@ -863,7 +1058,9 @@ export default function BusquedaPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <svg width="24" height="8"><line x1="0" y1="4" x2="24" y2="4" stroke="#94A3B8" strokeWidth="2.5" strokeDasharray="5 4" /></svg>
-                          <span className="text-sm text-apple-gray-500 dark:text-apple-gray-400">Promedio del grupo</span>
+                          <span className="text-sm text-apple-gray-500 dark:text-apple-gray-400">
+                            Promedio {ligaFilter || 'del grupo'}
+                          </span>
                         </div>
                       </div>
                       <div style={{ height: Math.max(340, activeMetrics.length * 28) }}>
@@ -872,52 +1069,73 @@ export default function BusquedaPage() {
                             <PolarGrid stroke="rgba(156,163,175,0.2)" />
                             <PolarAngleAxis dataKey="subject" tick={{ fontSize: 11, fill: 'currentColor', fontWeight: 500 }} />
                             <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
-                            {/* Player first (green fill underneath) */}
                             <Radar name={selectedPlayer.Jugador} dataKey="jugador" stroke="#22C55E" strokeWidth={2.5} fill="#22C55E" fillOpacity={0.22} />
-                            {/* Promedio on top — prominent dashed line, no fill */}
                             <Radar name="Promedio" dataKey="promedio" stroke="#94A3B8" strokeWidth={3} strokeDasharray="6 4" fill="#94A3B8" fillOpacity={0.06} />
                           </RadarChart>
                         </ResponsiveContainer>
                       </div>
                       <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mt-2 text-center">
-                        Cada eje es una métrica normalizada 0-100 dentro del grupo. Área verde = jugador analizado. Línea punteada gris = promedio.
+                        Cada eje normalizado 0-100. Verde = jugador · Punteado gris = promedio {ligaFilter || 'del grupo'}.
                       </p>
                     </div>
                   )}
 
                   {/* Bar chart */}
-                  <div>
-                    <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-200 mb-1">Barras comparativas</h3>
-                    <div className="flex items-center gap-5 mb-4">
-                      <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-brand-green" /><span className="text-sm text-apple-gray-600 dark:text-apple-gray-300">{selectedPlayer.Jugador}</span></div>
-                      <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-apple-gray-400/50" /><span className="text-sm text-apple-gray-500 dark:text-apple-gray-400">Promedio del grupo</span></div>
+                  <div id="chart-bars-section">
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-200">Barras comparativas</h3>
+                      <CopyBtn targetId="chart-bars-section" filename={`barras_${selectedPlayer.Jugador.replace(/\s+/g,'_')}`} />
                     </div>
-                    <div style={{ height: Math.max(300, activeMetrics.length * 68) }}>
+                    <div className="flex items-center gap-4 mb-4 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded bg-brand-green" />
+                        <span className="text-sm text-apple-gray-600 dark:text-apple-gray-300">{selectedPlayer.Jugador}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded bg-apple-gray-400/50" />
+                        <span className="text-sm text-apple-gray-500 dark:text-apple-gray-400">{ligaFilter || 'Pool general'}</span>
+                      </div>
+                      {compareLeague2 && (
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded bg-blue-400/60" />
+                          <span className="text-sm text-blue-500 dark:text-blue-400">{compareLeague2}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ height: Math.max(240, activeMetrics.length * (compareLeague2 ? 65 : 50)) }}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={barData} layout="vertical" margin={{ top: 4, right: 70, left: 10, bottom: 4 }}>
+                        <BarChart data={barData} layout="vertical" margin={{ top: 4, right: 90, left: 10, bottom: 4 }}>
                           <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(156,163,175,0.1)" />
                           <XAxis type="number" domain={[0, 100]} tick={false} axisLine={false} tickLine={false} />
-                          <YAxis type="category" dataKey="name" tick={{ fontSize: 13, fontWeight: 500 }} width={200} />
+                          <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fontWeight: 500 }} width={210} />
                           <Tooltip
                             cursor={{ fill: 'rgba(0,0,0,0.03)' }}
                             content={({ active, payload }) => {
                               if (!active || !payload?.length) return null
-                              const d = payload[0]?.payload as { name: string; jugadorRaw: number | null; promedioRaw: number | null }
+                              const d = payload[0]?.payload as { name: string; jugadorRaw: number | null; promedioRaw: number | null; promedio2Raw?: number | null }
                               return (
                                 <div className="bg-white dark:bg-apple-gray-800 border border-apple-gray-200 dark:border-apple-gray-700 rounded-lg px-3 py-2.5 shadow-lg text-sm">
                                   <p className="font-semibold text-apple-gray-700 dark:text-apple-gray-200 mb-1.5">{d.name}</p>
                                   <p className="text-brand-green font-medium">{selectedPlayer.Jugador}: <strong>{d.jugadorRaw?.toFixed(2) ?? '—'}</strong></p>
-                                  <p className="text-apple-gray-500 dark:text-apple-gray-400">Promedio: <strong>{d.promedioRaw?.toFixed(2) ?? '—'}</strong></p>
+                                  <p className="text-apple-gray-500 dark:text-apple-gray-400">{ligaFilter || 'Pool'}: <strong>{d.promedioRaw?.toFixed(2) ?? '—'}</strong></p>
+                                  {compareLeague2 && d.promedio2Raw != null && (
+                                    <p className="text-blue-500 dark:text-blue-400">{compareLeague2}: <strong>{d.promedio2Raw.toFixed(2)}</strong></p>
+                                  )}
                                 </div>
                               )
                             }}
                           />
-                          <Bar dataKey="jugador" name={selectedPlayer.Jugador} fill="#22C55E" radius={[0, 5, 5, 0]} barSize={14}>
-                            <LabelList dataKey="jugadorRaw" position="right" formatter={(v: number | null) => v?.toFixed(2) ?? ''} style={{ fontSize: 12, fill: '#22C55E', fontWeight: 700 }} />
+                          <Bar dataKey="jugador" name={selectedPlayer.Jugador} fill="#22C55E" radius={[0, 5, 5, 0]} barSize={9}>
+                            <LabelList dataKey="jugadorRaw" position="right" formatter={(v: number | null) => v?.toFixed(2) ?? ''} style={{ fontSize: 11, fill: '#22C55E', fontWeight: 700 }} />
                           </Bar>
-                          <Bar dataKey="promedio" name="Promedio" fill="rgba(156,163,175,0.4)" radius={[0, 5, 5, 0]} barSize={14}>
-                            <LabelList dataKey="promedioRaw" position="right" formatter={(v: number | null) => v?.toFixed(2) ?? ''} style={{ fontSize: 11, fill: '#9CA3AF' }} />
+                          <Bar dataKey="promedio" name={ligaFilter || 'Promedio'} fill="rgba(156,163,175,0.4)" radius={[0, 5, 5, 0]} barSize={9}>
+                            <LabelList dataKey="promedioRaw" position="right" formatter={(v: number | null) => v?.toFixed(2) ?? ''} style={{ fontSize: 10, fill: '#9CA3AF' }} />
                           </Bar>
+                          {compareLeague2 && (
+                            <Bar dataKey="promedio2" name={compareLeague2} fill="rgba(59,130,246,0.45)" radius={[0, 5, 5, 0]} barSize={9}>
+                              <LabelList dataKey="promedio2Raw" position="right" formatter={(v: number | null) => v?.toFixed(2) ?? ''} style={{ fontSize: 10, fill: '#60A5FA' }} />
+                            </Bar>
+                          )}
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -937,7 +1155,7 @@ export default function BusquedaPage() {
                       </div>
                     )}
                     <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mt-3">
-                      Las barras están normalizadas (0–100) dentro del grupo para comparación visual. El número a la derecha es el valor real.
+                      Barras normalizadas (0–100) para comparación visual. Número a la derecha = valor real.
                     </p>
                   </div>
                 </>
@@ -973,10 +1191,11 @@ export default function BusquedaPage() {
                   const { poolPoints, playerPoint } = buildScatterData(metricKey)
                   const allX = [...poolPoints.map(p => p.x), ...(playerPoint ? [playerPoint.x] : [])]
                   const avgX = allX.length ? allX.reduce((a, b) => a + b, 0) / allX.length : 0
+                  const scatterId = `chart-scatter-${idx}`
 
                   return (
-                    <div key={idx} className="border border-apple-gray-100 dark:border-apple-gray-700 rounded-xl p-4">
-                      <div className="flex items-center gap-3 mb-3">
+                    <div key={idx} id={scatterId} className="border border-apple-gray-100 dark:border-apple-gray-700 rounded-xl p-4">
+                      <div className="flex items-center gap-2 mb-3">
                         <select
                           value={metricKey}
                           onChange={e => updateScatterMetric(idx, e.target.value)}
@@ -988,6 +1207,7 @@ export default function BusquedaPage() {
                             </optgroup>
                           ))}
                         </select>
+                        <CopyBtn targetId={scatterId} filename={`dispersion_${metricMeta?.label?.replace(/\s+/g,'_') ?? idx}`} />
                         <button onClick={() => removeScatterMetric(idx)} className="px-3 py-1.5 rounded-lg text-xs text-apple-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
                           Quitar
                         </button>
@@ -1155,6 +1375,7 @@ export default function BusquedaPage() {
           </p>
         </div>
       )}
+
     </div>
   )
 }

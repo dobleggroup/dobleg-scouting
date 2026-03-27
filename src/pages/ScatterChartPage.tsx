@@ -1,4 +1,5 @@
 import { useMemo, useState, useRef } from 'react'
+import CopyChartButton from '@/components/ui/CopyChartButton'
 import { useNavigate } from 'react-router-dom'
 import { useData } from '@/context/DataContext'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -7,6 +8,7 @@ import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import AddToReportButton from '@/components/pdf/AddToReportButton'
 import ScoutsGGBadge from '@/components/ui/ScoutsGGBadge'
+import { smartSearch } from '@/lib/search'
 import type { EnrichedPlayer } from '@/types'
 
 // Color interpolation from red (bad) to yellow (medium) to green (good)
@@ -322,11 +324,8 @@ export default function ScatterChartPage() {
 
   // Search results for autocomplete
   const searchResults = useMemo(() => {
-    if (!searchTerm.trim() || searchTerm.length < 2) return []
-    const term = searchTerm.toLowerCase()
-    return allPlayers
-      .filter(p => p.Jugador.toLowerCase().includes(term) || p.Equipo?.toLowerCase().includes(term))
-      .slice(0, 8)
+    if (!searchTerm.trim()) return []
+    return smartSearch(allPlayers, searchTerm, p => `${p.Jugador} ${p.Equipo || ''}`, 8)
   }, [allPlayers, searchTerm])
 
   // Filter and prepare data
@@ -529,6 +528,7 @@ export default function ScatterChartPage() {
             variant="compact"
             players={chartData.filter(d => selectedPlayers.has(d.id)).map(d => d.name)}
           />
+          <CopyChartButton targetId="scatter-chart-container" filename="dispersion" />
           <button
             onClick={exportToPDF}
             disabled={exporting || chartData.length === 0}

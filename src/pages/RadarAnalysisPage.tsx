@@ -6,6 +6,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { RADAR_METRICS as POSITION_RADAR_METRICS, METRIC_ABBREVIATIONS, sortLeaguesByPriority } from '@/constants/scoring'
 import { smartSearch } from '@/lib/search'
 import AddToReportButton from '@/components/pdf/AddToReportButton'
+import CopyChartButton from '@/components/ui/CopyChartButton'
 import type { EnrichedPlayer } from '@/types'
 
 // Metrics organized by category for dropdown
@@ -701,15 +702,18 @@ export default function RadarAnalysisPage() {
                 Comparacion Radar
               </h3>
               {selectedPlayers.length > 0 && (
-                <AddToReportButton
-                  type="detector"
-                  title={`Detector: ${selectedPlayers.map(p => p.Jugador).join(' vs ')}`}
-                  description={`Comparacion radar de ${selectedPlayers.length} jugadores en ${selectedMetrics.length} metricas.`}
-                  captureId="radar-detector-container"
-                  source="Detector de Talentos"
-                  variant="compact"
-                  players={selectedPlayers.map(p => p.Jugador)}
-                />
+                <div className="flex items-center gap-2">
+                  <CopyChartButton targetId="radar-detector-container" filename={`radar_${selectedPlayers.map(p => p.Jugador.split(' ')[0]).join('_vs_')}`} />
+                  <AddToReportButton
+                    type="detector"
+                    title={`Detector: ${selectedPlayers.map(p => p.Jugador).join(' vs ')}`}
+                    description={`Comparacion radar de ${selectedPlayers.length} jugadores en ${selectedMetrics.length} metricas.`}
+                    captureId="radar-detector-container"
+                    source="Detector de Talentos"
+                    variant="compact"
+                    players={selectedPlayers.map(p => p.Jugador)}
+                  />
+                </div>
               )}
             </div>
 

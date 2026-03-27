@@ -1,0 +1,305 @@
+Jugador,ID TM,Fecha,Valor (€),Equipo,Edad
+A. Massaccesi,1221014,04/12/2023,10000,Instituto ACC II,21
+A. Massaccesi,1221014,26/06/2024,100000,CA Defensores de Belgrano,21
+A. Massaccesi,1221014,29/11/2024,150000,CA Defensores de Belgrano,22
+A. Massaccesi,1221014,22/05/2025,225000,CA Defensores de Belgrano,22
+A. Massaccesi,1221014,26/11/2025,250000,CA Defensores de Belgrano,23
+A. Mulet,843537,08/02/2021,250000,CA Vélez Sarsfield,20
+A. Mulet,843537,11/06/2021,1100000,CA Vélez Sarsfield,21
+A. Mulet,843537,20/10/2021,1000000,CA Vélez Sarsfield,21
+A. Mulet,843537,24/05/2022,800000,CA Vélez Sarsfield,22
+A. Mulet,843537,06/09/2022,600000,CA Vélez Sarsfield,22
+A. Mulet,843537,26/10/2022,600000,CA Vélez Sarsfield,22
+A. Mulet,843537,04/07/2023,600000,CA Independiente,23
+A. Mulet,843537,19/12/2023,450000,CA Independiente,23
+A. Mulet,843537,13/06/2024,400000,CD Cobreloa,24
+A. Mulet,843537,13/12/2024,300000,CS Independiente Rivadavia,24
+A. Mulet,843537,10/06/2025,300000,CA Cerro,25
+A. Mulet,843537,28/11/2025,300000,CD Olimpia,25
+A. Steimbach,1046802,06/09/2022,25000,Club de Gimnasia y Esgrima La Plata,20
+A. Steimbach,1046802,26/10/2022,125000,Club de Gimnasia y Esgrima La Plata,20
+A. Steimbach,1046802,04/07/2023,325000,Club de Gimnasia y Esgrima La Plata,20
+A. Steimbach,1046802,19/12/2023,250000,Club de Gimnasia y Esgrima La Plata,21
+A. Steimbach,1046802,26/06/2024,200000,CSD Tristan Suarez,21
+A. Steimbach,1046802,29/11/2024,225000,CSD Tristan Suarez,22
+A. Steimbach,1046802,22/05/2025,200000,CSD Tristan Suarez,22
+A. Steimbach,1046802,26/11/2025,300000,CSD Tristan Suarez,23
+A. Steimbach,1046802,18/03/2026,1000000,Club de Gimnasia y Esgrima La Plata,23
+B. Centeno,1001697,02/06/2022,25000,,17
+B. Centeno,1001697,10/07/2023,50000,Club Deportivo Maldonado,18
+B. Centeno,1001697,28/12/2023,250000,Club Deportivo Maldonado,18
+B. Centeno,1001697,10/06/2024,200000,Club Deportivo Maldonado,19
+B. Centeno,1001697,19/12/2024,200000,Club Deportivo Maldonado,19
+B. Centeno,1001697,30/06/2025,125000,Club Deportivo Maldonado,20
+B. Centeno,1001697,12/12/2025,50000,Club Deportivo Maldonado,20
+C. Bravo,441408,08/08/2016,50000,CA Banfield II,19
+C. Bravo,441408,09/10/2017,100000,CA Banfield,20
+C. Bravo,441408,08/05/2018,300000,CA Banfield,21
+C. Bravo,441408,18/12/2018,600000,CA Banfield,21
+C. Bravo,441408,06/08/2019,2500000,CA Banfield,22
+C. Bravo,441408,05/12/2019,3000000,CA Banfield,22
+C. Bravo,441408,08/04/2020,2400000,CA Banfield,23
+C. Bravo,441408,16/04/2021,2000000,Portland Timbers,24
+C. Bravo,441408,09/07/2021,2000000,Portland Timbers,24
+C. Bravo,441408,09/11/2021,2000000,Portland Timbers,24
+C. Bravo,441408,18/08/2022,2000000,Portland Timbers,25
+C. Bravo,441408,08/11/2022,2000000,Portland Timbers,25
+C. Bravo,441408,22/08/2023,2000000,Portland Timbers,26
+C. Bravo,441408,18/12/2023,2000000,Portland Timbers,26
+C. Bravo,441408,13/06/2024,1800000,Portland Timbers,27
+C. Bravo,441408,12/12/2024,1800000,Portland Timbers,27
+C. Bravo,441408,05/06/2025,1500000,Portland Timbers,28
+C. Bravo,441408,24/09/2025,1200000,AA Argentinos Juniors,28
+C. Bravo,441408,17/12/2025,800000,AA Argentinos Juniors,28
+D. Mastrángelo,1110143,04/07/2023,200000,Club de Gimnasia y Esgrima La Plata II,20
+D. Mastrángelo,1110143,19/12/2023,100000,Club de Gimnasia y Esgrima La Plata II,21
+D. Mastrángelo,1110143,26/06/2024,125000,Club Atlético San Martín (Tucumán),21
+D. Mastrángelo,1110143,29/11/2024,150000,Club Atlético San Martín (Tucumán),22
+D. Mastrángelo,1110143,02/06/2025,100000,Club de Gimnasia y Esgrima La Plata,22
+D. Mastrángelo,1110143,17/12/2025,75000,Club de Gimnasia y Esgrima La Plata,23
+F. Lo Celso,642757,06/08/2019,250000,CA Rosario Central,19
+F. Lo Celso,642757,05/12/2019,200000,CA Rosario Central,19
+F. Lo Celso,642757,08/02/2021,350000,CA Rosario Central,20
+F. Lo Celso,642757,20/10/2021,325000,CA Rosario Central,21
+F. Lo Celso,642757,24/05/2022,275000,CA Rosario Central,22
+F. Lo Celso,642757,26/10/2022,225000,CA Rosario Central,22
+F. Lo Celso,642757,04/07/2023,200000,CA Rosario Central,23
+F. Lo Celso,642757,19/12/2023,175000,CA Rosario Central,23
+F. Lo Celso,642757,12/06/2024,125000,CA Rosario Central,24
+F. Lo Celso,642757,13/12/2024,100000,Instituto ACC,24
+F. Lo Celso,642757,02/06/2025,50000,Instituto ACC,25
+F. Lo Celso,642757,17/12/2025,25000,CA Rosario Central,25
+F. Paradela,890130,20/10/2021,175000,CA Sarmiento (Junin),20
+F. Paradela,890130,08/02/2022,375000,CA Sarmiento (Junin),20
+F. Paradela,890130,24/05/2022,350000,CA Sarmiento (Junin),20
+F. Paradela,890130,26/10/2022,300000,CA Sarmiento (Junin),21
+F. Paradela,890130,04/07/2023,250000,CA Sarmiento (Junin),22
+F. Paradela,890130,19/12/2023,175000,CA Sarmiento (Junin),22
+F. Paradela,890130,12/06/2024,125000,CA Sarmiento (Junin),22
+F. Paradela,890130,13/12/2024,75000,CA Sarmiento (Junin),23
+F. Paradela,890130,02/06/2025,75000,CA Sarmiento (Junin),23
+F. Paradela,890130,17/12/2025,75000,CA Sarmiento (Junin),24
+G. Prestianni,1000674,01/07/2022,50000,CA Vélez Sarsfield II,16
+G. Prestianni,1000674,26/10/2022,2000000,CA Vélez Sarsfield II,16
+G. Prestianni,1000674,05/04/2023,5000000,CA Vélez Sarsfield,17
+G. Prestianni,1000674,04/07/2023,5000000,CA Vélez Sarsfield,17
+G. Prestianni,1000674,19/12/2023,10000000,CA Vélez Sarsfield,17
+G. Prestianni,1000674,06/06/2024,10000000,SL Benfica,18
+G. Prestianni,1000674,19/12/2024,10000000,SL Benfica,18
+G. Prestianni,1000674,31/03/2025,8000000,SL Benfica,19
+G. Prestianni,1000674,30/05/2025,8000000,SL Benfica,19
+G. Prestianni,1000674,18/12/2025,12000000,SL Benfica,19
+Gonzalo González,1029299,06/09/2022,25000,Club de Gimnasia y Esgrima La Plata II,19
+Gonzalo González,1029299,26/10/2022,50000,Club de Gimnasia y Esgrima La Plata II,19
+Gonzalo González,1029299,04/07/2023,50000,Club de Gimnasia y Esgrima La Plata II,20
+Gonzalo González,1029299,19/12/2023,50000,Club de Gimnasia y Esgrima La Plata II,20
+Gonzalo González,1029299,12/06/2024,25000,Club de Gimnasia y Esgrima La Plata II,21
+I. Erquiaga,579977,18/12/2018,750000,Club Estudiantes de La Plata,19
+I. Erquiaga,579977,06/08/2019,800000,Club Estudiantes de La Plata,20
+I. Erquiaga,579977,05/12/2019,800000,Club Estudiantes de La Plata,20
+I. Erquiaga,579977,08/04/2020,725000,Club Estudiantes de La Plata,21
+I. Erquiaga,579977,08/02/2021,750000,Club Estudiantes de La Plata,21
+I. Erquiaga,579977,20/10/2021,400000,CA Huracán,22
+I. Erquiaga,579977,05/07/2022,350000,Quilmes AC,23
+I. Erquiaga,579977,16/12/2022,275000,Quilmes AC,23
+I. Erquiaga,579977,17/07/2023,275000,Quilmes AC,24
+I. Erquiaga,579977,04/12/2023,250000,Quilmes AC,24
+I. Erquiaga,579977,17/05/2024,350000,Riga FC,25
+I. Erquiaga,579977,11/11/2024,375000,Riga FC,25
+I. Erquiaga,579977,13/06/2025,400000,Riga FC,26
+I. Erquiaga,579977,10/11/2025,250000,FK Auda,26
+J. Díaz,535028,08/04/2020,25000,Club Estudiantes de La Plata II,21
+J. Díaz,535028,17/05/2021,25000,CA Agropecuario,22
+J. Díaz,535028,22/12/2021,100000,CA Agropecuario,23
+J. Díaz,535028,24/05/2022,100000,CA Barracas Central,23
+J. Díaz,535028,26/10/2022,300000,CA Barracas Central,24
+J. Díaz,535028,05/04/2023,500000,CA Barracas Central,24
+J. Díaz,535028,04/07/2023,450000,CA Barracas Central,25
+J. Díaz,535028,19/12/2023,450000,CA Barracas Central,25
+J. Díaz,535028,13/06/2024,500000,CD O'Higgins,26
+J. Díaz,535028,12/11/2024,450000,CD O'Higgins,26
+J. Díaz,535028,30/06/2025,375000,CD O'Higgins,27
+J. Díaz,535028,17/09/2025,450000,CD O'Higgins,27
+J. Díaz,535028,10/12/2025,450000,CD O'Higgins,27
+J. Farías,1101427,21/05/2025,100000,Atlético FC,21
+J. Farías,1101427,16/12/2025,150000,Atlético FC,22
+J. López,625203,18/12/2018,200000,,18
+J. López,625203,05/12/2019,200000,Racing Club II,19
+J. López,625203,08/02/2021,200000,Racing Club,21
+J. López,625203,20/10/2021,250000,Racing Club,21
+J. López,625203,05/07/2022,200000,Defensa y Justicia,22
+J. López,625203,26/10/2022,500000,Defensa y Justicia,22
+J. López,625203,04/07/2023,1200000,Defensa y Justicia,23
+J. López,625203,19/12/2023,2000000,Defensa y Justicia,23
+J. López,625203,12/06/2024,2200000,Defensa y Justicia,24
+J. López,625203,13/12/2024,2000000,Defensa y Justicia,24
+J. López,625203,02/06/2025,1300000,Club Atlético Tigre,25
+J. López,625203,24/09/2025,1000000,Club Atlético Tigre,25
+J. López,625203,17/12/2025,1200000,Club Atlético Tigre,25
+J. Palacios,728262,08/02/2021,700000,CA San Lorenzo de Almagro,22
+J. Palacios,728262,20/10/2021,700000,CA San Lorenzo de Almagro,22
+J. Palacios,728262,24/05/2022,700000,CA Banfield,23
+J. Palacios,728262,06/09/2022,500000,CA Banfield,23
+J. Palacios,728262,26/10/2022,500000,CA Banfield,23
+J. Palacios,728262,07/04/2023,600000,Goiás EC,24
+J. Palacios,728262,25/07/2023,600000,Goiás EC,24
+J. Palacios,728262,11/12/2023,600000,Goiás EC,24
+J. Palacios,728262,06/03/2024,500000,Asteras Aktor,25
+J. Palacios,728262,30/05/2024,450000,Asteras Aktor,25
+J. Palacios,728262,18/12/2024,450000,Asteras Aktor,25
+J. Palacios,728262,02/06/2025,400000,CA Unión (Santa Fe),26
+J. Palacios,728262,24/09/2025,1000000,CA Unión (Santa Fe),26
+J. Palacios,728262,17/12/2025,1000000,CA Unión (Santa Fe),26
+J. Palacios,728262,18/03/2026,1500000,CA Unión (Santa Fe),27
+J. Paradela,639152,05/12/2019,500000,Club de Gimnasia y Esgrima La Plata,20
+J. Paradela,639152,08/04/2020,450000,Club de Gimnasia y Esgrima La Plata,21
+J. Paradela,639152,08/02/2021,1500000,Club de Gimnasia y Esgrima La Plata,22
+J. Paradela,639152,11/06/2021,2000000,CA River Plate,22
+J. Paradela,639152,20/10/2021,2000000,CA River Plate,22
+J. Paradela,639152,08/02/2022,1600000,CA River Plate,23
+J. Paradela,639152,24/05/2022,1300000,CA River Plate,23
+J. Paradela,639152,26/10/2022,1000000,CA River Plate,23
+J. Paradela,639152,05/04/2023,3500000,CA River Plate,24
+J. Paradela,639152,04/07/2023,3200000,CA River Plate,24
+J. Paradela,639152,04/10/2023,3000000,Club Atlético Tigre,24
+J. Paradela,639152,19/12/2023,3000000,Club Atlético Tigre,25
+J. Paradela,639152,14/06/2024,4500000,Club Necaxa,25
+J. Paradela,639152,10/10/2024,5000000,Club Necaxa,25
+J. Paradela,639152,11/12/2024,5000000,Club Necaxa,25
+J. Paradela,639152,31/03/2025,6500000,Club Necaxa,26
+J. Paradela,639152,26/05/2025,7000000,Club Necaxa,26
+J. Paradela,639152,22/09/2025,7500000,CD Cruz Azul,26
+J. Paradela,639152,29/12/2025,7000000,CD Cruz Azul,27
+J. Paradela,639152,26/03/2026,9000000,CD Cruz Azul,27
+J. Postigo,1069809,16/12/2022,10000,Quilmes Atlético Club II,19
+J. Postigo,1069809,04/12/2023,75000,Quilmes Atlético Club II,20
+J. Postigo,1069809,26/06/2024,75000,Quilmes AC,20
+J. Postigo,1069809,29/11/2024,75000,Quilmes AC,21
+J. Postigo,1069809,22/05/2025,75000,Quilmes AC,21
+J. Postigo,1069809,26/11/2025,75000,Quilmes AC,21
+L. Klimowicz,1198161,19/12/2023,25000,Instituto ACC II,19
+L. Klimowicz,1198161,24/09/2024,450000,Imbabura SC,20
+L. Klimowicz,1198161,16/12/2024,600000,Imbabura SC,20
+L. Klimowicz,1198161,02/06/2025,700000,Instituto ACC,21
+L. Klimowicz,1198161,17/12/2025,600000,Instituto ACC,21
+L. Orellano,636784,18/12/2018,75000,CA Vélez Sarsfield II,18
+L. Orellano,636784,06/08/2019,75000,CA Vélez Sarsfield,19
+L. Orellano,636784,05/12/2019,750000,CA Vélez Sarsfield,19
+L. Orellano,636784,08/04/2020,675000,CA Vélez Sarsfield,20
+L. Orellano,636784,08/02/2021,2500000,CA Vélez Sarsfield,20
+L. Orellano,636784,11/06/2021,8000000,CA Vélez Sarsfield,21
+L. Orellano,636784,20/10/2021,8000000,CA Vélez Sarsfield,21
+L. Orellano,636784,24/05/2022,8000000,CA Vélez Sarsfield,22
+L. Orellano,636784,26/10/2022,5000000,CA Vélez Sarsfield,22
+L. Orellano,636784,07/04/2023,5000000,Clube de Regatas Vasco da Gama,23
+L. Orellano,636784,25/07/2023,4500000,Clube de Regatas Vasco da Gama,23
+L. Orellano,636784,11/12/2023,4500000,Clube de Regatas Vasco da Gama,23
+L. Orellano,636784,13/06/2024,4500000,FC Cincinnati,24
+L. Orellano,636784,12/12/2024,5000000,FC Cincinnati,24
+L. Orellano,636784,17/04/2025,4500000,FC Cincinnati,25
+L. Orellano,636784,05/06/2025,4500000,FC Cincinnati,25
+L. Orellano,636784,11/12/2025,4500000,FC Cincinnati,25
+L. Orellano,636784,26/03/2026,8000000,CF Monterrey,26
+M. Enrique,742512,20/03/2020,50000,CA Vélez Sarsfield II,20
+M. Enrique,742512,08/02/2021,50000,CA Vélez Sarsfield II,21
+M. Enrique,742512,10/09/2021,50000,Cerro Largo FC,21
+M. Enrique,742512,01/01/2022,150000,Cerro Largo FC,22
+M. Enrique,742512,02/06/2022,150000,Cerro Largo FC,22
+M. Enrique,742512,12/11/2022,250000,Cerro Largo FC,22
+M. Enrique,742512,17/07/2023,300000,Club Almirante Brown,23
+M. Enrique,742512,04/12/2023,325000,Club Almirante Brown,23
+M. Enrique,742512,26/06/2024,300000,Quilmes AC,24
+M. Enrique,742512,29/11/2024,300000,Quilmes AC,24
+M. Enrique,742512,22/05/2025,250000,Quilmes AC,25
+M. Enrique,742512,26/11/2025,200000,CA Patronato,25
+M. Espíndola,992527,24/05/2022,25000,CA Tigre II,18
+M. Espíndola,992527,04/07/2023,50000,Club Atlético Tigre,19
+M. Espíndola,992527,19/12/2023,50000,Club Atlético Tigre,20
+M. Espíndola,992527,12/06/2024,75000,Club Atlético Tigre,20
+M. Espíndola,992527,13/12/2024,50000,Club Atlético Tigre,21
+M. Espíndola,992527,30/06/2025,200000,Club Deportivo Maldonado,21
+M. Espíndola,992527,12/12/2025,400000,Club Deportivo Maldonado,22
+M. Espíndola,992527,16/03/2026,500000,Club Deportivo Maldonado,22
+M. Kabalin,538538,28/04/2019,300000,CB Ramón Santamarina,20
+M. Kabalin,538538,17/02/2020,375000,CB Ramón Santamarina,21
+M. Kabalin,538538,08/04/2020,350000,CB Ramón Santamarina,21
+M. Kabalin,538538,17/05/2021,375000,CB Ramón Santamarina,22
+M. Kabalin,538538,10/09/2021,375000,CA Atenas de San Carlos,22
+M. Kabalin,538538,01/01/2022,300000,CA Atenas de San Carlos,23
+M. Kabalin,538538,10/06/2022,300000,CA Atenas de San Carlos,23
+M. Kabalin,538538,12/11/2022,300000,CA Atenas de San Carlos,24
+M. Kabalin,538538,17/07/2023,200000,CA Atenas de San Carlos,24
+M. Kabalin,538538,04/12/2023,150000,CA Atenas de San Carlos,25
+M. Kabalin,538538,26/06/2024,100000,Club Atlético San Martín (Tucumán),25
+M. Kabalin,538538,29/11/2024,100000,CA Mitre,26
+M. Kabalin,538538,22/05/2025,200000,CA Mitre,26
+M. Kabalin,538538,26/11/2025,250000,CA Mitre,27
+M. Palacios,621370,06/08/2019,5000000,CA San Lorenzo de Almagro II,17
+M. Palacios,621370,05/12/2019,10000000,CA San Lorenzo de Almagro II,17
+M. Palacios,621370,08/04/2020,9000000,CA San Lorenzo de Almagro II,17
+M. Palacios,621370,08/02/2021,8000000,CA San Lorenzo de Almagro,18
+M. Palacios,621370,23/06/2021,5500000,FC Basel 1893,19
+M. Palacios,621370,04/10/2021,3500000,FC Basel 1893,19
+M. Palacios,621370,03/01/2022,3500000,FC Basel 1893,19
+M. Palacios,621370,08/06/2022,2000000,FC Basel 1893,20
+M. Palacios,621370,15/12/2022,1000000,Al-Ain FC,20
+M. Palacios,621370,31/05/2023,2000000,Al-Ain FC,21
+M. Palacios,621370,12/10/2023,800000,Al-Ain FC,21
+M. Palacios,621370,08/03/2024,1000000,Al-Ain FC,21
+M. Palacios,621370,03/06/2024,1200000,Al-Ain FC,22
+M. Palacios,621370,18/11/2024,1500000,Al-Ain FC,22
+M. Palacios,621370,29/05/2025,1800000,Al-Ain FC,23
+M. Palacios,621370,28/11/2025,2000000,Al-Ain FC,23
+M. Sanabria,1027280,16/12/2022,10000,Quilmes Atlético Club II,20
+M. Sanabria,1027280,17/07/2023,100000,Quilmes AC,20
+M. Sanabria,1027280,04/12/2023,275000,Quilmes AC,21
+M. Sanabria,1027280,06/06/2024,175000,SD Aucas,21
+M. Sanabria,1027280,13/12/2024,125000,Club Deportivo Riestra,22
+M. Sanabria,1027280,02/06/2025,125000,SD Aucas,22
+M. Sanabria,1027280,22/12/2025,100000,SD Aucas,23
+M. Vera,697408,17/02/2020,225000,Club Social y Atlético Guillermo Brown,21
+M. Vera,697408,17/05/2021,225000,Club Estudiantes de La Plata II,23
+M. Vera,697408,22/12/2021,200000,CA San Martín (San Juan),23
+M. Vera,697408,16/06/2022,200000,San Luis de Quillota,24
+M. Vera,697408,15/11/2022,200000,San Luis de Quillota,24
+M. Vera,697408,15/07/2023,250000,San Luis de Quillota,25
+M. Vera,697408,29/12/2023,250000,San Luis de Quillota,25
+M. Vera,697408,10/06/2024,250000,CA Boston River,26
+M. Vera,697408,19/12/2024,350000,CA Boston River,26
+M. Vera,697408,10/06/2025,500000,CA Boston River,27
+M. Vera,697408,18/12/2025,600000,CA Boston River,27
+N. Leguizamón,437962,08/08/2016,125000,CA Colón,21
+N. Leguizamón,437962,13/02/2017,125000,CA Colón,22
+N. Leguizamón,437962,09/10/2017,2000000,CA Colón,22
+N. Leguizamón,437962,08/05/2018,1500000,CA Colón,23
+N. Leguizamón,437962,18/12/2018,1000000,CA Colón,23
+N. Leguizamón,437962,06/08/2019,1000000,CA Colón,24
+N. Leguizamón,437962,05/12/2019,1200000,CA Colón,24
+N. Leguizamón,437962,08/04/2020,950000,Defensa y Justicia,25
+N. Leguizamón,437962,08/02/2021,950000,Defensa y Justicia,26
+N. Leguizamón,437962,20/10/2021,700000,CA Colón,26
+N. Leguizamón,437962,24/05/2022,500000,CA Colón,27
+N. Leguizamón,437962,06/09/2022,275000,CA Central Córdoba (SdE),27
+N. Leguizamón,437962,26/10/2022,200000,CA Central Córdoba (SdE),27
+N. Leguizamón,437962,04/07/2023,100000,CA Central Córdoba (SdE),28
+N. Leguizamón,437962,19/12/2023,100000,CA Central Córdoba (SdE),28
+N. Leguizamón,437962,26/06/2024,100000,CA Colón,29
+N. Leguizamón,437962,13/12/2024,125000,CA Juventud,29
+N. Leguizamón,437962,10/06/2025,125000,CA Juventud,30
+N. Leguizamón,437962,22/12/2025,125000,Deportivo Cuenca,30
+S. Echeverría,249794,14/07/2015,400000,CA Huracán,25
+S. Echeverría,249794,06/02/2016,400000,Mineros de Zacatecas,25
+S. Echeverría,249794,07/03/2018,700000,Without Club,27
+S. Echeverría,249794,08/06/2018,700000,Without Club,28
+S. Echeverría,249794,17/02/2020,100000,CA Brown (Adrogué),29
+S. Echeverría,249794,30/03/2021,125000,Club Jorge Wilstermann ,31
+S. Echeverría,249794,28/10/2021,250000,Club Jorge Wilstermann ,31
+S. Echeverría,249794,10/06/2022,300000,Club Jorge Wilstermann ,32
+S. Echeverría,249794,23/11/2022,300000,Club Jorge Wilstermann ,32
+S. Echeverría,249794,10/04/2023,250000,Club Deportivo Guabirá,33
+S. Echeverría,249794,21/07/2023,250000,Club Deportivo Guabirá,33
+S. Echeverría,249794,22/02/2024,225000,Club Jorge Wilstermann ,33
+S. Echeverría,249794,14/06/2024,200000,Club Jorge Wilstermann ,34
+S. Echeverría,249794,17/12/2024,125000,Club Jorge Wilstermann ,34
+S. Echeverría,249794,27/06/2025,100000,CA Nacional Potosí,35
+S. Echeverría,249794,11/12/2025,75000,Bolívar La Paz,35

@@ -27,27 +27,27 @@ export default function App() {
   return (
     <PDFBuilderProvider>
       <BrowserRouter>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<ExternalScoutingPage />} />
+            <Route path="/interno" element={<InternalScoutingPage />} />
+            <Route path="/panel-interno" element={<DashboardPage />} />
+            <Route path="/seguimiento" element={<MonitoringPage />} />
+            <Route path="/oportunidades" element={<OpportunitiesPage />} />
+            <Route path="/similares" element={<SimilarPlayersPage />} />
+            <Route path="/jugador/:id" element={<PlayerDetailPage />} />
+            <Route path="/comparacion" element={<ComparisonPage />} />
+            <Route path="/formacion" element={<FormationPage />} />
+            <Route path="/dispersion" element={<ScatterChartPage />} />
+            <Route path="/evaluar" element={<ScoutEvaluationPage />} />
+            <Route path="/evaluaciones" element={<EvaluationsAdminPage />} />
+            <Route path="/radar" element={<RadarAnalysisPage />} />
+            <Route path="/trabajos-scouting" element={<ScoutingWorksPage />} />
+            <Route path="/scouts-gg" element={<ScoutTrackingGGPage />} />
+            <Route path="/analisis-completo" element={<BusquedaPage />} />
+          </Route>
+        </Routes>
         <Suspense fallback={null}>
-          <Routes>
-            <Route element={<Layout />}>
-              <Route path="/" element={<ExternalScoutingPage />} />
-              <Route path="/interno" element={<InternalScoutingPage />} />
-              <Route path="/panel-interno" element={<DashboardPage />} />
-              <Route path="/seguimiento" element={<MonitoringPage />} />
-              <Route path="/oportunidades" element={<OpportunitiesPage />} />
-              <Route path="/similares" element={<SimilarPlayersPage />} />
-              <Route path="/jugador/:id" element={<PlayerDetailPage />} />
-              <Route path="/comparacion" element={<ComparisonPage />} />
-              <Route path="/formacion" element={<FormationPage />} />
-              <Route path="/dispersion" element={<ScatterChartPage />} />
-              <Route path="/evaluar" element={<ScoutEvaluationPage />} />
-              <Route path="/evaluaciones" element={<EvaluationsAdminPage />} />
-              <Route path="/radar" element={<RadarAnalysisPage />} />
-              <Route path="/trabajos-scouting" element={<ScoutingWorksPage />} />
-              <Route path="/scouts-gg" element={<ScoutTrackingGGPage />} />
-              <Route path="/analisis-completo" element={<BusquedaPage />} />
-            </Route>
-          </Routes>
           <PDFBuilderModal />
           <PDFAddedToast />
         </Suspense>

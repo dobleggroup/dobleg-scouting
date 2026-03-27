@@ -27,6 +27,7 @@ export default defineConfig({
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'vendor-charts': ['recharts'],
           'vendor-pdf': ['jspdf', 'html2canvas'],
+          'vendor-react-pdf': ['@react-pdf/renderer'],
           'vendor-supabase': ['@supabase/supabase-js'],
         },
       },

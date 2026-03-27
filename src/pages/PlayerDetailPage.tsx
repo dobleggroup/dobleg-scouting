@@ -13,6 +13,7 @@ import ExportPDFModal, { type PDFTheme } from '@/components/ui/ExportPDFModal'
 import { exportPlayerToPdfFull } from '@/utils/pdfExport'
 import AddToReportButton from '@/components/pdf/AddToReportButton'
 import { normalizeName } from '@/utils/scoring'
+import { fuzzyMatch } from '@/lib/search'
 import { POSITION_MAP, DISPLAY_POSITION_MAP, DISPLAY_METRICS, RADAR_METRICS, METRIC_ABBREVIATIONS } from '@/constants/scoring'
 import { fetchPlayerEvaluations, fetchEvaluationsByName, type ScoutEvaluation } from '@/services/scoutEvaluationService'
 import TrackingWidget from '@/components/tracking/TrackingWidget'
@@ -599,11 +600,10 @@ export default function PlayerDetailPage() {
   // Filter players by search query
   const filteredPlayers = useMemo(() => {
     if (!playerSearchQuery.trim()) return availablePlayers
-    const query = playerSearchQuery.toLowerCase()
     return availablePlayers.filter(p =>
-      p.Jugador.toLowerCase().includes(query) ||
-      p.Equipo?.toLowerCase().includes(query) ||
-      p['Posición específica']?.toLowerCase().includes(query)
+      fuzzyMatch(playerSearchQuery, p.Jugador) ||
+      fuzzyMatch(playerSearchQuery, p.Equipo || '') ||
+      fuzzyMatch(playerSearchQuery, p['Posición específica'] || '')
     )
   }, [availablePlayers, playerSearchQuery])
 

@@ -4,7 +4,9 @@ import { useData } from '@/context/DataContext'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import EmptyState from '@/components/ui/EmptyState'
 import ScoreBar from '@/components/ui/ScoreBar'
+import CopyChartButton from '@/components/ui/CopyChartButton'
 import { POSITION_MAP, SCORING_CONFIG } from '@/constants/scoring'
+import { smartSearch } from '@/lib/search'
 import type { EnrichedPlayer } from '@/types'
 
 const STORAGE_KEY = 'similar-players-state'
@@ -128,10 +130,7 @@ export default function SimilarPlayersPage() {
   // Filter players for dropdown
   const searchResults = useMemo(() => {
     if (!search.trim()) return []
-    const s = search.toLowerCase()
-    return allPlayers
-      .filter(p => p.Jugador.toLowerCase().includes(s))
-      .slice(0, 10)
+    return smartSearch(allPlayers, search, p => `${p.Jugador} ${p.Equipo || ''}`, 10)
   }, [allPlayers, search])
 
   // Find similar players when one is selected
@@ -250,14 +249,17 @@ export default function SimilarPlayersPage() {
 
       {/* Similar players results */}
       {selectedPlayer && (
-        <div className="card-apple overflow-hidden">
-          <div className="px-6 py-4 border-b border-apple-gray-200/50 dark:border-apple-gray-700/50 bg-apple-gray-50 dark:bg-apple-gray-800/50">
-            <h3 className="font-semibold text-apple-gray-800 dark:text-white">
-              10 Jugadores más similares
-            </h3>
-            <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
-              Basado en métricas de rendimiento para {selectedPosition || 'la posición'}
-            </p>
+        <div id="similar-players-container" className="card-apple overflow-hidden">
+          <div className="px-6 py-4 border-b border-apple-gray-200/50 dark:border-apple-gray-700/50 bg-apple-gray-50 dark:bg-apple-gray-800/50 flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-apple-gray-800 dark:text-white">
+                10 Jugadores más similares
+              </h3>
+              <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
+                Basado en métricas de rendimiento para {selectedPosition || 'la posición'}
+              </p>
+            </div>
+            <CopyChartButton targetId="similar-players-container" filename={`similares_${selectedPlayer.Jugador.replace(/\s+/g,'_')}`} />
           </div>
 
           {similarPlayers.length === 0 ? (

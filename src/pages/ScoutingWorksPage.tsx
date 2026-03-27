@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { SCOUTING_PROJECTS, getNationalityFlag, getPositionColor, type ScoutingProject, type ScoutedPlayer } from '@/data/scoutingProjects'
+import { fuzzyMatch } from '@/lib/search'
 
 // Project Card Component
 function ProjectCard({ project, onClick }: { project: ScoutingProject; onClick: () => void }) {
@@ -322,7 +323,7 @@ function ProjectDetail({ project, onBack }: { project: ScoutingProject; onBack: 
     return project.players.filter(p => {
       if (filter === 'highlighted' && !p.destacado) return false
       if (positionFilter !== 'all' && p.Posicion !== positionFilter) return false
-      if (searchTerm && !p.Jugador.toLowerCase().includes(searchTerm.toLowerCase())) return false
+      if (searchTerm && !fuzzyMatch(searchTerm, p.Jugador)) return false
       return true
     })
   }, [project.players, filter, positionFilter, searchTerm])

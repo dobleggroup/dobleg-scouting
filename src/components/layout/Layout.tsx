@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router-dom'
+import { Suspense } from 'react'
 import Navbar from './Navbar'
 import Footer from './Footer'
 import AIAnalystChat from '@/components/chat/AIAnalystChat'
@@ -152,8 +153,16 @@ export default function Layout() {
   return (
     <div className="min-h-screen flex flex-col bg-apple-gray-50 dark:bg-apple-gray-900 text-apple-gray-800 dark:text-apple-gray-100 transition-colors duration-300 ease-apple">
       <Navbar />
-      <main className="flex-1 animate-fade-in">
-        <Outlet />
+      <main className="flex-1">
+        <Suspense fallback={
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <div className="w-6 h-6 border-2 border-brand-green border-t-transparent rounded-full animate-spin opacity-60" />
+          </div>
+        }>
+          <div className="animate-fade-in">
+            <Outlet />
+          </div>
+        </Suspense>
       </main>
       <Footer />
       <AIAnalystChat />
