@@ -7,6 +7,18 @@ import {
 } from 'recharts'
 import { useData } from '@/context/DataContext'
 import type { EnrichedPlayer } from '@/types'
+import { POSITION_MAP, SCORING_CONFIG, METRIC_ABBREVIATIONS, DISPLAY_POSITION_MAP } from '@/constants/scoring'
+
+// Normaliza una posición cruda del CSV (puede ser código Wyscout o string con comas)
+// a un nombre amigable en español para mostrar en dropdowns y filtros.
+function normalizePositionDisplay(raw: string): string {
+  if (!raw) return ''
+  // Si tiene coma (ej: "RCMF3, LB5, LW"), tomar la primera
+  const first = raw.split(',')[0].trim()
+  // Intentar POSITION_MAP primero (más completo con variantes), luego DISPLAY_POSITION_MAP
+  return POSITION_MAP[first] ?? DISPLAY_POSITION_MAP[first] ?? first
+}
+import CanvaExportModal, { type CanvaExportOptions } from '@/components/pdf/CanvaExportModal'
 
 // ─── Copy-as-PNG button ───────────────────────────────────────────────────────
 
@@ -165,6 +177,7 @@ function getAllMetricKeys(): string[] {
 // ─── Position default metrics ─────────────────────────────────────────────────
 
 const POSITION_DEFAULT_METRICS: Record<string, string[]> = {
+  'Arquero':           ['Goles evitados/90', 'Paradas, %', 'Porterías imbatidas en los 90', 'Salidas/90', 'Duelos aéreos en los 90'],
   'Defensor central':  ['Duelos aéreos ganados, %', 'Duelos defensivos ganados, %', 'Interceptaciones/90', 'Entradas/90', 'Precisión pases, %'],
   'Lateral derecho':   ['Duelos defensivos ganados, %', 'Carreras en progresión/90', 'Centros precisos/90', 'Pases progresivos exitosos/90', 'Jugadas claves/90'],
   'Lateral izquierdo': ['Duelos defensivos ganados, %', 'Carreras en progresión/90', 'Centros precisos/90', 'Pases progresivos exitosos/90', 'Jugadas claves/90'],
@@ -247,6 +260,8 @@ export default function BusquedaPage() {
   const contentRef = useRef<HTMLDivElement>(null)
   const [exporting, setExporting] = useState(false)
   const [exportingCanva, setExportingCanva] = useState(false)
+  const [showCanvaModal, setShowCanvaModal] = useState(false)
+  const [canvaModalData, setCanvaModalData] = useState<{ allMetrics: import('@/components/pdf/CanvaExportModal').CanvaMetricPreview[]; positionKeys: string[] } | null>(null)
 
   // Cascading search filters
   const [searchLigaFilter, setSearchLigaFilter] = useState('')
@@ -272,7 +287,7 @@ export default function BusquedaPage() {
       const key = `${src}::${p.Jugador}`
       if (seen.has(key)) return
       seen.add(key)
-      result.push({ name: p.Jugador, club: p.Equipo, liga: p.Liga, position: p['Posición'], source: src, player: p })
+      result.push({ name: p.Jugador, club: p.Equipo, liga: p.Liga, position: normalizePositionDisplay(p['Posición']), source: src, player: p })
     }
     for (const p of external) add(p, 'externo')
     for (const p of internal) add(p, 'interno')
@@ -575,11 +590,44 @@ export default function BusquedaPage() {
         import('@/components/pdf/AnalisisCompletoPDF'),
       ])
       const AnalisisCompletoPDF = pdfMod.default
-      // Build element using React.createElement to avoid JSX context issues
       const { createElement } = await import('react')
+
+      // Build position-specific bar data (top metrics by weight for player's position)
+      const rawPos = selectedPlayer['Posición'] ?? ''
+      const mappedPos = POSITION_MAP[rawPos] ?? null
+      const posWeights = mappedPos && SCORING_CONFIG[mappedPos]
+        ? [...SCORING_CONFIG[mappedPos]].sort((a, b) => b.weight - a.weight).slice(0, 10)
+        : null
+      const pdfMetricKeys = posWeights ? posWeights.map(m => m.column) : activeMetrics
+
+      const pdfBarData = pdfMetricKeys
+        .map(key => {
+          const playerVal = getMetricValue(selectedPlayer, key)
+          const poolVals = pool.map(p => getMetricValue(p, key)).filter((v): v is number => v !== null)
+          const pool2Vals = pool2.map(p => getMetricValue(p, key)).filter((v): v is number => v !== null)
+          const avg = poolVals.length ? poolVals.reduce((a, b) => a + b, 0) / poolVals.length : null
+          const avg2 = pool2Vals.length ? pool2Vals.reduce((a, b) => a + b, 0) / pool2Vals.length : null
+          const allVals = [...poolVals, ...pool2Vals, ...(playerVal !== null ? [playerVal] : [])]
+          const minV = allVals.length ? Math.min(...allVals) : 0
+          const maxV = allVals.length ? Math.max(...allVals) : 1
+          const range = maxV - minV || 1
+          const norm = (v: number | null) => v === null ? 0 : Math.max(0, Math.min(100, ((v - minV) / range) * 100))
+          const label = METRIC_ABBREVIATIONS[key] ?? findMetric(key)?.label ?? key
+          return {
+            name: label,
+            jugador: norm(playerVal),
+            promedio: avg !== null ? norm(avg) : 0,
+            ...(compareLeague2 && avg2 !== null ? { promedio2: norm(avg2) } : {}),
+            jugadorRaw: playerVal !== null ? parseFloat(playerVal.toFixed(2)) : null,
+            promedioRaw: avg !== null ? parseFloat(avg.toFixed(2)) : null,
+            promedio2Raw: avg2 !== null ? parseFloat(avg2.toFixed(2)) : null,
+          }
+        })
+        .filter(d => d.jugadorRaw !== null)
+
       const props = {
         player: selectedPlayer,
-        barData,
+        barData: pdfBarData,
         radarData,
         rankings,
         conclusions,
@@ -601,70 +649,170 @@ export default function BusquedaPage() {
 
   // ─── Canva card export ────────────────────────────────────────────────────────
 
-  async function exportInformeCanva() {
+  // Pre-calcula las métricas para el modal (con colores según gap jugador vs promedio)
+  function openCanvaModal() {
     if (!selectedPlayer) return
+    const rawPos = selectedPlayer['Posición'] ?? ''
+    const mappedPos = POSITION_MAP[rawPos] ?? null
+    const positionConfig = mappedPos && SCORING_CONFIG[mappedPos] ? SCORING_CONFIG[mappedPos] : null
+
+    // Top 10 por peso de posición (modo auto)
+    const sortedWeights = positionConfig ? [...positionConfig].sort((a, b) => b.weight - a.weight) : null
+    const positionKeys = sortedWeights ? sortedWeights.slice(0, 10).map(m => m.column) : activeMetrics.slice(0, 10)
+
+    // TODAS las métricas conocidas (de METRIC_ABBREVIATIONS) donde el jugador tiene dato real
+    const allKeys = Object.keys(METRIC_ABBREVIATIONS)
+
+    const allMetrics = allKeys
+      .map(key => {
+        const playerVal = getMetricValue(selectedPlayer, key)
+        if (playerVal === null) return null
+        const poolVals = pool.map(p => getMetricValue(p, key)).filter((v): v is number => v !== null)
+        const avg = poolVals.length ? poolVals.reduce((a, b) => a + b, 0) / poolVals.length : null
+        const allVals = [...poolVals, playerVal]
+        const minV = Math.min(...allVals)
+        const maxV = Math.max(...allVals)
+        const range = maxV - minV || 1
+        const norm = (v: number) => Math.max(0, Math.min(100, ((v - minV) / range) * 100))
+        const label = METRIC_ABBREVIATIONS[key] ?? findMetric(key)?.label ?? key
+        return {
+          key,
+          label,
+          jugador: norm(playerVal),
+          promedio: avg !== null ? norm(avg) : 50,
+          jugadorRaw: parseFloat(playerVal.toFixed(2)),
+          promedioRaw: avg !== null ? parseFloat(avg.toFixed(2)) : null,
+        }
+      })
+      .filter((m): m is NonNullable<typeof m> => m !== null)
+
+    setCanvaModalData({ allMetrics, positionKeys })
+    setShowCanvaModal(true)
+  }
+
+  async function exportInformeCanva(opts: CanvaExportOptions) {
+    if (!selectedPlayer) return
+    setShowCanvaModal(false)
     setExportingCanva(true)
     try {
-      const [{ default: html2canvas }, { createRoot }, { createElement }, { default: CanvaCard }] = await Promise.all([
-        import('html2canvas'),
+      const [{ toPng }, { createRoot }, { createElement }, { default: CanvaCard }] = await Promise.all([
+        import('html-to-image'),
         import('react-dom/client'),
         import('react'),
         import('@/components/pdf/InformeCanvaCard'),
       ])
 
-      // Render at full opacity so html2canvas captures correctly — removed briefly from view via z-index layering
-      const container = document.createElement('div')
-      container.style.cssText = 'position:fixed;top:0;left:0;width:1120px;height:630px;z-index:99999;pointer-events:none;'
-      document.body.appendChild(container)
-
-      const root = createRoot(container)
-      root.render(createElement(CanvaCard, {
-        player: selectedPlayer,
-        barData,
-        poolLabel: ligaFilter || 'Pool general',
-        pool2Label: compareLeague2 || undefined,
-        leagueContext: leagueScoreContext,
-      }))
-
-      // Let React paint fully
-      await new Promise(r => setTimeout(r, 200))
-
-      const canvas = await html2canvas(container, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#0f0f11',
-        width: 1120,
-        height: 630,
-      })
-
-      root.unmount()
-      document.body.removeChild(container)
-
-      const baseName = `Informe_Canva_${selectedPlayer.Jugador.replace(/[^a-zA-ZáéíóúñÁÉÍÓÚÑ\s]/g, '').replace(/\s+/g, '_')}`
-      const dataUrl = canvas.toDataURL('image/png')
-
-      // 1. Copy PNG to clipboard
-      const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/png'))
-      if (blob) {
+      // Pre-fetch logo as base64 data URL if requested (needed for html-to-image)
+      let logoDataUrl: string | undefined
+      if (opts.showLogo) {
         try {
-          await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-        } catch { /* clipboard blocked — no problem, we still download */ }
-
-        // Download PNG
-        const pngUrl = URL.createObjectURL(blob)
-        const pngLink = document.createElement('a')
-        pngLink.href = pngUrl; pngLink.download = `${baseName}.png`; pngLink.click()
-        URL.revokeObjectURL(pngUrl)
+          const res = await fetch('/brand/logo-white.png')
+          const blob = await res.blob()
+          logoDataUrl = await new Promise<string>(resolve => {
+            const fr = new FileReader()
+            fr.onload = () => resolve(fr.result as string)
+            fr.readAsDataURL(blob)
+          })
+        } catch { /* logo no disponible */ }
       }
 
-      // 2. Download PDF with the card image embedded
-      const { jsPDF } = await import('jspdf')
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [1120, 630], hotfixes: ['px_scaling'] })
-      pdf.addImage(dataUrl, 'PNG', 0, 0, 1120, 630)
-      pdf.save(`${baseName}.pdf`)
+      // Render in a 1×1 clipped container: browser lays out & renders the card fully
+      // but the user never sees it (overflow:hidden clips it to 1px).
+      // We capture container.firstElementChild (the 1120×630 card) directly.
+      const container = document.createElement('div')
+      container.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;overflow:hidden;z-index:-1;pointer-events:none;'
+      document.body.appendChild(container)
 
-      setExportingCanva(false)
+      // Helper to always clean up the overlay, no matter what happens
+      // eslint-disable-next-line prefer-const
+      let mountedRoot: { unmount: () => void } | null = null
+      function cleanup() {
+        try { mountedRoot?.unmount() } catch { /* ignore */ }
+        if (container.parentNode) document.body.removeChild(container)
+      }
+
+      try {
+        // Usar las métricas seleccionadas en el modal
+        const canvaMetricKeys = opts.metricKeys
+
+        const canvaBarData = canvaMetricKeys
+          .map(key => {
+            const playerVal = getMetricValue(selectedPlayer, key)
+            const poolVals = pool.map(p => getMetricValue(p, key)).filter((v): v is number => v !== null)
+            const pool2Vals = pool2.map(p => getMetricValue(p, key)).filter((v): v is number => v !== null)
+            const avg = poolVals.length ? poolVals.reduce((a, b) => a + b, 0) / poolVals.length : null
+            const avg2 = pool2Vals.length ? pool2Vals.reduce((a, b) => a + b, 0) / pool2Vals.length : null
+            const allVals = [...poolVals, ...pool2Vals, ...(playerVal !== null ? [playerVal] : [])]
+            const minV = allVals.length ? Math.min(...allVals) : 0
+            const maxV = allVals.length ? Math.max(...allVals) : 1
+            const range = maxV - minV || 1
+            const norm = (v: number | null) => v === null ? 0 : Math.max(0, Math.min(100, ((v - minV) / range) * 100))
+            const label = METRIC_ABBREVIATIONS[key] ?? findMetric(key)?.label ?? key
+            return {
+              name: label,
+              jugador: norm(playerVal),
+              promedio: avg !== null ? norm(avg) : 0,
+              ...(compareLeague2 && avg2 !== null ? { promedio2: norm(avg2) } : {}),
+              jugadorRaw: playerVal !== null ? parseFloat(playerVal.toFixed(2)) : null,
+              promedioRaw: avg !== null ? parseFloat(avg.toFixed(2)) : null,
+              promedio2Raw: avg2 !== null ? parseFloat(avg2.toFixed(2)) : null,
+            }
+          })
+          .filter(d => d.jugadorRaw !== null)
+
+        const root = createRoot(container)
+        mountedRoot = root
+        root.render(createElement(CanvaCard, {
+          player: selectedPlayer,
+          barData: canvaBarData,
+          poolLabel: ligaFilter || 'Pool general',
+          pool2Label: compareLeague2 || undefined,
+          leagueContext: leagueScoreContext,
+          videoUrl: opts.videoUrl || undefined,
+          logoDataUrl,
+        }))
+
+        // Wait for React 18 to fully paint + player image to load
+        await new Promise(r => setTimeout(r, 800))
+
+        const baseName = `Informe_Canva_${selectedPlayer.Jugador.replace(/[^a-zA-ZáéíóúñÁÉÍÓÚÑ\s]/g, '').replace(/\s+/g, '_')}`
+
+        const cardEl = (container.firstElementChild as HTMLElement) ?? container
+        const dataUrl = await toPng(cardEl, {
+          width: 1120,
+          height: 630,
+          pixelRatio: 2,
+          backgroundColor: '#0f0f11',
+          skipFonts: true,
+          // Skip external images to avoid CORS failures crashing the export.
+          // Transfermarkt blocks cross-origin fetches; images already fail to load
+          // in the browser (shown as initials), so excluding them doesn't change the output.
+          filter: (node) => {
+            if (node instanceof HTMLImageElement) {
+              const src = node.getAttribute('src') || ''
+              if (src.startsWith('http') && !src.startsWith(window.location.origin)) return false
+            }
+            return true
+          },
+        })
+
+        cleanup()
+
+        // Download PDF with the card image embedded
+        const { jsPDF } = await import('jspdf')
+        const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [1120, 630], hotfixes: ['px_scaling'] })
+        pdf.addImage(dataUrl, 'PNG', 0, 0, 1120, 630)
+        if (opts.videoUrl) {
+          pdf.link(958, 520, 142, 30, { url: opts.videoUrl })
+        }
+        pdf.save(`${baseName}.pdf`)
+
+        setExportingCanva(false)
+      } catch (e) {
+        console.error('Canva export error:', e)
+        cleanup()
+        setExportingCanva(false)
+      }
     } catch (e) {
       console.error('Canva export error:', e)
       setExportingCanva(false)
@@ -702,6 +850,16 @@ export default function BusquedaPage() {
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
 
+      {/* Modal de configuración del informe Canva */}
+      {showCanvaModal && canvaModalData && (
+        <CanvaExportModal
+          onConfirm={exportInformeCanva}
+          onClose={() => setShowCanvaModal(false)}
+          allMetrics={canvaModalData.allMetrics}
+          positionKeys={canvaModalData.positionKeys}
+        />
+      )}
+
       {/* Header row */}
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -712,11 +870,11 @@ export default function BusquedaPage() {
         </div>
         {selectedPlayer && (
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Canva card export */}
+            {/* Canva card export — abre modal de configuración */}
             <button
-              onClick={exportInformeCanva}
+              onClick={openCanvaModal}
               disabled={exportingCanva}
-              title="Genera una imagen PNG estilo informe para pegar en Canva"
+              title="Configura y genera un informe estilo Canva (PNG + PDF)"
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-green/10 border border-brand-green/30 text-brand-green text-sm font-medium hover:bg-brand-green/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {exportingCanva ? (
@@ -726,7 +884,7 @@ export default function BusquedaPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               )}
-              {exportingCanva ? 'Generando...' : 'Copiar informe Canva'}
+              {exportingCanva ? 'Generando...' : 'Informe Canva'}
             </button>
             {/* PDF export */}
             <button

@@ -70,7 +70,9 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 16,
     paddingBottom: 10,
-    borderBottom: `1 solid ${C.border}`,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    borderBottomStyle: 'solid',
   },
   brandText: { fontSize: 9, color: C.grayDark, fontFamily: 'Helvetica-Bold' },
   pageTitle: { fontSize: 9, color: C.textSec },
@@ -96,7 +98,9 @@ const s = StyleSheet.create({
     color: C.text,
     fontFamily: 'Helvetica-Bold',
     marginBottom: 10,
-    borderLeft: `3 solid ${C.brand}`,
+    borderLeftWidth: 3,
+    borderLeftColor: C.brand,
+    borderLeftStyle: 'solid',
     paddingLeft: 8,
   },
   sectionTitleSm: {
@@ -213,7 +217,9 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderTop: `1 solid ${C.border}`,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    borderTopStyle: 'solid',
     paddingTop: 6,
   },
   footerText: { fontSize: 7, color: C.grayDark },
@@ -380,7 +386,7 @@ function RankingsSection({ rankings, playerName }: { rankings: RankingRow[]; pla
       </Text>
       <View style={s.rankGrid}>
         {top.map((r, i) => (
-          <View key={i} style={[s.rankCard, r.rank === 1 ? { backgroundColor: 'rgba(34,197,94,0.12)', borderLeft: `3 solid ${C.brand}` } : {}]}>
+          <View key={i} style={[s.rankCard, r.rank === 1 ? { backgroundColor: 'rgba(34,197,94,0.12)', borderLeftWidth: 3, borderLeftColor: C.brand, borderLeftStyle: 'solid' } : {}]}>
             <Text style={[s.rankNum, { color: r.rank === 1 ? C.brand : r.rank <= 3 ? C.textSec : C.grayDark }]}>
               {r.rank}°
             </Text>
@@ -414,7 +420,7 @@ function RadarTable({ data, playerName, poolLabel }: {
       {data.map((d, i) => {
         const diff = d.jugador - d.promedio
         return (
-          <View key={i} style={{ flexDirection: 'row', paddingVertical: 5, borderBottom: `1 solid ${C.border}` }}>
+          <View key={i} style={{ flexDirection: 'row', paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: C.border, borderBottomStyle: 'solid' }}>
             <Text style={{ flex: 2, fontSize: 8, color: C.textSec }}>{d.subject}</Text>
             <View style={{ flex: 1, alignItems: 'center' }}>
               <View style={{ width: 40, height: 5, backgroundColor: C.cardAlt, borderRadius: 2, overflow: 'hidden' }}>
@@ -485,7 +491,7 @@ function ConclusionsSection({ c, playerName }: {
 
       {/* Rankings highlight */}
       {c.top1.length > 0 && (
-        <View style={{ backgroundColor: 'rgba(34,197,94,0.06)', borderRadius: 5, padding: 8, marginBottom: 8, borderLeft: `3 solid ${C.brand}` }}>
+        <View style={{ backgroundColor: 'rgba(34,197,94,0.06)', borderRadius: 5, padding: 8, marginBottom: 8, borderLeftWidth: 3, borderLeftColor: C.brand, borderLeftStyle: 'solid' }}>
           <Text style={{ fontSize: 9, color: C.brand, fontFamily: 'Helvetica-Bold', marginBottom: 3 }}>
             Lidera en {c.top1.length} métrica{c.top1.length > 1 ? 's' : ''}
           </Text>
@@ -523,7 +529,7 @@ function ConclusionsSection({ c, playerName }: {
 
       {/* Recommendation */}
       {c.recommendation && (
-        <View style={{ backgroundColor: recBg, borderRadius: 5, padding: 10, borderLeft: `3 solid ${recColor}` }}>
+        <View style={{ backgroundColor: recBg, borderRadius: 5, padding: 10, borderLeftWidth: 3, borderLeftColor: recColor, borderLeftStyle: 'solid' }}>
           <Text style={{ fontSize: 9, color: recColor, fontFamily: 'Helvetica-Bold', marginBottom: 2 }}>Evaluación</Text>
           <Text style={{ fontSize: 8.5, color: recColor, lineHeight: 1.5 }}>{c.recommendation}</Text>
         </View>
@@ -574,7 +580,7 @@ export default function AnalisisCompletoPDF({
             {/* Stats grid */}
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
               {statsRow.map((stat, i) => (
-                <View key={i} style={{ width: '30%', backgroundColor: C.cardAlt, borderRadius: 4, padding: '6 8', marginBottom: 4 }}>
+                <View key={i} style={{ width: '30%', backgroundColor: C.cardAlt, borderRadius: 4, paddingVertical: 6, paddingHorizontal: 8, marginBottom: 4 }}>
                   <Text style={s.statLabel}>{stat.label}</Text>
                   <Text style={[s.statValue, { fontSize: 10 }]}>{stat.value}</Text>
                 </View>
@@ -616,7 +622,7 @@ export default function AnalisisCompletoPDF({
             <Text style={s.contextChipText}>Contexto: {poolLabel}</Text>
           </View>
           {pool2Label && (
-            <View style={[s.contextChip, { borderLeft: `3 solid ${C.blue}` }]}>
+            <View style={[s.contextChip, { borderLeftWidth: 3, borderLeftColor: C.blue, borderLeftStyle: 'solid' }]}>
               <Text style={s.contextChipText}>También vs: {pool2Label}</Text>
             </View>
           )}

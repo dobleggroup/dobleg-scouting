@@ -8,12 +8,17 @@ import type {
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
-// Normaliza nombres de liga con caracteres corruptos del Sheet
-// El símbolo ° (U+00B0) a veces se corrompe en la exportación CSV de Google Sheets
+// Normaliza nombres de liga:
+// - Corrige caracteres corruptos del Sheet (ej: "2◆◆ Argentina" → "2° Argentina")
+// - Normaliza variantes de nombre (ej: "Liga México" / "Liga Mexico" → "Liga MX")
 function normalizeLiga(liga: string): string {
   if (!liga) return liga
-  // Reemplaza caracteres no alfanuméricos/no-espacios entre un dígito y un espacio (ej: "2◆◆ Argentina" → "2° Argentina")
-  return liga.replace(/(\d)[^\w\s]+(\s)/g, '$1°$2').trim()
+  let out = liga.replace(/(\d)[^\w\s]+(\s)/g, '$1°$2').trim()
+  // Normalizar Liga MX y variantes
+  if (/liga\s*m[eé]xico/i.test(out) || /liga\s*mx/i.test(out) || /primera\s*divisi[oó]n\s*m[eé]xico/i.test(out)) {
+    out = 'Liga MX'
+  }
+  return out
 }
 
 function trimHeaders(row: RawRow): RawRow {
@@ -125,6 +130,16 @@ export interface SeguimientoMetricsPlayer {
   [key: string]: string | undefined
 }
 
+// Deduplicates players by Jugador+Equipo key, keeping the last occurrence
+function deduplicatePlayers<T extends { Jugador?: string; Equipo?: string }>(players: T[]): T[] {
+  const seen = new Map<string, T>()
+  for (const p of players) {
+    const key = `${(p.Jugador ?? '').trim().toLowerCase()}|${(p.Equipo ?? '').trim().toLowerCase()}`
+    seen.set(key, p)
+  }
+  return Array.from(seen.values())
+}
+
 export interface AllRawData {
   external: RawExternalPlayer[]
   internal: RawInternalPlayer[]
@@ -140,8 +155,9 @@ export interface AllRawData {
 }
 
 export async function loadAllData(): Promise<AllRawData> {
-  const [extRaw, intRaw, monRaw, segMetRaw, normRaw, evoRaw, metRaw, tmRaw, masDatosRaw, mvHistRaw, gpsRaw] = await Promise.all([
+  const [extRaw, arqueroRaw, intRaw, monRaw, segMetRaw, normRaw, evoRaw, metRaw, tmRaw, masDatosRaw, mvHistRaw, gpsRaw] = await Promise.all([
     fetchCSV(SHEET_URLS.externo),
+    fetchCSV(SHEET_URLS.arqueros),
     fetchCSV(SHEET_URLS.interno),
     fetchCSV(SHEET_URLS.seguimiento),
     fetchCSV(SHEET_URLS.seguimientoMetricas),
@@ -154,7 +170,13 @@ export async function loadAllData(): Promise<AllRawData> {
     fetchCSV(SHEET_URLS.gps),
   ])
 
-  const external = resolveAliases(extRaw).filter(r => r['Jugador']?.trim()) as RawExternalPlayer[]
+  // Merge arqueros into external (they use the same RawExternalPlayer shape)
+  // Deduplicate by Jugador+Equipo to handle updated sheets with repeated rows
+  const externalCombined = [
+    ...resolveAliases(extRaw).filter(r => r['Jugador']?.trim()),
+    ...resolveAliases(arqueroRaw).filter(r => r['Jugador']?.trim()),
+  ]
+  const external = deduplicatePlayers(externalCombined) as RawExternalPlayer[]
   const internal = resolveAliases(intRaw).filter(r => r['Jugador']?.trim()) as RawInternalPlayer[]
 
   const monitoring: MonitoringPlayer[] = monRaw

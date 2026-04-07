@@ -199,6 +199,7 @@ export default function DashboardPage() {
   // Score GG por posición (solo jugadores internos con score)
   const positionScores = useMemo(() => {
     const groups: Record<string, string> = {
+      'Arquero': 'Arquero',
       'Defensor Central': 'Defensor Central',
       'Lateral Derecho': 'Lateral',
       'Lateral Izquierdo': 'Lateral',
@@ -210,7 +211,7 @@ export default function DashboardPage() {
       'Extremo': 'Extremo',
       'Delantero': 'Delantero',
     }
-    const ORDER = ['Defensor Central', 'Lateral', 'Volante Central', 'Volante Interno', 'Extremo', 'Delantero']
+    const ORDER = ['Arquero', 'Defensor Central', 'Lateral', 'Volante Central', 'Volante Interno', 'Extremo', 'Delantero']
 
     // Promedio del interno por grupo
     const acc: Record<string, { scores: number[]; count: number }> = {}
