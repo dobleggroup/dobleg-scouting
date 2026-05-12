@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { AGENCY_PLAYERS, getTotalPortfolioValue, formatPortfolioValue, getExpiringContracts } from '@/constants/agencyPlayers'
 import { fetchAllAgencyFixtures, getFixturesForDate, groupFixturesByDate } from '@/services/footballApiService'
 import type { AgencyFixture } from '@/types/footballApi'
@@ -186,13 +187,14 @@ function MatchSkeleton() {
 export default function HomePage() {
   const [fixtures, setFixtures] = useState<AgencyFixture[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     fetchAllAgencyFixtures()
-      .then(setFixtures)
-      .catch(() => {})
+      .then(f => { setFixtures(f); setError(null) })
+      .catch(e => setError(e.message || 'Error cargando fixtures'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -201,7 +203,10 @@ export default function HomePage() {
     try {
       const data = await fetchAllAgencyFixtures(true)
       setFixtures(data)
-    } catch { /* ignore */ }
+      setError(null)
+    } catch (e: any) {
+      setError(e.message || 'Error cargando fixtures')
+    }
     setRefreshing(false)
   }
 
@@ -278,6 +283,17 @@ export default function HomePage() {
         <StatCard value={String(expiringCount)} label="Contratos por vencer" />
       </div>
 
+      {/* ── Error Banner ───────────────────────────────────── */}
+      {error && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-apple-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 text-sm text-red-700 dark:text-red-300">
+          <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+          <span className="flex-1">{error}</span>
+          <button onClick={handleRefresh} className="text-xs font-medium text-red-600 dark:text-red-400 hover:underline">Reintentar</button>
+        </div>
+      )}
+
       {/* ── Today's Matches ─────────────────────────────────── */}
       <section>
         <h2 className="text-lg font-semibold text-apple-gray-800 dark:text-white mb-4 flex items-center gap-2">
@@ -319,9 +335,20 @@ export default function HomePage() {
 
       {/* ── Calendar + Upcoming ─────────────────────────────── */}
       <section>
-        <h2 className="text-lg font-semibold text-apple-gray-800 dark:text-white mb-4">
-          Próximos partidos
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-apple-gray-800 dark:text-white">
+            Próximos partidos
+          </h2>
+          <Link
+            to="/calendario"
+            className="inline-flex items-center gap-1 text-sm font-medium text-brand-green hover:text-emerald-600 transition-colors"
+          >
+            Ver calendario
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+        </div>
 
         {/* Calendar Strip */}
         <div className="bg-white dark:bg-apple-gray-800/60 rounded-apple-lg border border-apple-gray-200/60 dark:border-apple-gray-700/40 overflow-hidden">

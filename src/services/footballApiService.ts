@@ -1,10 +1,11 @@
 import type { ApiResponse, ApiFixture, AgencyFixture } from '@/types/footballApi'
-import { AGENCY_PLAYERS, getPlayersByTeamId, getUniqueTeamIds } from '@/constants/agencyPlayers'
+import { getPlayersByTeamId, getUniqueTeamIds } from '@/constants/agencyPlayers'
 
 const API_KEY = import.meta.env.VITE_FOOTBALL_API_KEY as string
 const BASE_URL = 'https://v3.football.api-sports.io'
-const CACHE_KEY = 'dg-fixtures-cache'
+const CACHE_KEY = 'dg-fixtures-cache-v2'
 const CACHE_TTL = 4 * 60 * 60 * 1000
+const AR_TZ = 'America/Argentina/Buenos_Aires'
 
 interface CachedData {
   fixtures: AgencyFixture[]
@@ -12,6 +13,8 @@ interface CachedData {
 }
 
 async function apiFetch<T>(endpoint: string, params: Record<string, string>): Promise<ApiResponse<T>> {
+  if (!API_KEY) throw new Error('VITE_FOOTBALL_API_KEY no configurada')
+
   const url = new URL(`${BASE_URL}${endpoint}`)
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
 
@@ -20,20 +23,33 @@ async function apiFetch<T>(endpoint: string, params: Record<string, string>): Pr
   })
 
   if (!res.ok) throw new Error(`API error: ${res.status}`)
-  return res.json()
+  const data = await res.json()
+
+  if (data.errors && Object.keys(data.errors).length > 0) {
+    throw new Error(`API: ${JSON.stringify(data.errors)}`)
+  }
+
+  return data
 }
 
 async function getTeamFixtures(teamId: number): Promise<ApiFixture[]> {
-  try {
-    const data = await apiFetch<ApiFixture[]>('/fixtures', {
+  const [upcoming, past] = await Promise.all([
+    apiFetch<ApiFixture[]>('/fixtures', {
       team: String(teamId),
-      next: '15',
-      timezone: 'America/Argentina/Buenos_Aires',
-    })
-    return data.response || []
-  } catch {
-    return []
-  }
+      next: '20',
+      timezone: AR_TZ,
+    }).catch(() => null),
+    apiFetch<ApiFixture[]>('/fixtures', {
+      team: String(teamId),
+      last: '10',
+      timezone: AR_TZ,
+    }).catch(() => null),
+  ])
+
+  return [
+    ...(upcoming?.response || []),
+    ...(past?.response || []),
+  ]
 }
 
 function mapFixture(fixture: ApiFixture, teamId: number): AgencyFixture {
@@ -91,12 +107,13 @@ function getCached(): AgencyFixture[] | null {
 
 function setCache(fixtures: AgencyFixture[]) {
   try {
-    const data: CachedData = { fixtures, timestamp: Date.now() }
-    localStorage.setItem(CACHE_KEY, JSON.stringify(data))
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ fixtures, timestamp: Date.now() }))
   } catch { /* quota exceeded */ }
 }
 
 export async function fetchAllAgencyFixtures(forceRefresh = false): Promise<AgencyFixture[]> {
+  if (!API_KEY) throw new Error('API key no configurada. Agregá VITE_FOOTBALL_API_KEY en las variables de entorno.')
+
   if (!forceRefresh) {
     const cached = getCached()
     if (cached) return cached
@@ -105,25 +122,25 @@ export async function fetchAllAgencyFixtures(forceRefresh = false): Promise<Agen
   const teamIds = getUniqueTeamIds()
   const batchSize = 5
   const allFixtures: AgencyFixture[] = []
+  let hasAnyResults = false
 
   for (let i = 0; i < teamIds.length; i += batchSize) {
     const batch = teamIds.slice(i, i + batchSize)
     const results = await Promise.all(batch.map(id => getTeamFixtures(id)))
     for (let j = 0; j < batch.length; j++) {
+      if (results[j].length > 0) hasAnyResults = true
       for (const fixture of results[j]) {
         allFixtures.push(mapFixture(fixture, batch[j]))
       }
     }
   }
 
-  const deduped = Array.from(
-    new Map(allFixtures.map(f => [f.fixtureId, f])).values()
-  )
+  if (!hasAnyResults && allFixtures.length === 0) {
+    throw new Error('No se pudieron obtener fixtures. Verificá la API key y la conexión.')
+  }
 
-  const merged: AgencyFixture[] = []
   const fixtureMap = new Map<number, AgencyFixture>()
-
-  for (const f of deduped) {
+  for (const f of allFixtures) {
     const existing = fixtureMap.get(f.fixtureId)
     if (existing) {
       const newPlayers = f.players.filter(
@@ -132,18 +149,15 @@ export async function fetchAllAgencyFixtures(forceRefresh = false): Promise<Agen
       existing.players.push(...newPlayers)
     } else {
       fixtureMap.set(f.fixtureId, { ...f })
-      merged.push(fixtureMap.get(f.fixtureId)!)
     }
   }
 
-  merged.sort((a, b) => a.timestamp - b.timestamp)
+  const merged = Array.from(fixtureMap.values()).sort((a, b) => a.timestamp - b.timestamp)
   setCache(merged)
   return merged
 }
 
-const AR_TZ = 'America/Argentina/Buenos_Aires'
-
-function toArDateKey(date: Date | string): string {
+export function toArDateKey(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date
   return new Intl.DateTimeFormat('sv-SE', { timeZone: AR_TZ }).format(d)
 }
@@ -162,5 +176,3 @@ export function groupFixturesByDate(fixtures: AgencyFixture[]): Map<string, Agen
   }
   return groups
 }
-
-export { AGENCY_PLAYERS }
