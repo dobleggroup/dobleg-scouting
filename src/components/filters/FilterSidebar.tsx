@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import type { FilterState, EnrichedPlayer } from '@/types'
 import { FILTER_POSITION_MAP, sortLeaguesByPriority } from '@/constants/scoring'
+import { fuzzyMatch } from '@/lib/search'
 
 // Available metrics for column selection
 export const SELECTABLE_METRICS = [
@@ -507,7 +508,7 @@ export default function FilterSidebar({ players, filters, onChange, onReset }: F
               />
               <div className="space-y-1.5 max-h-40 overflow-y-auto scrollbar-thin pr-1">
                 {representantes
-                  .filter(r => !filters.representante || r.toLowerCase().includes(filters.representante.toLowerCase()))
+                  .filter(r => !filters.representante || fuzzyMatch(filters.representante, r))
                   .slice(0, 15)
                   .map(r => (
                     <button

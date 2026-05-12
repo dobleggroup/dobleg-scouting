@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useData } from '@/context/DataContext'
 import { linkScoutPlayerToDb } from '@/services/scoutPlayersService'
+import { fuzzyMatch } from '@/lib/search'
 import type { ScoutPlayer } from '@/types'
 
 interface Props {
@@ -17,7 +18,7 @@ export default function LinkPlayerModal({ player, onClose, onLinked }: Props) {
   const [error, setError] = useState<string | null>(null)
 
   const results = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = query.trim()
     if (!q) return []
 
     const candidates = [
@@ -27,8 +28,8 @@ export default function LinkPlayerModal({ player, onClose, onLinked }: Props) {
 
     return candidates
       .filter(p =>
-        p.Jugador.toLowerCase().includes(q) ||
-        p.Equipo?.toLowerCase().includes(q)
+        fuzzyMatch(q, p.Jugador) ||
+        fuzzyMatch(q, p.Equipo || '')
       )
       .slice(0, 30)
   }, [query, sourceFilter, external, internal])

@@ -8,6 +8,7 @@ import {
 import { useData } from '@/context/DataContext'
 import type { EnrichedPlayer } from '@/types'
 import { POSITION_MAP, SCORING_CONFIG, METRIC_ABBREVIATIONS, DISPLAY_POSITION_MAP } from '@/constants/scoring'
+import { fuzzyMatch } from '@/lib/search'
 
 // Normaliza una posición cruda del CSV (puede ser código Wyscout o string con comas)
 // a un nombre amigable en español para mostrar en dropdowns y filtros.
@@ -214,7 +215,7 @@ function scoreBg(s: number | null | undefined) {
   return s >= 7 ? 'bg-green-100 dark:bg-green-900/30' : s >= 5 ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-red-100 dark:bg-red-900/30'
 }
 
-// Normalize string for search (remove accents, lowercase)
+// Kept for non-search uses (jitter, etc.)
 function norm(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(/\p{Mn}/gu, '')
 }
@@ -325,10 +326,10 @@ export default function BusquedaPage() {
 
   const filteredCandidates = useMemo<SearchCandidate[]>(() => {
     if (!query.trim() && !searchLigaFilter && !searchPositionFilter && !searchEquipoFilter) return []
-    const q = norm(query)
+    const q = query.trim()
     return candidates
       .filter(c => {
-        const matchesQuery = !q || norm(c.name).includes(q) || norm(c.club).includes(q) || norm(c.position).includes(q)
+        const matchesQuery = !q || fuzzyMatch(q, c.name) || fuzzyMatch(q, c.club) || fuzzyMatch(q, c.position)
         return matchesQuery
           && (!searchLigaFilter || c.liga === searchLigaFilter)
           && (!searchEquipoFilter || c.club === searchEquipoFilter)

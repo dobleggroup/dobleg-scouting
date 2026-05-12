@@ -491,13 +491,13 @@ export default function MonitoringPage() {
       // League filter
       if (ligaFilters.length > 0 && !ligaFilters.includes(p.Liga)) return false
       // Club search
-      if (clubSearch && !p.Club?.toLowerCase().includes(clubSearch.toLowerCase())) return false
+      if (clubSearch && !fuzzyMatch(clubSearch, p.Club || '')) return false
       // Role filter
       if (rolFilter && p.Rol !== rolFilter) return false
       // Representative filter
       if (repreFilter) {
         const playerRepre = p.Repre || p.metricsPlayer?.Representante || ''
-        if (!playerRepre.toLowerCase().includes(repreFilter.toLowerCase())) return false
+        if (!fuzzyMatch(repreFilter, playerRepre)) return false
       }
       // Status filter
       if (statusFilter) {
@@ -559,12 +559,11 @@ export default function MonitoringPage() {
       const posicion = mp.posicion || ext?.['Posición'] || ''
 
       if (search) {
-        const s = search.toLowerCase()
-        if (!nameForSearch.toLowerCase().includes(s) && !clubForSearch.toLowerCase().includes(s)) continue
+        if (!fuzzyMatch(search, nameForSearch) && !fuzzyMatch(search, clubForSearch)) continue
       }
       if (posFilters.length > 0 && !posFilters.includes(posicion)) continue
       if (ligaFilters.length > 0 && !ligaFilters.includes(liga)) continue
-      if (clubSearch && !clubForSearch.toLowerCase().includes(clubSearch.toLowerCase())) continue
+      if (clubSearch && !fuzzyMatch(clubSearch, clubForSearch)) continue
       if (rolFilter && mp.rol !== rolFilter) continue
       if (statusFilter) {
         const st = (manualStatuses[mp.id]?.status as ManagementStatus) || 'en_seguimiento'

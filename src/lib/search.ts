@@ -1,95 +1,89 @@
-/**
- * Smart search utilities for fuzzy matching
- * Handles accents, case insensitivity, and partial matches
- */
-
-/**
- * Normalize a string for search comparison
- * - Removes accents/diacritics (é → e, ñ → n, etc.)
- * - Converts to lowercase
- * - Trims whitespace
- */
 export function normalizeForSearch(str: string): string {
   return str
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // Remove diacritics
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[.\-_,;:]/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim()
 }
 
-/**
- * Check if a search term matches a target string (fuzzy)
- * Handles: accents, case, partial matches, initials
- */
+function initialsMatch(searchWords: string[], targetWords: string[]): boolean {
+  if (searchWords.length < 1) return false
+  const first = searchWords[0]
+  if (first.length > 2) return false
+  const rest = searchWords.slice(1)
+  const hasInitialHit = targetWords.some(tw => tw.startsWith(first))
+  if (!hasInitialHit) return false
+  if (rest.length === 0) return first.length >= 2
+  return rest.every(sw => targetWords.some(tw => tw.includes(sw) || sw.includes(tw)))
+}
+
 export function fuzzyMatch(searchTerm: string, target: string): boolean {
   if (!searchTerm || !target) return false
 
-  const normalizedSearch = normalizeForSearch(searchTerm)
-  const normalizedTarget = normalizeForSearch(target)
+  const ns = normalizeForSearch(searchTerm)
+  const nt = normalizeForSearch(target)
 
-  // Direct substring match
-  if (normalizedTarget.includes(normalizedSearch)) {
-    return true
-  }
+  if (!ns) return false
 
-  // Match against individual words in target
-  const targetWords = normalizedTarget.split(/\s+/)
-  const searchWords = normalizedSearch.split(/\s+/)
+  if (ns.length >= 2 && nt.includes(ns)) return true
 
-  // All search words must match something
-  return searchWords.every(searchWord =>
-    targetWords.some(targetWord => targetWord.includes(searchWord))
-  )
+  const sw = ns.split(/\s+/)
+  const tw = nt.split(/\s+/)
+
+  if (sw.length > 1 && sw.every(s => tw.some(t => t.includes(s)))) return true
+  if (sw.length === 1 && sw[0].length >= 3 && tw.some(t => t.startsWith(sw[0]))) return true
+
+  if (initialsMatch(sw, tw)) return true
+  if (initialsMatch(tw, sw)) return true
+
+  return false
 }
 
-/**
- * Score a match for sorting (higher = better match)
- */
 export function matchScore(searchTerm: string, target: string): number {
   if (!searchTerm || !target) return 0
 
-  const normalizedSearch = normalizeForSearch(searchTerm)
-  const normalizedTarget = normalizeForSearch(target)
+  const ns = normalizeForSearch(searchTerm)
+  const nt = normalizeForSearch(target)
 
-  // Exact match = highest score
-  if (normalizedTarget === normalizedSearch) return 100
+  if (!ns) return 0
+  if (nt === ns) return 100
+  if (nt.startsWith(ns)) return 90
 
-  // Starts with = very high score
-  if (normalizedTarget.startsWith(normalizedSearch)) return 90
+  const tw = nt.split(/\s+/)
+  const sw = ns.split(/\s+/)
 
-  // Contains as complete word
-  const words = normalizedTarget.split(/\s+/)
-  for (const word of words) {
-    if (word === normalizedSearch) return 85
-    if (word.startsWith(normalizedSearch)) return 80
+  for (const word of tw) {
+    if (word === ns) return 85
+    if (word.startsWith(ns)) return 80
   }
 
-  // Contains anywhere
-  if (normalizedTarget.includes(normalizedSearch)) return 70
+  if (ns.length >= 2 && nt.includes(ns)) return 70
 
-  // Partial word match
-  const searchWords = normalizedSearch.split(/\s+/)
-  const matchedWords = searchWords.filter(sw =>
-    words.some(tw => tw.includes(sw))
-  ).length
+  if (initialsMatch(sw, tw)) return 75
 
-  if (matchedWords > 0) {
-    return 50 + (matchedWords / searchWords.length) * 20
+  const matched = sw.filter(s => tw.some(t => t.includes(s) || t.startsWith(s))).length
+  if (matched === sw.length) return 65
+
+  if (matched > 0) return 40 + (matched / sw.length) * 25
+
+  if (sw.length === 1 && sw[0].length >= 3) {
+    for (const t of tw) {
+      if (t.startsWith(sw[0])) return 60
+    }
   }
 
   return 0
 }
 
-/**
- * Search and sort a list of items by match quality
- */
 export function smartSearch<T>(
   items: T[],
   searchTerm: string,
   getSearchableText: (item: T) => string,
   limit = 10
 ): T[] {
-  if (!searchTerm || searchTerm.length < 2) return []
+  if (!searchTerm || searchTerm.length < 1) return []
 
   const scored = items
     .map(item => ({

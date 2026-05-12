@@ -6,6 +6,7 @@ import { PDFBuilderProvider } from '@/context/PDFBuilderContext'
 const PDFBuilderModal = lazy(() => import('@/components/pdf/PDFBuilderModal'))
 const PDFAddedToast = lazy(() => import('@/components/pdf/AddToReportButton').then(m => ({ default: m.PDFAddedToast })))
 
+const HomePage = lazy(() => import('@/pages/HomePage'))
 const ExternalScoutingPage = lazy(() => import('@/pages/ExternalScoutingPage'))
 const InternalScoutingPage = lazy(() => import('@/pages/InternalScoutingPage'))
 const MonitoringPage = lazy(() => import('@/pages/MonitoringPage'))
@@ -29,7 +30,8 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route element={<Layout />}>
-            <Route path="/" element={<ExternalScoutingPage />} />
+            <Route path="/" element={<HomePage />} />
+            <Route path="/scouting" element={<ExternalScoutingPage />} />
             <Route path="/interno" element={<InternalScoutingPage />} />
             <Route path="/panel-interno" element={<DashboardPage />} />
             <Route path="/seguimiento" element={<MonitoringPage />} />

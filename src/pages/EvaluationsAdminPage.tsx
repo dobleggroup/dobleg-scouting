@@ -5,64 +5,8 @@ import {
   updateEvaluation,
   type ScoutEvaluation,
 } from '@/services/scoutEvaluationService'
+import { matchScore as sharedMatchScore } from '@/lib/search'
 
-// Fuzzy matching function
-function fuzzyMatch(input: string, target: string): number {
-  const inputLower = input.toLowerCase().trim()
-  const targetLower = target.toLowerCase().trim()
-
-  // Exact match
-  if (inputLower === targetLower) return 100
-
-  // Check if input is contained in target or vice versa
-  if (targetLower.includes(inputLower) || inputLower.includes(targetLower)) {
-    return 80
-  }
-
-  // Split into parts and check each
-  const inputParts = inputLower.split(/[\s.,]+/).filter(Boolean)
-  const targetParts = targetLower.split(/[\s.,]+/).filter(Boolean)
-
-  let matchScore = 0
-  let matchedParts = 0
-
-  for (const inputPart of inputParts) {
-    for (const targetPart of targetParts) {
-      if (inputPart === targetPart) {
-        matchedParts++
-        matchScore += 30
-      } else if (targetPart.includes(inputPart) || inputPart.includes(targetPart)) {
-        matchedParts++
-        matchScore += 20
-      } else if (inputPart.length > 2 && targetPart.startsWith(inputPart.charAt(0))) {
-        // Initial match (e.g., "J" matches "Juan")
-        matchScore += 5
-      }
-    }
-  }
-
-  // Bonus for matching multiple parts
-  if (matchedParts >= 2) matchScore += 15
-
-  // Check for common abbreviation patterns
-  // "J. Perez" should match "Juan Perez"
-  if (inputParts.length === 2 && inputParts[0].length <= 2) {
-    const lastName = inputParts[1]
-    if (targetParts.some(p => p === lastName || p.includes(lastName))) {
-      matchScore += 25
-    }
-  }
-  if (targetParts.length >= 2 && targetParts[0].length <= 2) {
-    const lastName = targetParts[targetParts.length - 1]
-    if (inputParts.some(p => p === lastName || p.includes(lastName))) {
-      matchScore += 25
-    }
-  }
-
-  return Math.min(matchScore, 95)
-}
-
-// Find best matches for a player name
 function findBestMatches(
   searchName: string,
   searchTeam: string | null,
@@ -72,25 +16,23 @@ function findBestMatches(
   const results: Array<{ player: typeof players[0]; score: number; reasons: string[] }> = []
 
   for (const player of players) {
-    let score = fuzzyMatch(searchName, player.name)
+    let score = sharedMatchScore(searchName, player.name)
     const reasons: string[] = []
 
-    if (score < 10) continue // Skip very low matches
+    if (score < 10) continue
 
     if (score >= 50) reasons.push('Nombre similar')
 
-    // Team bonus
     if (searchTeam && player.team) {
-      const teamMatch = fuzzyMatch(searchTeam, player.team)
+      const teamMatch = sharedMatchScore(searchTeam, player.team)
       if (teamMatch >= 50) {
         score += 20
         reasons.push('Mismo equipo')
       }
     }
 
-    // Position bonus
     if (searchPosition && player.position) {
-      const posMatch = fuzzyMatch(searchPosition, player.position)
+      const posMatch = sharedMatchScore(searchPosition, player.position)
       if (posMatch >= 50) {
         score += 10
         reasons.push('Misma posicion')

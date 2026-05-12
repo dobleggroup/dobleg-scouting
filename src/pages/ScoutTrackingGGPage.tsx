@@ -15,6 +15,7 @@ import AddPlayerModal from '@/components/tracking/AddPlayerModal'
 import LinkPlayerModal from '@/components/tracking/LinkPlayerModal'
 import FichaManualModal from '@/components/tracking/FichaManualModal'
 import type { ScoutPlayer, ScoutPlayerStatusRecord, ScoutsGGStatus, EnrichedPlayer } from '@/types'
+import { fuzzyMatch } from '@/lib/search'
 
 const ADMIN_EMAIL = 'marcoscucho99@gmail.com'
 
@@ -272,10 +273,9 @@ export default function ScoutTrackingGGPage() {
   const filtered = useMemo(() => {
     return players.filter(p => {
       if (search) {
-        const s = search.toLowerCase()
-        if (!p.full_name.toLowerCase().includes(s) &&
-            !p.club?.toLowerCase().includes(s) &&
-            !p.liga?.toLowerCase().includes(s)) return false
+        if (!fuzzyMatch(search, p.full_name) &&
+            !fuzzyMatch(search, p.club || '') &&
+            !fuzzyMatch(search, p.liga || '')) return false
       }
       if (posFilter && p.posicion !== posFilter) return false
       if (priorityFilter && p.prioridad !== priorityFilter) return false
