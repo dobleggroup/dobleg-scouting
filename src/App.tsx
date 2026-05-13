@@ -36,7 +36,7 @@ export default function App() {
             <Route path="/scouting" element={<ExternalScoutingPage />} />
             <Route path="/interno" element={<InternalScoutingPage />} />
             <Route path="/panel-interno" element={<DashboardPage />} />
-            <Route path="/seguimiento" element={<MonitoringPage />} />
+            <Route path="/seguimiento-datos" element={<MonitoringPage />} />
             <Route path="/oportunidades" element={<OpportunitiesPage />} />
             <Route path="/similares" element={<SimilarPlayersPage />} />
             <Route path="/jugador/:id" element={<PlayerDetailPage />} />
@@ -47,7 +47,7 @@ export default function App() {
             <Route path="/evaluaciones" element={<EvaluationsAdminPage />} />
             <Route path="/radar" element={<RadarAnalysisPage />} />
             <Route path="/trabajos-scouting" element={<ScoutingWorksPage />} />
-            <Route path="/scouts-gg" element={<ScoutTrackingGGPage />} />
+            <Route path="/seguimiento-gg" element={<ScoutTrackingGGPage />} />
             <Route path="/analisis-completo" element={<BusquedaPage />} />
           </Route>
         </Routes>

@@ -907,7 +907,7 @@ export default function PlayerDetailPage() {
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-apple-gray-500 dark:text-apple-gray-400 mb-5">
         <Link
-          to={source === 'interno' ? '/interno' : source === 'seguimiento' ? '/seguimiento' : '/'}
+          to={source === 'interno' ? '/interno' : source === 'seguimiento' ? '/seguimiento-datos' : '/'}
           className="hover:text-brand-green transition-colors"
         >
           {source === 'interno' ? 'Scout Interno' : source === 'seguimiento' ? 'Seguimiento' : 'Scout Externo'}

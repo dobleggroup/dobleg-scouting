@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { AGENCY_PLAYERS, getTotalPortfolioValue, formatPortfolioValue, getExpiringContracts } from '@/constants/agencyPlayers'
-import { fetchAllAgencyFixtures, getFixturesForDate, groupFixturesByDate } from '@/services/footballApiService'
+import { AGENCY_PLAYERS, getExpiringContracts } from '@/constants/agencyPlayers'
+import { fetchAllAgencyFixtures, getFixturesForDate, groupFixturesByDate, toArDateKey } from '@/services/footballApiService'
+import { useAuth } from '@/context/AuthContext'
 import type { AgencyFixture } from '@/types/footballApi'
 
 const DAYS_ES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
@@ -12,12 +13,19 @@ function formatDateLong(date: Date): string {
   return `${DAYS_ES[date.getDay()]} ${date.getDate()} de ${MONTHS_ES[date.getMonth()]}`
 }
 
+function formatDateShort(date: Date): string {
+  return `${date.getDate()} ${MONTHS_ES[date.getMonth()].slice(0, 3)}`
+}
+
 function dateKey(date: Date): string {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' }).format(date)
 }
 
 function getGreeting(): string {
-  const h = new Date().getHours()
+  const h = parseInt(new Intl.DateTimeFormat('es-AR', {
+    hour: 'numeric', hour12: false,
+    timeZone: 'America/Argentina/Buenos_Aires',
+  }).format(new Date()), 10)
   if (h < 12) return 'Buenos días'
   if (h < 19) return 'Buenas tardes'
   return 'Buenas noches'
@@ -32,7 +40,7 @@ function formatMatchTime(dateStr: string): string {
 }
 
 function isSameDay(a: Date, b: Date): boolean {
-  return a.getDate() === b.getDate() && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear()
+  return dateKey(a) === dateKey(b)
 }
 
 function isMatchFinished(status: string): boolean {
@@ -43,25 +51,26 @@ function isMatchLive(status: string): boolean {
   return ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'SUSP', 'INT', 'LIVE'].includes(status)
 }
 
-// ─── Stat Card ───────────────────────────────────────────────────────────────
-
-function StatCard({ value, label, accent }: { value: string; label: string; accent?: boolean }) {
-  return (
-    <div className="bg-white dark:bg-apple-gray-800/60 rounded-apple-lg p-4 border border-apple-gray-200/60 dark:border-apple-gray-700/40 transition-all hover:shadow-apple dark:hover:shadow-apple-dark">
-      <p className={`text-2xl font-bold tracking-tight ${accent ? 'text-brand-green' : 'text-apple-gray-800 dark:text-white'}`}>
-        {value}
-      </p>
-      <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mt-0.5">{label}</p>
-    </div>
-  )
+function isAbroad(fixture: AgencyFixture): boolean {
+  return fixture.leagueCountry !== 'Argentina'
 }
 
-// ─── Match Card ──────────────────────────────────────────────────────────────
+function parseContractDate(str: string): Date {
+  const [d, m, y] = str.split('/')
+  return new Date(+y, +m - 1, +d)
+}
+
+function daysUntil(date: Date): number {
+  return Math.ceil((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+}
+
+// ─── Match Card (today/live) ────────────────────────────────────────────────
 
 function MatchCard({ fixture }: { fixture: AgencyFixture }) {
   const time = formatMatchTime(fixture.date)
   const finished = isMatchFinished(fixture.statusShort)
   const live = isMatchLive(fixture.statusShort)
+  const abroad = isAbroad(fixture)
 
   return (
     <div className={`bg-white dark:bg-apple-gray-800/60 rounded-apple-lg border transition-all hover:shadow-apple-md dark:hover:shadow-apple-dark-md ${
@@ -74,14 +83,22 @@ function MatchCard({ fixture }: { fixture: AgencyFixture }) {
             {fixture.leagueName} · {fixture.round.replace('Regular Season - ', 'J')}
           </span>
         </div>
-        {live ? (
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-green">
-            <span className="w-1.5 h-1.5 rounded-full bg-brand-green animate-pulse-soft" />
-            {fixture.elapsed}'
-          </span>
-        ) : (
-          <span className="text-xs text-apple-gray-400 dark:text-apple-gray-500">{time}</span>
-        )}
+        <div className="flex items-center gap-2">
+          {abroad && fixture.leagueFlag && (
+            <span className="inline-flex items-center gap-1 text-2xs text-sky-400">
+              <img src={fixture.leagueFlag} alt="" className="w-3.5 h-2.5 object-cover rounded-[1px]" />
+              {fixture.leagueCountry}
+            </span>
+          )}
+          {live ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-green">
+              <span className="w-1.5 h-1.5 rounded-full bg-brand-green animate-pulse-soft" />
+              {fixture.elapsed}'
+            </span>
+          ) : (
+            <span className="text-xs text-apple-gray-400 dark:text-apple-gray-500">{time}</span>
+          )}
+        </div>
       </div>
 
       <div className="px-4 py-4">
@@ -92,7 +109,6 @@ function MatchCard({ fixture }: { fixture: AgencyFixture }) {
               {fixture.homeTeam.name}
             </span>
           </div>
-
           <div className="flex-shrink-0 px-3">
             {finished || live ? (
               <span className="text-lg font-bold text-apple-gray-800 dark:text-white tabular-nums">
@@ -102,7 +118,6 @@ function MatchCard({ fixture }: { fixture: AgencyFixture }) {
               <span className="text-sm font-medium text-apple-gray-300 dark:text-apple-gray-600">vs</span>
             )}
           </div>
-
           <div className="flex items-center gap-2.5 flex-1 min-w-0 justify-end">
             <span className="text-sm font-medium text-apple-gray-800 dark:text-white truncate text-right">
               {fixture.awayTeam.name}
@@ -112,46 +127,63 @@ function MatchCard({ fixture }: { fixture: AgencyFixture }) {
         </div>
       </div>
 
-      <div className="px-4 py-2.5 border-t border-apple-gray-100 dark:border-apple-gray-700/40 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {fixture.players.map(p => (
-            <span key={p.fullName} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-green/10 text-brand-green">
-              {p.image && <img src={p.image} alt="" className="w-3.5 h-3.5 rounded-full object-cover" />}
-              {p.shortName}
-            </span>
-          ))}
-        </div>
-        <span className={`text-xs flex-shrink-0 ${fixture.isHome ? 'text-blue-500' : 'text-orange-400'}`}>
-          {fixture.isHome ? 'Local' : 'Visitante'}
-        </span>
+      <div className="px-4 py-3 border-t border-apple-gray-100 dark:border-apple-gray-700/40 flex items-center gap-2 flex-wrap">
+        {fixture.players.map(p => (
+          <span key={p.fullName} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium bg-brand-green/10 text-brand-green">
+            {p.image && <img src={p.image} alt="" className="w-6 h-6 rounded-full object-cover" />}
+            {p.shortName}
+          </span>
+        ))}
       </div>
     </div>
   )
 }
 
-// ─── Player Mini Card ────────────────────────────────────────────────────────
+// ─── Result Row (compact) ───────────────────────────────────────────────────
 
-function PlayerMiniCard({ player }: { player: typeof AGENCY_PLAYERS[0] }) {
+function ResultRow({ fixture }: { fixture: AgencyFixture }) {
+  const fixtureDate = new Date(fixture.date)
+  const abroad = isAbroad(fixture)
+
+  const ourTeamId = fixture.players.length > 0
+    ? AGENCY_PLAYERS.find(p => fixture.players.some(fp => fp.fullName === p.fullName))?.apiTeamId
+    : undefined
+  const won = ourTeamId === fixture.homeTeam.id
+    ? (fixture.goalsHome ?? 0) > (fixture.goalsAway ?? 0)
+    : (fixture.goalsAway ?? 0) > (fixture.goalsHome ?? 0)
+  const drew = fixture.goalsHome === fixture.goalsAway
+
   return (
-    <div className="group bg-white dark:bg-apple-gray-800/40 rounded-apple p-3 border border-apple-gray-200/50 dark:border-apple-gray-700/30 transition-all hover:shadow-apple dark:hover:shadow-apple-dark hover:border-apple-gray-300 dark:hover:border-apple-gray-600">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full overflow-hidden bg-apple-gray-100 dark:bg-apple-gray-700 flex-shrink-0 ring-2 ring-apple-gray-200/50 dark:ring-apple-gray-600/50">
-          {player.image ? (
-            <img src={player.image} alt="" className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-apple-gray-400 text-sm font-medium">
-              {player.shortName.charAt(0)}
-            </div>
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-apple-gray-800 dark:text-white truncate">{player.shortName}</p>
-          <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 truncate">{player.team}</p>
-        </div>
-        {player.marketValue && (
-          <span className="text-xs font-medium text-brand-green flex-shrink-0">{player.marketValue}</span>
-        )}
+    <div className="flex items-center gap-3 py-2">
+      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+        drew ? 'bg-apple-gray-400' : won ? 'bg-brand-green' : 'bg-red-400'
+      }`} />
+      <span className="text-xs text-apple-gray-400 w-14 flex-shrink-0">
+        {formatDateShort(fixtureDate)}
+      </span>
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+        <img src={fixture.homeTeam.logo} alt="" className="w-5 h-5 object-contain flex-shrink-0" />
+        <span className="text-sm text-apple-gray-700 dark:text-apple-gray-300 truncate">
+          {fixture.homeTeam.name}
+        </span>
+        <span className="text-sm font-bold text-apple-gray-800 dark:text-white tabular-nums flex-shrink-0">
+          {fixture.goalsHome} - {fixture.goalsAway}
+        </span>
+        <span className="text-sm text-apple-gray-700 dark:text-apple-gray-300 truncate">
+          {fixture.awayTeam.name}
+        </span>
+        <img src={fixture.awayTeam.logo} alt="" className="w-5 h-5 object-contain flex-shrink-0" />
       </div>
+      <div className="flex items-center gap-1 flex-shrink-0">
+        {fixture.players.slice(0, 2).map(p => (
+          <span key={p.fullName} className="text-2xs text-brand-green font-medium">
+            {p.shortName}
+          </span>
+        ))}
+      </div>
+      {abroad && fixture.leagueFlag && (
+        <img src={fixture.leagueFlag} alt="" className="w-4 h-3 object-cover rounded-[1px] flex-shrink-0" />
+      )}
     </div>
   )
 }
@@ -175,9 +207,6 @@ function MatchSkeleton() {
           <div className="w-8 h-8 rounded-full bg-apple-gray-100 dark:bg-apple-gray-700" />
         </div>
       </div>
-      <div className="px-4 py-2.5 border-t border-apple-gray-100 dark:border-apple-gray-700/40">
-        <div className="h-3 bg-apple-gray-100 dark:bg-apple-gray-700 rounded w-20" />
-      </div>
     </div>
   )
 }
@@ -185,6 +214,7 @@ function MatchSkeleton() {
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function HomePage() {
+  const { userDisplayName } = useAuth()
   const [fixtures, setFixtures] = useState<AgencyFixture[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -227,6 +257,64 @@ export default function HomePage() {
     [fixtures, selectedDate]
   )
 
+  const recentResults = useMemo(() => {
+    const results: AgencyFixture[] = []
+    for (let i = 1; i <= 5; i++) {
+      const d = new Date(today)
+      d.setDate(today.getDate() - i)
+      const key = toArDateKey(d)
+      const dayFixtures = fixturesByDate.get(key) || []
+      results.push(...dayFixtures.filter(f => isMatchFinished(f.statusShort)))
+    }
+    return results.sort((a, b) => b.timestamp - a.timestamp)
+  }, [today, fixturesByDate])
+
+  const upcomingTravel = useMemo(() => {
+    const trips: AgencyFixture[] = []
+    for (let i = 0; i <= 10; i++) {
+      const d = new Date(today)
+      d.setDate(today.getDate() + i)
+      const key = toArDateKey(d)
+      const dayFixtures = fixturesByDate.get(key) || []
+      trips.push(...dayFixtures.filter(f => isAbroad(f) && !isMatchFinished(f.statusShort)))
+    }
+    return trips.sort((a, b) => a.timestamp - b.timestamp)
+  }, [today, fixturesByDate])
+
+  const weekActivity = useMemo(() => {
+    const playerGames = new Map<string, number>()
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today)
+      d.setDate(today.getDate() + i)
+      const key = toArDateKey(d)
+      const dayFixtures = fixturesByDate.get(key) || []
+      for (const f of dayFixtures) {
+        for (const p of f.players) {
+          playerGames.set(p.fullName, (playerGames.get(p.fullName) || 0) + 1)
+        }
+      }
+    }
+    return playerGames
+  }, [today, fixturesByDate])
+
+  const activePlayers = useMemo(
+    () => AGENCY_PLAYERS.filter(p => !p.isReserve && weekActivity.has(p.fullName)),
+    [weekActivity]
+  )
+
+  const inactivePlayers = useMemo(
+    () => AGENCY_PLAYERS.filter(p => !p.isReserve && !weekActivity.has(p.fullName)),
+    [weekActivity]
+  )
+
+  const expiringContracts = useMemo(() => {
+    return getExpiringContracts(8).sort((a, b) => {
+      const dateA = parseContractDate(a.contractEnd!)
+      const dateB = parseContractDate(b.contractEnd!)
+      return dateA.getTime() - dateB.getTime()
+    })
+  }, [])
+
   const calendarDays = useMemo(() => {
     const days: Date[] = []
     for (let i = 0; i < 14; i++) {
@@ -246,10 +334,6 @@ export default function HomePage() {
     return null
   }, [calendarDays, today, fixturesByDate])
 
-  const portfolioValue = useMemo(() => formatPortfolioValue(getTotalPortfolioValue()), [])
-  const expiringCount = useMemo(() => getExpiringContracts().length, [])
-  const uniqueTeams = useMemo(() => new Set(AGENCY_PLAYERS.map(p => p.team)).size, [])
-
   return (
     <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-6 space-y-8 animate-fade-in">
 
@@ -257,7 +341,7 @@ export default function HomePage() {
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-apple-gray-800 dark:text-white tracking-tight">
-            {getGreeting()}
+            {getGreeting()}{userDisplayName ? `, ${userDisplayName}` : ''}
           </h1>
           <p className="text-sm text-apple-gray-400 dark:text-apple-gray-500 mt-0.5">
             {formatDateLong(today)}
@@ -275,14 +359,6 @@ export default function HomePage() {
         </button>
       </div>
 
-      {/* ── Quick Stats ─────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard value={String(AGENCY_PLAYERS.length)} label="Jugadores" />
-        <StatCard value={portfolioValue} label="Valor portfolio" accent />
-        <StatCard value={String(uniqueTeams)} label="Equipos" />
-        <StatCard value={String(expiringCount)} label="Contratos por vencer" />
-      </div>
-
       {/* ── Error Banner ───────────────────────────────────── */}
       {error && (
         <div className="flex items-center gap-3 px-4 py-3 rounded-apple-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 text-sm text-red-700 dark:text-red-300">
@@ -296,27 +372,24 @@ export default function HomePage() {
 
       {/* ── Today's Matches ─────────────────────────────────── */}
       <section>
-        <h2 className="text-lg font-semibold text-apple-gray-800 dark:text-white mb-4 flex items-center gap-2">
-          Partidos de hoy
+        <div className="flex items-center gap-3 mb-4">
+          <h2 className="text-lg font-semibold text-apple-gray-800 dark:text-white">
+            Partidos de hoy
+          </h2>
           {todayFixtures.length > 0 && (
-            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-green text-white text-xs font-bold">
+            <span className="inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-md bg-brand-green/15 text-brand-green text-xs font-bold">
               {todayFixtures.length}
             </span>
           )}
-        </h2>
+        </div>
 
         {loading ? (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3">
             <MatchSkeleton />
             <MatchSkeleton />
           </div>
         ) : todayFixtures.length === 0 ? (
-          <div className="text-center py-12 bg-white dark:bg-apple-gray-800/30 rounded-apple-lg border border-apple-gray-200/40 dark:border-apple-gray-700/30">
-            <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-apple-gray-100 dark:bg-apple-gray-800 flex items-center justify-center">
-              <svg className="w-6 h-6 text-apple-gray-300 dark:text-apple-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </div>
+          <div className="text-center py-10 bg-white dark:bg-apple-gray-800/30 rounded-apple-lg border border-apple-gray-200/40 dark:border-apple-gray-700/30">
             <p className="text-sm text-apple-gray-400 dark:text-apple-gray-500">No hay partidos hoy</p>
             {nextMatchDate && (
               <p className="text-xs text-apple-gray-300 dark:text-apple-gray-600 mt-1">
@@ -325,7 +398,7 @@ export default function HomePage() {
             )}
           </div>
         ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3">
             {todayFixtures.map(f => (
               <MatchCard key={f.fixtureId} fixture={f} />
             ))}
@@ -333,11 +406,11 @@ export default function HomePage() {
         )}
       </section>
 
-      {/* ── Calendar + Upcoming ─────────────────────────────── */}
+      {/* ── Calendar Strip (14 days) ──────────────────────── */}
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-apple-gray-800 dark:text-white">
-            Próximos partidos
+            Próximos 14 días
           </h2>
           <Link
             to="/calendario"
@@ -350,7 +423,6 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {/* Calendar Strip */}
         <div className="bg-white dark:bg-apple-gray-800/60 rounded-apple-lg border border-apple-gray-200/60 dark:border-apple-gray-700/40 overflow-hidden">
           <div className="flex overflow-x-auto">
             {calendarDays.map(day => {
@@ -394,11 +466,10 @@ export default function HomePage() {
             })}
           </div>
 
-          {/* Selected Day Matches */}
           {!loading && (
             <div className="border-t border-apple-gray-200/60 dark:border-apple-gray-700/40">
               {selectedDayFixtures.length === 0 ? (
-                <div className="py-8 text-center">
+                <div className="py-6 text-center">
                   <p className="text-sm text-apple-gray-400 dark:text-apple-gray-500">
                     Sin partidos el {formatDateLong(selectedDate)}
                   </p>
@@ -423,11 +494,14 @@ export default function HomePage() {
                       </div>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         {f.players.map(p => (
-                          <span key={p.fullName} className="px-1.5 py-0.5 rounded text-2xs font-medium bg-brand-green/10 text-brand-green">
+                          <span key={p.fullName} className="text-2xs font-medium text-brand-green">
                             {p.shortName}
                           </span>
                         ))}
                       </div>
+                      {isAbroad(f) && f.leagueFlag && (
+                        <img src={f.leagueFlag} alt="" className="w-4 h-3 object-cover rounded-[1px] flex-shrink-0" />
+                      )}
                     </div>
                   ))}
                 </div>
@@ -437,17 +511,147 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Roster ──────────────────────────────────────────── */}
-      <section>
-        <h2 className="text-lg font-semibold text-apple-gray-800 dark:text-white mb-4">
-          Plantilla
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
-          {AGENCY_PLAYERS.map((player, i) => (
-            <PlayerMiniCard key={`${player.fullName}-${i}`} player={player} />
-          ))}
-        </div>
-      </section>
+      {/* ── Viajes próximos (full width) ──────────────────── */}
+      {upcomingTravel.length > 0 && (
+        <section className="bg-gradient-to-r from-sky-50 to-blue-50 dark:from-sky-900/20 dark:to-blue-900/20 rounded-apple-lg border border-sky-200/50 dark:border-sky-800/30 p-5">
+          <h3 className="text-sm font-semibold text-apple-gray-800 dark:text-white mb-4 flex items-center gap-2">
+            <span className="text-lg">✈️</span>
+            Viajes próximos
+            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded bg-sky-100 dark:bg-sky-900/40 text-sky-600 dark:text-sky-400 text-2xs font-bold">
+              {upcomingTravel.length}
+            </span>
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {upcomingTravel.slice(0, 6).map(f => {
+              const d = new Date(f.date)
+              const opponent = f.isHome ? f.awayTeam : f.homeTeam
+              return (
+                <div key={f.fixtureId} className="flex items-center gap-3 bg-white/70 dark:bg-apple-gray-800/50 rounded-apple p-3">
+                  <div className="text-center w-12 flex-shrink-0">
+                    <p className="text-xs font-semibold text-apple-gray-700 dark:text-apple-gray-300">{formatDateShort(d)}</p>
+                    <p className="text-2xs text-apple-gray-400">{formatMatchTime(f.date)}</p>
+                  </div>
+                  {f.leagueFlag && (
+                    <img src={f.leagueFlag} alt="" className="w-5 h-3.5 object-cover rounded-[2px] flex-shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-apple-gray-700 dark:text-apple-gray-300 truncate">
+                      vs {opponent.name}
+                    </p>
+                    <p className="text-2xs text-sky-500">{f.leagueCountry} · {f.city}</p>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {f.players.slice(0, 2).map(p => (
+                      <span key={p.fullName} className="text-2xs text-brand-green font-medium">{p.shortName}</span>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* ── Results + Contracts (two columns) ─────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* Recent Results */}
+        {recentResults.length > 0 && (
+          <section className="bg-white dark:bg-apple-gray-800/40 rounded-apple-lg border border-apple-gray-200/50 dark:border-apple-gray-700/30 p-5">
+            <h3 className="text-sm font-semibold text-apple-gray-800 dark:text-white mb-2">
+              Resultados recientes
+            </h3>
+            <div className="divide-y divide-apple-gray-100 dark:divide-apple-gray-700/30">
+              {recentResults.slice(0, 8).map(f => (
+                <ResultRow key={f.fixtureId} fixture={f} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Expiring Contracts */}
+        {expiringContracts.length > 0 && (
+          <section className="bg-white dark:bg-apple-gray-800/40 rounded-apple-lg border border-apple-gray-200/50 dark:border-apple-gray-700/30 p-5">
+            <h3 className="text-sm font-semibold text-apple-gray-800 dark:text-white mb-3 flex items-center gap-2">
+              <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Contratos por vencer
+            </h3>
+            <div className="space-y-2.5">
+              {expiringContracts.map(p => {
+                const endDate = parseContractDate(p.contractEnd!)
+                const days = daysUntil(endDate)
+                const urgent = days <= 60
+
+                return (
+                  <div key={p.fullName} className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full overflow-hidden bg-apple-gray-100 dark:bg-apple-gray-700 flex-shrink-0">
+                      {p.image ? (
+                        <img src={p.image} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-apple-gray-400 text-xs">
+                          {p.shortName.charAt(0)}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-apple-gray-800 dark:text-white truncate">{p.shortName}</p>
+                      <p className="text-2xs text-apple-gray-400 truncate">{p.team}</p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className={`text-xs font-semibold ${urgent ? 'text-red-400' : 'text-amber-400'}`}>
+                        {days <= 0 ? 'Vencido' : `${days} días`}
+                      </p>
+                      <p className="text-2xs text-apple-gray-400">{p.contractEnd}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        )}
+      </div>
+
+      {/* ── Week Activity ──────────────────────────────────── */}
+      {!loading && (
+        <section>
+          <h2 className="text-lg font-semibold text-apple-gray-800 dark:text-white mb-4">
+            Actividad de la semana
+          </h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-white dark:bg-apple-gray-800/40 rounded-apple-lg border border-apple-gray-200/50 dark:border-apple-gray-700/30 p-5">
+              <p className="text-xs font-semibold text-brand-green uppercase tracking-wider mb-3">
+                Juegan esta semana ({activePlayers.length})
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {activePlayers.map(p => (
+                  <div key={p.fullName} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-green/5 dark:bg-brand-green/10">
+                    {p.image && <img src={p.image} alt="" className="w-5 h-5 rounded-full object-cover" />}
+                    <span className="text-sm text-apple-gray-700 dark:text-apple-gray-300">{p.shortName}</span>
+                    <span className="text-2xs text-brand-green font-semibold">{weekActivity.get(p.fullName)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-apple-gray-800/40 rounded-apple-lg border border-apple-gray-200/50 dark:border-apple-gray-700/30 p-5">
+              <p className="text-xs font-semibold text-apple-gray-400 uppercase tracking-wider mb-3">
+                Sin partidos esta semana ({inactivePlayers.length})
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {inactivePlayers.map(p => (
+                  <div key={p.fullName} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-apple-gray-50 dark:bg-apple-gray-800/60">
+                    {p.image && <img src={p.image} alt="" className="w-5 h-5 rounded-full object-cover opacity-50" />}
+                    <span className="text-sm text-apple-gray-400">{p.shortName}</span>
+                    <span className="text-2xs text-apple-gray-300 dark:text-apple-gray-600">{p.team}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useData } from '@/context/DataContext'
 import FilterSidebar from '@/components/filters/FilterSidebar'
 import MobileFilterPanel, { MobileFilterButton } from '@/components/filters/MobileFilterPanel'
@@ -7,9 +7,10 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import EmptyState from '@/components/ui/EmptyState'
 import { FILTER_POSITION_MAP } from '@/constants/scoring'
 import { parseContractDate } from '@/utils/scoring'
-import { exportTableToPdf } from '@/utils/pdfExport'
 import { fuzzyMatch } from '@/lib/search'
+import { fetchAllAgencyFixtures, fetchAgencyPlayersAppearances } from '@/services/footballApiService'
 import type { FilterState, EnrichedPlayer } from '@/types'
+import type { PlayerAppearanceData } from '@/types/footballApi'
 
 const DEFAULT_FILTERS: FilterState = {
   search: '',
@@ -91,8 +92,23 @@ function applyFilters(players: EnrichedPlayer[], filters: FilterState): Enriched
 export default function InternalScoutingPage() {
   const { internal, loading, error } = useData()
   const [filters, setFilters] = useState<FilterState>(loadFiltersFromStorage)
-  const [exporting, setExporting] = useState(false)
   const [showMobileFilters, setShowMobileFilters] = useState(false)
+  const [appearanceData, setAppearanceData] = useState<Map<string, PlayerAppearanceData>>(new Map())
+  const [appearanceProgress, setAppearanceProgress] = useState<{ loaded: number; total: number } | null>(null)
+  const appearanceFetched = useRef(false)
+
+  useEffect(() => {
+    if (appearanceFetched.current) return
+    appearanceFetched.current = true
+    fetchAllAgencyFixtures()
+      .then(fixtures =>
+        fetchAgencyPlayersAppearances(fixtures, (loaded, total) =>
+          setAppearanceProgress({ loaded, total })
+        )
+      )
+      .then(data => { setAppearanceData(data); setAppearanceProgress(null) })
+      .catch(() => setAppearanceProgress(null))
+  }, [])
 
   // Count active filters
   const activeFiltersCount = [
@@ -122,11 +138,6 @@ export default function InternalScoutingPage() {
     setFilters(DEFAULT_FILTERS)
     sessionStorage.removeItem(FILTERS_STORAGE_KEY)
   }, [])
-
-  const handleExport = async () => {
-    setExporting(true)
-    try { await exportTableToPdf('interno') } finally { setExporting(false) }
-  }
 
   if (loading) return <LoadingSpinner fullScreen message="Cargando scouting interno..." />
   if (error) return (
@@ -161,32 +172,25 @@ export default function InternalScoutingPage() {
               className="input-apple pl-9 pr-4 w-56"
             />
           </div>
-          {/* Export PDF */}
-          <button
-            onClick={handleExport}
-            disabled={exporting || filtered.length === 0}
-            className="btn-apple-primary disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {exporting ? (
-              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-            ) : (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            )}
-            Exportar PDF
-          </button>
         </div>
       </div>
+
+      {/* Appearance loading indicator */}
+      {appearanceProgress && appearanceProgress.total > 0 && (
+        <div className="flex items-center gap-2 px-4 py-2 rounded-apple bg-apple-gray-50 dark:bg-apple-gray-800/40 border border-apple-gray-200/40 dark:border-apple-gray-700/30 text-xs text-apple-gray-500 dark:text-apple-gray-400">
+          <svg className="w-3.5 h-3.5 animate-spin text-brand-green" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          Cargando datos de titularidad... {appearanceProgress.loaded}/{appearanceProgress.total}
+        </div>
+      )}
 
       {/* Layout */}
       <div className="flex gap-6">
         <FilterSidebar players={internal} filters={filters} onChange={setFilters} onReset={handleReset} />
         <div className="flex-1 min-w-0">
-          <PlayerTable players={filtered} source="interno" selectedMetrics={filters.selectedMetrics} />
+          <PlayerTable players={filtered} source="interno" selectedMetrics={filters.selectedMetrics} appearanceData={appearanceData} />
         </div>
       </div>
     </div>

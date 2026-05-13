@@ -831,7 +831,7 @@ export default function DashboardPage() {
               </p>
             </div>
             <button
-              onClick={() => navigate('/seguimiento')}
+              onClick={() => navigate('/seguimiento-datos')}
               className="px-4 py-2 bg-brand-green text-black text-sm font-semibold rounded-lg hover:bg-green-400 transition-colors"
             >
               Ver todos los seguimientos
@@ -863,7 +863,7 @@ export default function DashboardPage() {
             {/* Top Recommendations - Above Doble G Average */}
             <Section
               title="Superan a Doble G"
-              action={{ label: 'Ver mas', onClick: () => navigate('/seguimiento') }}
+              action={{ label: 'Ver mas', onClick: () => navigate('/seguimiento-datos') }}
             >
               {recommendedSignings.length > 0 ? (
                 <div className="space-y-1">
@@ -888,7 +888,7 @@ export default function DashboardPage() {
             {/* Best Value Opportunities */}
             <Section
               title="Mejor Relacion Calidad/Precio"
-              action={{ label: 'Ver mas', onClick: () => navigate('/seguimiento') }}
+              action={{ label: 'Ver mas', onClick: () => navigate('/seguimiento-datos') }}
             >
               {bestValueOpportunities.length > 0 ? (
                 <div className="space-y-1">
@@ -912,7 +912,7 @@ export default function DashboardPage() {
             {/* Contract Opportunities */}
             <Section
               title="Contratos por Vencer"
-              action={{ label: 'Ver mas', onClick: () => navigate('/seguimiento') }}
+              action={{ label: 'Ver mas', onClick: () => navigate('/seguimiento-datos') }}
             >
               {contractOpportunities.length > 0 ? (
                 <div className="space-y-1">

@@ -93,6 +93,7 @@ export interface AgencyFixture {
   leagueName: string
   leagueLogo: string
   leagueCountry: string
+  leagueFlag: string | null
   round: string
   homeTeam: { id: number; name: string; logo: string }
   awayTeam: { id: number; name: string; logo: string }
@@ -100,4 +101,41 @@ export interface AgencyFixture {
   goalsAway: number | null
   isHome: boolean
   players: { shortName: string; fullName: string; image: string | null }[]
+}
+
+// ─── Fixture Players (per-match participation) ───────────────────────────────
+
+export interface ApiFixturePlayerStats {
+  player: { id: number; name: string; photo: string }
+  statistics: Array<{
+    games: {
+      minutes: number | null
+      number: number | null
+      position: string | null
+      rating: string | null
+      captain: boolean
+      substitute: boolean
+    }
+  }>
+}
+
+export interface ApiFixturePlayersResponse {
+  team: { id: number; name: string; logo: string }
+  players: ApiFixturePlayerStats[]
+}
+
+export type MatchStatus = 'starter' | 'sub' | 'not_played'
+
+export interface MatchAppearance {
+  fixtureId: number
+  date: string
+  status: MatchStatus
+}
+
+export interface PlayerAppearanceData {
+  matches: MatchAppearance[]
+  startRate: number
+  appearances: number
+  starts: number
+  subIns: number
 }

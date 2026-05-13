@@ -1,5 +1,5 @@
-import type { ApiResponse, ApiFixture, AgencyFixture } from '@/types/footballApi'
-import { getPlayersByTeamId, getUniqueTeamIds } from '@/constants/agencyPlayers'
+import type { ApiResponse, ApiFixture, AgencyFixture, ApiFixturePlayersResponse, MatchAppearance, PlayerAppearanceData } from '@/types/footballApi'
+import { AGENCY_PLAYERS, getPlayersByTeamId, getUniqueTeamIds } from '@/constants/agencyPlayers'
 
 const API_KEY = import.meta.env.VITE_FOOTBALL_API_KEY as string
 const BASE_URL = 'https://v3.football.api-sports.io'
@@ -68,6 +68,7 @@ function mapFixture(fixture: ApiFixture, teamId: number): AgencyFixture {
     leagueName: fixture.league.name,
     leagueLogo: fixture.league.logo,
     leagueCountry: fixture.league.country,
+    leagueFlag: fixture.league.flag ?? null,
     round: fixture.league.round,
     homeTeam: {
       id: fixture.teams.home.id,
@@ -175,4 +176,126 @@ export function groupFixturesByDate(fixtures: AgencyFixture[]): Map<string, Agen
     groups.get(key)!.push(f)
   }
   return groups
+}
+
+// ─── Player Appearances (per-match lineup data) ─────────────────────────────
+
+const LINEUPS_CACHE_KEY = 'dg-lineups-cache-v2'
+const FINISHED_STATUSES = ['FT', 'AET', 'PEN']
+
+function normalizeName(name: string): string {
+  return name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+}
+
+function namesMatch(apiName: string, agencyName: string): boolean {
+  const a = normalizeName(apiName)
+  const b = normalizeName(agencyName)
+  if (a === b) return true
+  const aParts = a.split(/\s+/)
+  const bParts = b.split(/\s+/)
+  const aLast = aParts[aParts.length - 1]
+  const bLast = bParts[bParts.length - 1]
+  if (aLast === bLast && aParts.length >= 2 && bParts.length >= 2 && aParts[0][0] === bParts[0][0]) return true
+  if (a.includes(b) || b.includes(a)) return true
+  return false
+}
+
+function getLineupsCache(): Record<string, ApiFixturePlayersResponse[]> {
+  try {
+    const raw = localStorage.getItem(LINEUPS_CACHE_KEY)
+    if (!raw) return {}
+    return JSON.parse(raw) as Record<string, ApiFixturePlayersResponse[]>
+  } catch { return {} }
+}
+
+function saveLineupsCache(data: Record<string, ApiFixturePlayersResponse[]>) {
+  try {
+    localStorage.setItem(LINEUPS_CACHE_KEY, JSON.stringify(data))
+  } catch { /* quota */ }
+}
+
+async function fetchFixturePlayers(fixtureId: number): Promise<ApiFixturePlayersResponse[]> {
+  const res = await apiFetch<ApiFixturePlayersResponse[]>('/fixtures/players', {
+    fixture: String(fixtureId),
+  })
+  return res.response
+}
+
+export async function fetchAgencyPlayersAppearances(
+  fixtures: AgencyFixture[],
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<Map<string, PlayerAppearanceData>> {
+  const result = new Map<string, PlayerAppearanceData>()
+  if (!API_KEY) return result
+
+  const finished = fixtures.filter(f => FINISHED_STATUSES.includes(f.statusShort))
+  const activePlayers = AGENCY_PLAYERS.filter(p => !p.isReserve && p.apiTeamId)
+
+  const teamFixturesMap = new Map<number, AgencyFixture[]>()
+  for (const p of activePlayers) {
+    if (teamFixturesMap.has(p.apiTeamId!)) continue
+    teamFixturesMap.set(
+      p.apiTeamId!,
+      finished
+        .filter(f => f.homeTeam.id === p.apiTeamId || f.awayTeam.id === p.apiTeamId)
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, 5),
+    )
+  }
+
+  const fixtureIds = new Set<number>()
+  for (const fixes of teamFixturesMap.values()) {
+    for (const f of fixes) fixtureIds.add(f.fixtureId)
+  }
+
+  const cache = getLineupsCache()
+  const uncached = [...fixtureIds].filter(id => !cache[String(id)])
+  let loaded = fixtureIds.size - uncached.length
+  onProgress?.(loaded, fixtureIds.size)
+
+  const BATCH = 10
+  for (let i = 0; i < uncached.length; i += BATCH) {
+    const batch = uncached.slice(i, i + BATCH)
+    const results = await Promise.all(batch.map(id => fetchFixturePlayers(id).catch(() => null)))
+    for (let j = 0; j < batch.length; j++) {
+      if (results[j]) cache[String(batch[j])] = results[j]!
+      loaded++
+    }
+    onProgress?.(loaded, fixtureIds.size)
+    saveLineupsCache(cache)
+    if (i + BATCH < uncached.length) await new Promise(r => setTimeout(r, 150))
+  }
+
+  for (const player of activePlayers) {
+    const teamFixes = teamFixturesMap.get(player.apiTeamId!) || []
+    const matches: MatchAppearance[] = []
+    let starts = 0
+    let subs = 0
+
+    for (const fix of teamFixes) {
+      const data = cache[String(fix.fixtureId)]
+      if (!data) { matches.push({ fixtureId: fix.fixtureId, date: fix.date, status: 'not_played' }); continue }
+
+      const teamData = data.find(t => t.team.id === player.apiTeamId)
+      if (!teamData) { matches.push({ fixtureId: fix.fixtureId, date: fix.date, status: 'not_played' }); continue }
+
+      const found = teamData.players.find(p => namesMatch(p.player.name, player.fullName))
+      if (!found || !found.statistics[0]?.games?.minutes) {
+        matches.push({ fixtureId: fix.fixtureId, date: fix.date, status: 'not_played' })
+      } else if (found.statistics[0].games.substitute) {
+        matches.push({ fixtureId: fix.fixtureId, date: fix.date, status: 'sub' })
+        subs++
+      } else {
+        matches.push({ fixtureId: fix.fixtureId, date: fix.date, status: 'starter' })
+        starts++
+      }
+    }
+
+    const appearances = starts + subs
+    const startRate = teamFixes.length > 0 ? Math.round((starts / teamFixes.length) * 100) : 0
+
+    result.set(player.fullName, { matches, startRate, appearances, starts, subIns: subs })
+  }
+
+  return result
 }

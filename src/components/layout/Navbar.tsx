@@ -1,31 +1,69 @@
 import { useState, useEffect, useRef } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '@/context/ThemeContext'
 import { useAuth } from '@/context/AuthContext'
 import ThemeToggle from './ThemeToggle'
 import AuthModal from '@/components/auth/AuthModal'
 import { PDFBuilderFloatingButton } from '@/components/pdf/AddToReportButton'
 
-const navLinks = [
-  { to: '/', label: 'Inicio', icon: 'home', exact: true },
+// ─── Navigation structure ────────────────────────────────────────────────────
+
+interface NavItem {
+  to: string
+  label: string
+  icon: string
+  exact?: boolean
+}
+
+interface NavGroup {
+  label: string
+  icon: string
+  to?: string // if clicking the label should navigate somewhere
+  items: NavItem[]
+}
+
+const inicioGroup: NavGroup = {
+  label: 'Inicio',
+  icon: 'home',
+  to: '/',
+  items: [
+    { to: '/panel-interno', label: 'Panel Interno', icon: 'chart' },
+    { to: '/calendario', label: 'Calendario', icon: 'calendar' },
+  ],
+}
+
+const directLinks: NavItem[] = [
   { to: '/scouting', label: 'Scout Externo', icon: 'globe' },
   { to: '/interno', label: 'Scout Interno', icon: 'users' },
-  { to: '/panel-interno', label: 'Panel Interno', icon: 'chart' },
-  { to: '/seguimiento', label: 'Seguimiento', icon: 'eye' },
-  { to: '/scouts-gg', label: 'Scouts GG', icon: 'shield' },
-  { to: '/trabajos-scouting', label: 'Trabajos', icon: 'folder' },
-  { to: '/evaluar', label: 'Reporte', icon: 'clipboard' },
 ]
 
-const talentSearchLinks = [
-  { to: '/analisis-completo', label: 'Análisis Completo', icon: 'search' },
-  { to: '/oportunidades', label: 'Oportunidades', icon: 'star' },
-  { to: '/similares', label: 'Similares', icon: 'search' },
-  { to: '/comparacion', label: 'Comparaciones', icon: 'compare' },
-  { to: '/formacion', label: 'Formaciones', icon: 'layout' },
-  { to: '/dispersion', label: 'Dispersión', icon: 'scatter' },
-  { to: '/radar', label: 'Detector', icon: 'radar' },
-]
+const seguimientoGroup: NavGroup = {
+  label: 'Seguimiento',
+  icon: 'eye',
+  items: [
+    { to: '/seguimiento-gg', label: 'Seguimiento GG', icon: 'shield' },
+    { to: '/seguimiento-datos', label: 'Seguimiento Datos', icon: 'eye' },
+  ],
+}
+
+const talentGroup: NavGroup = {
+  label: 'Búsqueda de Talento',
+  icon: 'search',
+  items: [
+    { to: '/analisis-completo', label: 'Análisis Completo', icon: 'search' },
+    { to: '/oportunidades', label: 'Oportunidades', icon: 'star' },
+    { to: '/similares', label: 'Similares', icon: 'search' },
+    { to: '/comparacion', label: 'Comparaciones', icon: 'compare' },
+    { to: '/formacion', label: 'Formaciones', icon: 'layout' },
+    { to: '/dispersion', label: 'Dispersión', icon: 'scatter' },
+    { to: '/trabajos-scouting', label: 'Trabajos', icon: 'folder' },
+    { to: '/radar', label: 'Detector', icon: 'radar' },
+  ],
+}
+
+const reportLink: NavItem = { to: '/evaluar', label: 'Reporte', icon: 'clipboard' }
+
+// ─── Icon component ──────────────────────────────────────────────────────────
 
 function NavIcon({ icon, className = "w-5 h-5" }: { icon: string; className?: string }) {
   const icons: Record<string, JSX.Element> = {
@@ -43,6 +81,7 @@ function NavIcon({ icon, className = "w-5 h-5" }: { icon: string; className?: st
     clipboard: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />,
     folder: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />,
     shield: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />,
+    calendar: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />,
   }
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -51,6 +90,74 @@ function NavIcon({ icon, className = "w-5 h-5" }: { icon: string; className?: st
   )
 }
 
+// ─── Desktop Dropdown ────────────────────────────────────────────────────────
+
+function DesktopDropdown({
+  group,
+  isOpen,
+  onToggle,
+  dropdownRef,
+  location,
+}: {
+  group: NavGroup
+  isOpen: boolean
+  onToggle: () => void
+  dropdownRef: React.RefObject<HTMLDivElement>
+  location: ReturnType<typeof useLocation>
+}) {
+  const navigate = useNavigate()
+  const isGroupActive = group.items.some(l => location.pathname === l.to)
+  const isExactActive = group.to ? location.pathname === group.to : false
+  const active = isGroupActive || isExactActive
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={() => {
+          if (group.to && !isOpen) {
+            navigate(group.to)
+          }
+          onToggle()
+        }}
+        className={`flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+          active
+            ? 'bg-brand-green text-gray-900 shadow-sm'
+            : 'text-apple-gray-600 dark:text-apple-gray-300 hover:text-apple-gray-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-apple-gray-700/50'
+        }`}
+      >
+        {group.label}
+        <svg className={`w-3.5 h-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 mt-2 w-52 bg-white dark:bg-apple-gray-800 rounded-xl shadow-xl border border-apple-gray-200 dark:border-apple-gray-700 py-1 animate-scale-in origin-top-left z-50">
+          {group.items.map(link => (
+            <NavLink
+              key={link.to}
+              to={link.to}
+              onClick={onToggle}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                  isActive
+                    ? 'bg-brand-green/10 text-brand-green font-medium'
+                    : 'text-apple-gray-700 dark:text-apple-gray-300 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700'
+                }`
+              }
+            >
+              <NavIcon icon={link.icon} className="w-4 h-4" />
+              {link.label}
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Main Navbar ─────────────────────────────────────────────────────────────
+
 export default function Navbar() {
   const { theme } = useTheme()
   const { user, userDisplayName, signOut, loading: authLoading } = useAuth()
@@ -58,33 +165,37 @@ export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
-  const [showTalentMenu, setShowTalentMenu] = useState(false)
-  const userMenuRef = useRef<HTMLDivElement>(null)
-  const talentMenuRef = useRef<HTMLDivElement>(null)
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null)
 
-  // Check if current route is a talent search route
-  const isTalentRoute = talentSearchLinks.some(l => location.pathname === l.to)
+  const userMenuRef = useRef<HTMLDivElement>(null)
+  const inicioRef = useRef<HTMLDivElement>(null)
+  const seguimientoRef = useRef<HTMLDivElement>(null)
+  const talentRef = useRef<HTMLDivElement>(null)
 
   // Close menu on route change
   useEffect(() => {
     setIsOpen(false)
+    setOpenDropdown(null)
   }, [location.pathname])
 
   // Close menus on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
-        setShowUserMenu(false)
-      }
-      if (talentMenuRef.current && !talentMenuRef.current.contains(event.target as Node)) {
-        setShowTalentMenu(false)
+      const target = event.target as Node
+      if (userMenuRef.current && !userMenuRef.current.contains(target)) setShowUserMenu(false)
+      if (
+        inicioRef.current && !inicioRef.current.contains(target) &&
+        seguimientoRef.current && !seguimientoRef.current.contains(target) &&
+        talentRef.current && !talentRef.current.contains(target)
+      ) {
+        setOpenDropdown(null)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Prevent scroll when menu is open
+  // Prevent scroll when mobile menu is open
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
@@ -94,36 +205,57 @@ export default function Navbar() {
     return () => { document.body.style.overflow = '' }
   }, [isOpen])
 
+  const toggleDropdown = (name: string) => {
+    setOpenDropdown(prev => prev === name ? null : name)
+  }
+
+  // Mobile: collapsible sections
+  const [mobileExpanded, setMobileExpanded] = useState<string | null>(null)
+  const toggleMobile = (name: string) => setMobileExpanded(prev => prev === name ? null : name)
+
+  // Check active routes for groups
+  const isSeguimientoRoute = seguimientoGroup.items.some(l => location.pathname === l.to)
+  const isTalentRoute = talentGroup.items.some(l => location.pathname === l.to)
+
   return (
     <>
       <header className="sticky top-0 z-50 bg-white/90 dark:bg-apple-gray-900/90 backdrop-blur-xl border-b border-apple-gray-200/50 dark:border-apple-gray-800/50">
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 flex items-center justify-between h-14">
           {/* Logo */}
-          <NavLink to="/" className="flex items-center gap-2.5 flex-shrink-0">
-            <div className="relative w-10 h-10 flex items-center justify-center">
+          <NavLink to="/" className="flex items-center gap-3 flex-shrink-0">
+            <div className="relative w-12 h-12 flex items-center justify-center">
               <img
                 src={theme === 'dark' ? '/logo-light.png' : '/logo-dark.png'}
                 alt="Scout Platform"
-                className="w-10 h-10 object-contain"
+                className="w-12 h-12 object-contain"
               />
             </div>
             <div className="hidden sm:flex flex-col">
-              <span className="font-semibold text-apple-gray-800 dark:text-white text-sm tracking-tight leading-none">
+              <span className="font-bold text-apple-gray-800 dark:text-white text-base tracking-tight leading-none">
                 Scout Platform
               </span>
-              <span className="text-2xs text-apple-gray-400 dark:text-apple-gray-500 leading-none mt-0.5">
-                Doble G Sports
+              <span className="text-xs text-apple-gray-400 dark:text-apple-gray-500 font-medium leading-none mt-1">
+                Doble G Sports Group
               </span>
             </div>
           </NavLink>
 
           {/* Desktop Nav */}
           <nav className="hidden lg:flex items-center gap-0.5 bg-apple-gray-100/70 dark:bg-apple-gray-800/70 rounded-xl p-1 backdrop-blur-sm">
-            {navLinks.map(link => (
+            {/* Inicio dropdown */}
+            <DesktopDropdown
+              group={inicioGroup}
+              isOpen={openDropdown === 'inicio'}
+              onToggle={() => toggleDropdown('inicio')}
+              dropdownRef={inicioRef}
+              location={location}
+            />
+
+            {/* Direct links */}
+            {directLinks.map(link => (
               <NavLink
                 key={link.to}
                 to={link.to}
-                end={link.exact}
                 className={({ isActive }) =>
                   `px-3.5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                     isActive
@@ -136,44 +268,37 @@ export default function Navbar() {
               </NavLink>
             ))}
 
-            {/* Talent Search Dropdown */}
-            <div className="relative" ref={talentMenuRef}>
-              <button
-                onClick={() => setShowTalentMenu(!showTalentMenu)}
-                className={`flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                  isTalentRoute
+            {/* Seguimiento dropdown */}
+            <DesktopDropdown
+              group={seguimientoGroup}
+              isOpen={openDropdown === 'seguimiento'}
+              onToggle={() => toggleDropdown('seguimiento')}
+              dropdownRef={seguimientoRef}
+              location={location}
+            />
+
+            {/* Búsqueda de Talento dropdown */}
+            <DesktopDropdown
+              group={talentGroup}
+              isOpen={openDropdown === 'talent'}
+              onToggle={() => toggleDropdown('talent')}
+              dropdownRef={talentRef}
+              location={location}
+            />
+
+            {/* Reporte */}
+            <NavLink
+              to={reportLink.to}
+              className={({ isActive }) =>
+                `px-3.5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                  isActive
                     ? 'bg-brand-green text-gray-900 shadow-sm'
                     : 'text-apple-gray-600 dark:text-apple-gray-300 hover:text-apple-gray-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-apple-gray-700/50'
-                }`}
-              >
-                Búsqueda de Talento
-                <svg className={`w-3.5 h-3.5 transition-transform ${showTalentMenu ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {showTalentMenu && (
-                <div className="absolute top-full left-0 mt-2 w-48 bg-white dark:bg-apple-gray-800 rounded-xl shadow-xl border border-apple-gray-200 dark:border-apple-gray-700 py-1 animate-scale-in origin-top-left z-50">
-                  {talentSearchLinks.map(link => (
-                    <NavLink
-                      key={link.to}
-                      to={link.to}
-                      onClick={() => setShowTalentMenu(false)}
-                      className={({ isActive }) =>
-                        `flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
-                          isActive
-                            ? 'bg-brand-green/10 text-brand-green font-medium'
-                            : 'text-apple-gray-700 dark:text-apple-gray-300 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700'
-                        }`
-                      }
-                    >
-                      <NavIcon icon={link.icon} className="w-4 h-4" />
-                      {link.label}
-                    </NavLink>
-                  ))}
-                </div>
-              )}
-            </div>
+                }`
+              }
+            >
+              {reportLink.label}
+            </NavLink>
           </nav>
 
           {/* Right side */}
@@ -200,7 +325,6 @@ export default function Navbar() {
                     </svg>
                   </button>
 
-                  {/* Dropdown */}
                   {showUserMenu && (
                     <div className="absolute right-0 mt-2 w-52 bg-white dark:bg-apple-gray-800 rounded-apple shadow-apple-lg dark:shadow-apple-dark-md border border-apple-gray-200 dark:border-apple-gray-700 py-1 animate-scale-in origin-top-right">
                       <div className="px-4 py-2 border-b border-apple-gray-100 dark:border-apple-gray-700">
@@ -279,11 +403,47 @@ export default function Navbar() {
       >
         <nav className="h-full overflow-y-auto py-4 px-3">
           <div className="space-y-1">
-            {navLinks.map(link => (
+            {/* Inicio section */}
+            <NavLink
+              to="/"
+              end
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
+                  isActive
+                    ? 'bg-brand-green text-gray-900'
+                    : 'text-apple-gray-700 dark:text-apple-gray-300 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-800'
+                }`
+              }
+            >
+              <NavIcon icon="home" className="w-5 h-5" />
+              Inicio
+            </NavLink>
+
+            {/* Inicio sub-items */}
+            <div className="ml-4 space-y-1">
+              {inicioGroup.items.map(link => (
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
+                      isActive
+                        ? 'bg-brand-green text-gray-900'
+                        : 'text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-800'
+                    }`
+                  }
+                >
+                  <NavIcon icon={link.icon} className="w-4 h-4" />
+                  {link.label}
+                </NavLink>
+              ))}
+            </div>
+
+            {/* Direct links */}
+            {directLinks.map(link => (
               <NavLink
                 key={link.to}
                 to={link.to}
-                end={link.exact}
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
                     isActive
@@ -298,29 +458,101 @@ export default function Navbar() {
             ))}
           </div>
 
-          {/* Talent Search Section */}
+          {/* Seguimiento Section */}
           <div className="mt-4 pt-4 border-t border-apple-gray-200 dark:border-apple-gray-800">
-            <p className="px-4 mb-2 text-xs font-semibold text-apple-gray-400 uppercase tracking-wider">
-              Búsqueda de Talento
-            </p>
-            <div className="space-y-1">
-              {talentSearchLinks.map(link => (
-                <NavLink
-                  key={link.to}
-                  to={link.to}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                      isActive
-                        ? 'bg-brand-green text-gray-900'
-                        : 'text-apple-gray-700 dark:text-apple-gray-300 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-800'
-                    }`
-                  }
-                >
-                  <NavIcon icon={link.icon} className="w-5 h-5" />
-                  {link.label}
-                </NavLink>
-              ))}
-            </div>
+            <button
+              onClick={() => toggleMobile('seguimiento')}
+              className={`flex items-center justify-between w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
+                isSeguimientoRoute
+                  ? 'bg-brand-green/10 text-brand-green'
+                  : 'text-apple-gray-700 dark:text-apple-gray-300 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-800'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <NavIcon icon="eye" className="w-5 h-5" />
+                Seguimiento
+              </div>
+              <svg className={`w-4 h-4 transition-transform ${mobileExpanded === 'seguimiento' ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {(mobileExpanded === 'seguimiento' || isSeguimientoRoute) && (
+              <div className="ml-4 mt-1 space-y-1">
+                {seguimientoGroup.items.map(link => (
+                  <NavLink
+                    key={link.to}
+                    to={link.to}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
+                        isActive
+                          ? 'bg-brand-green text-gray-900'
+                          : 'text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-800'
+                      }`
+                    }
+                  >
+                    <NavIcon icon={link.icon} className="w-4 h-4" />
+                    {link.label}
+                  </NavLink>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Búsqueda de Talento Section */}
+          <div className="mt-4 pt-4 border-t border-apple-gray-200 dark:border-apple-gray-800">
+            <button
+              onClick={() => toggleMobile('talent')}
+              className={`flex items-center justify-between w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
+                isTalentRoute
+                  ? 'bg-brand-green/10 text-brand-green'
+                  : 'text-apple-gray-700 dark:text-apple-gray-300 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-800'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <NavIcon icon="search" className="w-5 h-5" />
+                Búsqueda de Talento
+              </div>
+              <svg className={`w-4 h-4 transition-transform ${mobileExpanded === 'talent' ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {(mobileExpanded === 'talent' || isTalentRoute) && (
+              <div className="ml-4 mt-1 space-y-1">
+                {talentGroup.items.map(link => (
+                  <NavLink
+                    key={link.to}
+                    to={link.to}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
+                        isActive
+                          ? 'bg-brand-green text-gray-900'
+                          : 'text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-800'
+                      }`
+                    }
+                  >
+                    <NavIcon icon={link.icon} className="w-4 h-4" />
+                    {link.label}
+                  </NavLink>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Reporte */}
+          <div className="mt-4 pt-4 border-t border-apple-gray-200 dark:border-apple-gray-800">
+            <NavLink
+              to={reportLink.to}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
+                  isActive
+                    ? 'bg-brand-green text-gray-900'
+                    : 'text-apple-gray-700 dark:text-apple-gray-300 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-800'
+                }`
+              }
+            >
+              <NavIcon icon={reportLink.icon} className="w-5 h-5" />
+              {reportLink.label}
+            </NavLink>
           </div>
 
           {/* Footer in menu */}
