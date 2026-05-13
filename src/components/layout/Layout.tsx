@@ -2,7 +2,7 @@ import { Outlet } from 'react-router-dom'
 import { Suspense } from 'react'
 import Navbar from './Navbar'
 import Footer from './Footer'
-import AIAnalystChat from '@/components/chat/AIAnalystChat'
+
 import { useAuth } from '@/context/AuthContext'
 import AuthModal from '@/components/auth/AuthModal'
 
@@ -165,7 +165,6 @@ export default function Layout() {
         </Suspense>
       </main>
       <Footer />
-      <AIAnalystChat />
     </div>
   )
 }
