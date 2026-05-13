@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchAllAgencyFixtures, groupFixturesByDate, toArDateKey } from '@/services/footballApiService'
+import { AGENCY_PLAYERS } from '@/constants/agencyPlayers'
 import type { AgencyFixture } from '@/types/footballApi'
 
 const DAYS_SHORT = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM']
@@ -322,6 +323,109 @@ function DayPanel({
   )
 }
 
+// ─── Player Search ───────────────────────────────────────────────────────────
+
+function normSearch(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+}
+
+const ACTIVE_PLAYERS = AGENCY_PLAYERS.filter(p => !p.isReserve && p.apiTeamId)
+
+function PlayerSearch({
+  onSelect,
+  selected,
+  onClear,
+}: {
+  onSelect: (player: typeof ACTIVE_PLAYERS[number]) => void
+  selected: typeof ACTIVE_PLAYERS[number] | null
+  onClear: () => void
+}) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const results = useMemo(() => {
+    if (!query.trim()) return ACTIVE_PLAYERS
+    const q = normSearch(query)
+    return ACTIVE_PLAYERS.filter(p =>
+      normSearch(p.fullName).includes(q) ||
+      normSearch(p.shortName).includes(q) ||
+      normSearch(p.team).includes(q)
+    )
+  }, [query])
+
+  if (selected) {
+    return (
+      <button
+        onClick={onClear}
+        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-green/10 text-brand-green text-sm font-medium hover:bg-brand-green/20 transition-colors group"
+      >
+        {selected.image && (
+          <img src={selected.image} alt="" className="w-5 h-5 rounded-full object-cover" />
+        )}
+        {selected.shortName}
+        <svg className="w-3.5 h-3.5 opacity-50 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    )
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="relative">
+        <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <input
+          type="text"
+          value={query}
+          onChange={e => { setQuery(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          placeholder="Buscar jugador..."
+          className="w-full sm:w-56 pl-8 pr-3 py-1.5 rounded-lg bg-apple-gray-100 dark:bg-apple-gray-800 border border-apple-gray-200/60 dark:border-apple-gray-700/40 text-sm text-apple-gray-800 dark:text-white placeholder:text-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-green/30 focus:border-brand-green/40 transition-all"
+        />
+      </div>
+
+      {open && (
+        <div className="absolute top-full left-0 right-0 sm:right-auto sm:w-72 mt-1.5 bg-white dark:bg-apple-gray-800 border border-apple-gray-200/60 dark:border-apple-gray-700/40 rounded-xl shadow-lg overflow-hidden z-50 max-h-[320px] overflow-y-auto">
+          {results.length === 0 ? (
+            <div className="px-4 py-6 text-center text-sm text-apple-gray-400">Sin resultados</div>
+          ) : (
+            results.map(p => (
+              <button
+                key={p.fullName}
+                onClick={() => { onSelect(p); setQuery(''); setOpen(false) }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-brand-green/5 dark:hover:bg-brand-green/10 transition-colors text-left"
+              >
+                {p.image ? (
+                  <img src={p.image} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-apple-gray-100 dark:bg-apple-gray-700 flex items-center justify-center flex-shrink-0">
+                    <span className="text-2xs font-semibold text-apple-gray-500">{p.shortName.split(' ').map(w => w[0]).join('')}</span>
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-apple-gray-800 dark:text-white truncate">{p.fullName}</div>
+                  <div className="text-2xs text-apple-gray-400 truncate">{p.team}</div>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Calendar Page ───────────────────────────────────────────────────────
 
 export default function CalendarPage() {
@@ -331,6 +435,7 @@ export default function CalendarPage() {
   const [view, setView] = useState<View>('month')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDay, setSelectedDay] = useState<Date | null>(null)
+  const [selectedPlayer, setSelectedPlayer] = useState<typeof ACTIVE_PLAYERS[number] | null>(null)
 
   const today = useMemo(() => new Date(), [])
 
@@ -341,7 +446,14 @@ export default function CalendarPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const fixturesByDate = useMemo(() => groupFixturesByDate(fixtures), [fixtures])
+  const filteredFixtures = useMemo(() => {
+    if (!selectedPlayer) return fixtures
+    return fixtures.filter(f =>
+      f.homeTeam.id === selectedPlayer.apiTeamId || f.awayTeam.id === selectedPlayer.apiTeamId
+    )
+  }, [fixtures, selectedPlayer])
+
+  const fixturesByDate = useMemo(() => groupFixturesByDate(filteredFixtures), [filteredFixtures])
 
   const selectedDayFixtures = useMemo(
     () => selectedDay ? fixturesByDate.get(toArDateKey(selectedDay)) || [] : [],
@@ -400,16 +512,21 @@ export default function CalendarPage() {
     <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6 space-y-5 animate-fade-in">
 
       {/* ── Header ──────────────────────────────────────────── */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <Link
           to="/"
-          className="inline-flex items-center gap-1.5 text-sm text-apple-gray-400 hover:text-apple-gray-600 dark:hover:text-apple-gray-300 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm text-apple-gray-400 hover:text-apple-gray-600 dark:hover:text-apple-gray-300 transition-colors flex-shrink-0"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
           Inicio
         </Link>
+        <PlayerSearch
+          selected={selectedPlayer}
+          onSelect={p => { setSelectedPlayer(p); setSelectedDay(null) }}
+          onClear={() => { setSelectedPlayer(null); setSelectedDay(null) }}
+        />
       </div>
 
       {/* ── Controls ────────────────────────────────────────── */}

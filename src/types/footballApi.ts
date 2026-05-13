@@ -103,39 +103,3 @@ export interface AgencyFixture {
   players: { shortName: string; fullName: string; image: string | null }[]
 }
 
-// ─── Fixture Players (per-match participation) ───────────────────────────────
-
-export interface ApiFixturePlayerStats {
-  player: { id: number; name: string; photo: string }
-  statistics: Array<{
-    games: {
-      minutes: number | null
-      number: number | null
-      position: string | null
-      rating: string | null
-      captain: boolean
-      substitute: boolean
-    }
-  }>
-}
-
-export interface ApiFixturePlayersResponse {
-  team: { id: number; name: string; logo: string }
-  players: ApiFixturePlayerStats[]
-}
-
-export type MatchStatus = 'starter' | 'sub' | 'not_played'
-
-export interface MatchAppearance {
-  fixtureId: number
-  date: string
-  status: MatchStatus
-}
-
-export interface PlayerAppearanceData {
-  matches: MatchAppearance[]
-  startRate: number
-  appearances: number
-  starts: number
-  subIns: number
-}
