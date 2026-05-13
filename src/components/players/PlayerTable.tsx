@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { EnrichedPlayer, SortState } from '@/types'
-import type { PlayerAppearanceData } from '@/types/footballApi'
 import ContractBadge from '@/components/ui/ContractBadge'
 import ScoreBar from '@/components/ui/ScoreBar'
 import EmptyState from '@/components/ui/EmptyState'
@@ -15,7 +14,6 @@ interface PlayerTableProps {
   source: 'externo' | 'interno'
   isLoading?: boolean
   selectedMetrics?: string[]
-  appearanceData?: Map<string, PlayerAppearanceData>
 }
 
 interface Column {
@@ -45,48 +43,8 @@ const BASE_COLUMNS_INTERNAL: Column[] = [
 ]
 
 const SCORE_COLUMN: Column = { key: 'ggScore', label: 'Score', sortable: true, align: 'center' }
-const TIT_COLUMN: Column = { key: '_startRate', label: '% Tit', sortable: true, align: 'center' }
 
 const PAGE_SIZE = 50
-
-function normName(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim()
-}
-
-function findAppearance(data: Map<string, PlayerAppearanceData> | undefined, name: string): PlayerAppearanceData | undefined {
-  if (!data || data.size === 0) return undefined
-
-  const exact = data.get(name)
-  if (exact) return exact
-
-  const n = normName(name)
-  for (const [key, val] of data) {
-    if (normName(key) === n) return val
-  }
-
-  const parts = n.split(' ')
-  const last = parts[parts.length - 1]
-  const initial = parts[0]?.[0] || ''
-
-  const lastMatches: PlayerAppearanceData[] = []
-  for (const [key, val] of data) {
-    const kParts = normName(key).split(' ')
-    const kLast = kParts[kParts.length - 1]
-    if (kLast === last) {
-      const kInit = kParts[0]?.[0] || ''
-      if (kInit === initial) return val
-      lastMatches.push(val)
-    }
-  }
-  if (lastMatches.length === 1) return lastMatches[0]
-
-  for (const [key, val] of data) {
-    const kn = normName(key)
-    if (kn.includes(n) || n.includes(kn)) return val
-  }
-
-  return undefined
-}
 
 function SortIcon({ direction }: { direction: 'asc' | 'desc' | null }) {
   if (!direction) {
@@ -115,23 +73,11 @@ function formatMetricValue(value: unknown): string {
   return num.toFixed(2)
 }
 
-export default function PlayerTable({ players, source, isLoading, selectedMetrics = [], appearanceData }: PlayerTableProps) {
+export default function PlayerTable({ players, source, isLoading, selectedMetrics = [] }: PlayerTableProps) {
   const navigate = useNavigate()
   const { positionAverages } = useData()
   const [sort, setSort] = useState<SortState>({ column: 'ggScore', direction: 'desc' })
   const [page, setPage] = useState(1)
-
-  const hasAppearances = appearanceData && appearanceData.size > 0
-
-  const appearanceLookup = useMemo(() => {
-    if (!appearanceData || appearanceData.size === 0) return new Map<string, PlayerAppearanceData>()
-    const map = new Map<string, PlayerAppearanceData>()
-    for (const p of players) {
-      const app = findAppearance(appearanceData, p.Jugador)
-      if (app) map.set(p.Jugador, app)
-    }
-    return map
-  }, [players, appearanceData])
 
   const columns = useMemo(() => {
     const base = source === 'interno' ? BASE_COLUMNS_INTERNAL : BASE_COLUMNS
@@ -145,10 +91,8 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
         isMetric: true,
       }
     })
-    const cols = [...base, ...metricColumns, SCORE_COLUMN]
-    if (hasAppearances) cols.push(TIT_COLUMN)
-    return cols
-  }, [source, selectedMetrics, hasAppearances])
+    return [...base, ...metricColumns, SCORE_COLUMN]
+  }, [source, selectedMetrics])
 
   const handleSort = (col: string) => {
     setSort(prev =>
@@ -162,16 +106,8 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
   const sorted = useMemo(() => {
     const { column, direction } = sort
     return [...players].sort((a, b) => {
-      let aVal: unknown
-      let bVal: unknown
-
-      if (column === '_startRate' && appearanceLookup.size > 0) {
-        aVal = appearanceLookup.get(a.Jugador)?.startRate ?? -1
-        bVal = appearanceLookup.get(b.Jugador)?.startRate ?? -1
-      } else {
-        aVal = a[column]
-        bVal = b[column]
-      }
+      let aVal: unknown = a[column]
+      let bVal: unknown = b[column]
 
       if (typeof aVal === 'string') aVal = parseFloat((aVal as string).replace(',', '.')) || 0
       if (typeof bVal === 'string') bVal = parseFloat((bVal as string).replace(',', '.')) || 0
@@ -187,7 +123,7 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
       const cmp = aStr.localeCompare(bStr, 'es')
       return direction === 'asc' ? cmp : -cmp
     })
-  }, [players, sort, appearanceLookup])
+  }, [players, sort])
 
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE)
   const paginated = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -252,25 +188,6 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
                     {player['Posición']}
                   </span>
                 )}
-                {/* Appearance dots - mobile */}
-                {(() => {
-                  const app = appearanceLookup.get(player.Jugador)
-                  if (!app) return null
-                  return (
-                    <div className="flex items-center gap-1">
-                      <div className="flex items-center gap-0.5">
-                        {[...app.matches].reverse().map((m, i) => (
-                          <span key={i} className={`w-1.5 h-1.5 rounded-full ${
-                            m.status === 'starter' ? 'bg-brand-green' :
-                            m.status === 'sub' ? 'bg-amber-400' :
-                            'bg-red-400'
-                          }`} />
-                        ))}
-                      </div>
-                      <span className="text-2xs font-semibold text-apple-gray-400 tabular-nums">{app.startRate}%</span>
-                    </div>
-                  )
-                })()}
                 <span className="ml-auto text-xs font-medium text-brand-green">{player.marketValueFormatted}</span>
               </div>
             </div>
@@ -344,33 +261,6 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
                             monthsRemaining={player.monthsRemaining}
                           />
                         </div>
-                        {/* Appearance dots */}
-                        {(() => {
-                          const app = appearanceLookup.get(player.Jugador)
-                          if (!app || app.matches.length === 0) return null
-                          return (
-                            <div className="flex items-center gap-1.5 mt-1">
-                              <div className="flex items-center gap-[3px]">
-                                {[...app.matches].reverse().map((m, i) => (
-                                  <span
-                                    key={i}
-                                    title={`${new Date(m.date).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} — ${
-                                      m.status === 'starter' ? 'Titular' : m.status === 'sub' ? 'Ingresó' : 'No jugó'
-                                    }`}
-                                    className={`w-[7px] h-[7px] rounded-full transition-transform hover:scale-150 ${
-                                      m.status === 'starter' ? 'bg-brand-green' :
-                                      m.status === 'sub' ? 'bg-amber-400' :
-                                      'bg-red-400'
-                                    }`}
-                                  />
-                                ))}
-                              </div>
-                              <span className="text-2xs text-apple-gray-400 tabular-nums">
-                                {app.starts + app.subIns}/{app.matches.length}
-                              </span>
-                            </div>
-                          )
-                        })()}
                       </div>
                     </div>
                   </td>
@@ -418,23 +308,6 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
                       />
                     </div>
                   </td>
-                  {/* % Titularidad */}
-                  {hasAppearances && (
-                    <td className="px-3 py-3 text-center">
-                      {(() => {
-                        const app = appearanceLookup.get(player.Jugador)
-                        if (!app) return <span className="text-2xs text-apple-gray-300 dark:text-apple-gray-600">—</span>
-                        const color = app.startRate >= 70 ? 'text-brand-green' :
-                                      app.startRate >= 40 ? 'text-amber-400' :
-                                      'text-red-400'
-                        return (
-                          <span className={`text-xs font-bold tabular-nums ${color}`}>
-                            {app.startRate}%
-                          </span>
-                        )
-                      })()}
-                    </td>
-                  )}
                 </tr>
               ))}
             </tbody>

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useData } from '@/context/DataContext'
 import FilterSidebar from '@/components/filters/FilterSidebar'
 import MobileFilterPanel, { MobileFilterButton } from '@/components/filters/MobileFilterPanel'
@@ -8,9 +8,7 @@ import EmptyState from '@/components/ui/EmptyState'
 import { FILTER_POSITION_MAP } from '@/constants/scoring'
 import { parseContractDate } from '@/utils/scoring'
 import { fuzzyMatch } from '@/lib/search'
-import { fetchAllAgencyFixtures, fetchAgencyPlayersAppearances } from '@/services/footballApiService'
 import type { FilterState, EnrichedPlayer } from '@/types'
-import type { PlayerAppearanceData } from '@/types/footballApi'
 
 const DEFAULT_FILTERS: FilterState = {
   search: '',
@@ -93,22 +91,6 @@ export default function InternalScoutingPage() {
   const { internal, loading, error } = useData()
   const [filters, setFilters] = useState<FilterState>(loadFiltersFromStorage)
   const [showMobileFilters, setShowMobileFilters] = useState(false)
-  const [appearanceData, setAppearanceData] = useState<Map<string, PlayerAppearanceData>>(new Map())
-  const [appearanceProgress, setAppearanceProgress] = useState<{ loaded: number; total: number } | null>(null)
-  const appearanceFetched = useRef(false)
-
-  useEffect(() => {
-    if (appearanceFetched.current) return
-    appearanceFetched.current = true
-    fetchAllAgencyFixtures()
-      .then(fixtures =>
-        fetchAgencyPlayersAppearances(fixtures, (loaded, total) =>
-          setAppearanceProgress({ loaded, total })
-        )
-      )
-      .then(data => { setAppearanceData(data); setAppearanceProgress(null) })
-      .catch(() => setAppearanceProgress(null))
-  }, [])
 
   // Count active filters
   const activeFiltersCount = [
@@ -175,22 +157,11 @@ export default function InternalScoutingPage() {
         </div>
       </div>
 
-      {/* Appearance loading indicator */}
-      {appearanceProgress && appearanceProgress.total > 0 && (
-        <div className="flex items-center gap-2 px-4 py-2 rounded-apple bg-apple-gray-50 dark:bg-apple-gray-800/40 border border-apple-gray-200/40 dark:border-apple-gray-700/30 text-xs text-apple-gray-500 dark:text-apple-gray-400">
-          <svg className="w-3.5 h-3.5 animate-spin text-brand-green" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          Cargando datos de titularidad... {appearanceProgress.loaded}/{appearanceProgress.total}
-        </div>
-      )}
-
       {/* Layout */}
       <div className="flex gap-6">
         <FilterSidebar players={internal} filters={filters} onChange={setFilters} onReset={handleReset} />
         <div className="flex-1 min-w-0">
-          <PlayerTable players={filtered} source="interno" selectedMetrics={filters.selectedMetrics} appearanceData={appearanceData} />
+          <PlayerTable players={filtered} source="interno" selectedMetrics={filters.selectedMetrics} />
         </div>
       </div>
     </div>
