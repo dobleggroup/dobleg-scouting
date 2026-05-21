@@ -1,32 +1,38 @@
+export type ScoreScale = '100' | '10'
+
 interface ScoreBarProps {
   score: number | null
   size?: 'sm' | 'md' | 'lg'
   showLabel?: boolean
   posAvg?: number | null
+  scale?: ScoreScale
 }
 
-function getScoreColor(score: number): { text: string; bg: string; bar: string; glow: string; isElite?: boolean } {
-  // 80+ elite green (special), 55-79 green, 35-54 yellow, 20-34 orange, 0-19 red
-  if (score >= 80) return {
+function threshold(val100: number, scale: ScoreScale): number {
+  return scale === '10' ? val100 / 10 : val100
+}
+
+function getScoreColor(score: number, scale: ScoreScale = '100'): { text: string; bg: string; bar: string; glow: string; isElite?: boolean } {
+  if (score >= threshold(80, scale)) return {
     text: 'text-emerald-400',
     bg: 'bg-emerald-400/15',
     bar: 'bg-gradient-to-r from-emerald-400 via-green-300 to-emerald-400',
     glow: 'shadow-lg shadow-emerald-400/30',
     isElite: true
   }
-  if (score >= 55) return {
+  if (score >= threshold(55, scale)) return {
     text: 'text-emerald-500',
     bg: 'bg-emerald-500/10',
     bar: 'bg-gradient-to-r from-emerald-500 to-green-500',
     glow: 'shadow-emerald-500/20'
   }
-  if (score >= 35) return {
+  if (score >= threshold(35, scale)) return {
     text: 'text-amber-500',
     bg: 'bg-amber-500/10',
     bar: 'bg-gradient-to-r from-amber-500 to-yellow-400',
     glow: 'shadow-amber-500/20'
   }
-  if (score >= 20) return {
+  if (score >= threshold(20, scale)) return {
     text: 'text-orange-500',
     bg: 'bg-orange-500/10',
     bar: 'bg-gradient-to-r from-orange-500 to-orange-400',
@@ -40,61 +46,60 @@ function getScoreColor(score: number): { text: string; bg: string; bar: string; 
   }
 }
 
-// Export for use in other components
-export function getScoreColorClass(score: number | null): string {
+export function getScoreColorClass(score: number | null, scale: ScoreScale = '100'): string {
   if (score === null) return 'text-apple-gray-400'
-  if (score >= 80) return 'text-emerald-400'
-  if (score >= 55) return 'text-emerald-500'
-  if (score >= 35) return 'text-amber-500'
-  if (score >= 20) return 'text-orange-500'
+  if (score >= threshold(80, scale)) return 'text-emerald-400'
+  if (score >= threshold(55, scale)) return 'text-emerald-500'
+  if (score >= threshold(35, scale)) return 'text-amber-500'
+  if (score >= threshold(20, scale)) return 'text-orange-500'
   return 'text-red-500'
 }
 
-export function getScoreBgClass(score: number | null): string {
+export function getScoreBgClass(score: number | null, scale: ScoreScale = '100'): string {
   if (score === null) return 'bg-apple-gray-400/10'
-  if (score >= 80) return 'bg-emerald-400/20'
-  if (score >= 55) return 'bg-emerald-500/15'
-  if (score >= 35) return 'bg-amber-500/15'
-  if (score >= 20) return 'bg-orange-500/15'
+  if (score >= threshold(80, scale)) return 'bg-emerald-400/20'
+  if (score >= threshold(55, scale)) return 'bg-emerald-500/15'
+  if (score >= threshold(35, scale)) return 'bg-amber-500/15'
+  if (score >= threshold(20, scale)) return 'bg-orange-500/15'
   return 'bg-red-500/15'
 }
 
-// Position-relative color: green if score >= posAvg, else degraded scale
-export function getRelativeScoreColorClass(score: number | null, posAvg: number | null): string {
+export function getRelativeScoreColorClass(score: number | null, posAvg: number | null, scale: ScoreScale = '100'): string {
   if (score === null) return 'text-apple-gray-400'
-  if (score >= 80) return 'text-emerald-400'
+  if (score >= threshold(80, scale)) return 'text-emerald-400'
   if (posAvg !== null) {
     if (score >= posAvg) return 'text-emerald-500'
     if (score >= posAvg * 0.85) return 'text-amber-500'
     if (score >= posAvg * 0.70) return 'text-orange-500'
     return 'text-red-500'
   }
-  return getScoreColorClass(score)
+  return getScoreColorClass(score, scale)
 }
 
-export function getRelativeScoreBgClass(score: number | null, posAvg: number | null): string {
+export function getRelativeScoreBgClass(score: number | null, posAvg: number | null, scale: ScoreScale = '100'): string {
   if (score === null) return 'bg-apple-gray-400/10'
-  if (score >= 80) return 'bg-emerald-400/20'
+  if (score >= threshold(80, scale)) return 'bg-emerald-400/20'
   if (posAvg !== null) {
     if (score >= posAvg) return 'bg-emerald-500/15'
     if (score >= posAvg * 0.85) return 'bg-amber-500/15'
     if (score >= posAvg * 0.70) return 'bg-orange-500/15'
     return 'bg-red-500/15'
   }
-  return getScoreBgClass(score)
+  return getScoreBgClass(score, scale)
 }
 
-export default function ScoreBar({ score, size = 'md', showLabel = true, posAvg }: ScoreBarProps) {
+export default function ScoreBar({ score, size = 'md', showLabel = true, posAvg, scale = '100' }: ScoreBarProps) {
   if (score === null) {
     return <span className="text-apple-gray-400 text-sm">—</span>
   }
 
-  const colors = getScoreColor(score)
-  const clampedScore = Math.max(0, Math.min(100, score))
-  const isElite = score >= 80
+  const colors = getScoreColor(score, scale)
+  const pct = scale === '10' ? ((score - 1) / 9) * 100 : score
+  const clampedScore = Math.max(0, Math.min(100, pct))
+  const isElite = score >= threshold(80, scale)
 
   if (size === 'sm') {
-    const textColor = posAvg != null ? getRelativeScoreColorClass(score, posAvg) : colors.text
+    const textColor = posAvg != null ? getRelativeScoreColorClass(score, posAvg, scale) : colors.text
     return (
       <span className={`font-semibold text-sm tabular-nums ${textColor} ${isElite ? 'drop-shadow-[0_0_4px_rgba(52,211,153,0.5)]' : ''}`}>
         {score.toFixed(1)}
@@ -127,9 +132,9 @@ export default function ScoreBar({ score, size = 'md', showLabel = true, posAvg 
           </div>
         </div>
         <div className="flex justify-between text-xs text-apple-gray-400">
-          <span>0</span>
-          <span>50</span>
-          <span>100</span>
+          <span>{scale === '10' ? '1' : '0'}</span>
+          <span>{scale === '10' ? '5' : '50'}</span>
+          <span>{scale === '10' ? '10' : '100'}</span>
         </div>
       </div>
     )
