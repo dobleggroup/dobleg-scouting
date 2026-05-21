@@ -8,6 +8,11 @@ import type {
   LeagueInfo,
 } from '@/types/scoring';
 
+function currentSeason(): number {
+  const now = new Date();
+  return now.getMonth() < 7 ? now.getFullYear() - 1 : now.getFullYear();
+}
+
 export async function fetchPlayersList(filters: {
   position?: Position;
   league_id?: number;
@@ -19,7 +24,7 @@ export async function fetchPlayersList(filters: {
   page?: number;
   pageSize?: number;
 }): Promise<{ players: PlayerWithScore[]; count: number }> {
-  const season = filters.season ?? new Date().getFullYear();
+  const season = filters.season ?? currentSeason();
   const page = filters.page ?? 0;
   const pageSize = filters.pageSize ?? 50;
 
@@ -65,7 +70,7 @@ export async function fetchPlayerDetail(playerId: number, season?: number): Prom
   matches: PlayerMatchStat[];
   allSeasonScores: PlayerSeasonScore[];
 } | null> {
-  const s = season ?? new Date().getFullYear();
+  const s = season ?? currentSeason();
 
   const [playerRes, scoresRes, matchesRes] = await Promise.all([
     supabase.from('players').select(`
@@ -109,7 +114,7 @@ export async function fetchPlayerDetail(playerId: number, season?: number): Prom
 export async function fetchPositionAverages(
   season?: number
 ): Promise<PositionAverage[]> {
-  const s = season ?? new Date().getFullYear();
+  const s = season ?? currentSeason();
 
   const { data, error } = await supabase
     .from('player_season_scores')
@@ -157,7 +162,7 @@ export interface ScoreLookupEntry {
 export async function fetchScoreLookup(
   season?: number
 ): Promise<Map<string, ScoreLookupEntry>> {
-  const s = season ?? new Date().getFullYear();
+  const s = season ?? currentSeason();
 
   const { data, error } = await supabase
     .from('player_season_scores')

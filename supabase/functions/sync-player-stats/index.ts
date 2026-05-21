@@ -125,8 +125,9 @@ serve(async () => {
         }
 
         if (allRows.length > 0) {
+          const dedupedRows = [...new Map(allRows.map(r => [`${r.player_id}_${r.fixture_id}`, r])).values()];
           const { error } = await supabase.from('player_match_stats').upsert(
-            allRows.map(r => ({
+            dedupedRows.map(r => ({
               player_id: r.player_id,
               fixture_id: r.fixture_id,
               team_id: r.team_id,
@@ -166,7 +167,7 @@ serve(async () => {
           );
 
           if (error) throw error;
-          results.players_inserted += allRows.length;
+          results.players_inserted += dedupedRows.length;
         }
 
         await supabase.from('fixtures')
