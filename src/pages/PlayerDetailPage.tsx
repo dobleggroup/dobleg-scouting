@@ -8,6 +8,10 @@ import PlayerRadarChart from '@/components/charts/PlayerRadarChart'
 import EvolutionChart from '@/components/charts/EvolutionChart'
 import MarketValueChart from '@/components/charts/MarketValueChart'
 import GaugeScore from '@/components/charts/GaugeScore'
+import PositionBar from '@/components/ui/PositionBar'
+import ScoreEvolutionChart from '@/components/charts/ScoreEvolutionChart'
+import { usePlayerDetail, usePlayerMatchHistory, usePositionAverages } from '@/hooks/usePlayerStats'
+import type { Position } from '@/types/scoring'
 import GPSTab from '@/components/charts/GPSTab'
 import ExportPDFModal, { type PDFTheme } from '@/components/ui/ExportPDFModal'
 import { exportPlayerToPdfFull } from '@/utils/pdfExport'
@@ -577,6 +581,7 @@ export default function PlayerDetailPage() {
   const overridePosition = searchParams.get('pos')
   const { external, internal, monitoring, normalized, evolution, subjectiveMetrics, marketValueHistory, gpsData, loading, error } = useData()
   const [activeTab, setActiveTab] = useState('General')
+  const [selectedPosition, setSelectedPosition] = useState<Position | null>(null)
   const [comparisonLeague, setComparisonLeague] = useState<string>('all')
   const [customRadarMetrics, setCustomRadarMetrics] = useState<string[]>([])
   const [showMetricSelector, setShowMetricSelector] = useState(false)
@@ -656,6 +661,30 @@ export default function PlayerDetailPage() {
       normalizeName(p['Nombre jugador']) === normalizeName(decodedId)
     ) ?? null
   }, [id, source, monitoring])
+
+  const apiPlayerId = (typeof player?.apiFootballId === 'number' ? player.apiFootballId : null) as number | null
+  const { data: supabaseDetail } = usePlayerDetail(apiPlayerId)
+  const { matches: supabaseMatches } = usePlayerMatchHistory(
+    apiPlayerId,
+    selectedPosition ?? supabaseDetail?.player?.primary_position ?? undefined
+  )
+  const { averages: positionAverages } = usePositionAverages()
+
+  const supabaseAvgScore = useMemo(() => {
+    if (!supabaseDetail) return null
+    const pos = selectedPosition ?? supabaseDetail.player.primary_position
+    const score = supabaseDetail.allSeasonScores.find(s => s.position === pos)
+    return score?.avg_score ?? null
+  }, [supabaseDetail, selectedPosition])
+
+  const supabasePosAverage = useMemo(() => {
+    if (!supabaseDetail || !positionAverages.length) return null
+    const pos = selectedPosition ?? supabaseDetail.player.primary_position
+    const leagueId = supabaseDetail.player.team?.league_id
+    if (!pos || !leagueId) return null
+    const avg = positionAverages.find(a => a.position === pos && a.league_id === leagueId)
+    return avg?.avg_score ?? null
+  }, [supabaseDetail, selectedPosition, positionAverages])
 
   const rawPosition = useMemo(() => {
     if (overridePosition) return overridePosition
@@ -1137,9 +1166,10 @@ export default function PlayerDetailPage() {
               </h2>
             </div>
             <GaugeScore
-              score={player.ggScore}
+              score={supabaseAvgScore ?? player.ggScore}
               size="lg"
-              comparisonScore={positionAverageScore}
+              scale={supabaseAvgScore != null ? '10' : '100'}
+              comparisonScore={supabaseAvgScore != null ? supabasePosAverage : positionAverageScore}
               comparisonLabel={`Promedio ${posKey || 'posición'}`}
             />
             {subjectiveGroups.length > 0 && (
@@ -1205,6 +1235,17 @@ export default function PlayerDetailPage() {
               </div>
             )}
           </div>
+
+          {/* Position Distribution */}
+          {supabaseDetail?.player?.position_distribution && Object.keys(supabaseDetail.player.position_distribution).length > 0 && (
+            <div className="card-apple p-4">
+              <PositionBar
+                distribution={supabaseDetail.player.position_distribution}
+                selectedPosition={selectedPosition ?? supabaseDetail.player.primary_position}
+                onSelectPosition={setSelectedPosition}
+              />
+            </div>
+          )}
 
           {/* Score Scout Timeline - self-contained, renders its own card if evaluations exist */}
           <ScoreScoutTimeline playerId={player.id || player.Jugador} playerName={player.Jugador} />
@@ -1527,6 +1568,16 @@ export default function PlayerDetailPage() {
                   })()}
                   <p className="text-center text-xs text-apple-gray-500 dark:text-apple-gray-400 mt-1">{displayPosition}</p>
                 </div>
+
+                {/* Score Evolution Chart */}
+                {supabaseMatches.length > 0 && (
+                  <div className="mt-6">
+                    <ScoreEvolutionChart
+                      matches={supabaseMatches}
+                      avgScore={supabaseAvgScore}
+                    />
+                  </div>
+                )}
 
                 {/* Preview de secciones - Solo para jugadores internos */}
                 {source === 'interno' && (
