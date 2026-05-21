@@ -46,6 +46,11 @@ export async function fetchPlayersList(filters: {
   if (filters.min_score) query = query.gte('avg_score', filters.min_score);
   if (filters.min_matches) query = query.gte('matches_played', filters.min_matches);
   if (filters.search) query = query.ilike('player.name', `%${filters.search}%`);
+  if (filters.max_age) {
+    const minBirth = new Date();
+    minBirth.setFullYear(minBirth.getFullYear() - filters.max_age);
+    query = query.gte('player.birth_date', minBirth.toISOString().split('T')[0]);
+  }
 
   query = query
     .order('avg_score', { ascending: false })

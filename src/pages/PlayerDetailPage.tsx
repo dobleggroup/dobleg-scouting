@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { useData } from '@/context/DataContext'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -574,6 +574,23 @@ function MetricRowWithPercentile({ label, value, percentile }: MetricWithPercent
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function PlayerDetailPage() {
+  const [searchParams] = useSearchParams()
+  const source = searchParams.get('source')
+
+  if (source === 'supabase') {
+    return (
+      <Suspense fallback={<LoadingSpinner fullScreen message="Cargando ficha del jugador..." />}>
+        <SupabasePlayerDetailLazy />
+      </Suspense>
+    )
+  }
+
+  return <CsvPlayerDetail />
+}
+
+const SupabasePlayerDetailLazy = lazy(() => import('@/components/players/SupabasePlayerDetail'))
+
+function CsvPlayerDetail() {
   const { id } = useParams<{ id: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
