@@ -298,8 +298,88 @@ export const SCORING_CONFIG: Record<string, MetricWeight[]> = {
   ],
 }
 
-// ─── RADAR CHART METRICS ──────────────────────────────────────────────────────
-// 8 representative metrics per position for radar visualization
+// ─── API-FOOTBALL RADAR METRICS ──────────────────────────────────────────────
+// Radar chart metrics mapped to API-Football stat fields (used when Supabase data is available)
+
+export const API_RADAR_METRICS: Record<string, Array<{ key: string; label: string }>> = {
+  ARQ: [
+    { key: 'saves', label: 'Atajadas' },
+    { key: 'goals_conceded', label: 'Goles Rec. (inv)' },
+    { key: 'rating', label: 'Rating' },
+    { key: 'passes_accuracy', label: 'Prec. Pases' },
+    { key: 'duels_won_pct', label: 'Duelos %' },
+  ],
+  CB: [
+    { key: 'duels_won_pct', label: 'Duelos %' },
+    { key: 'tackles', label: 'Entradas' },
+    { key: 'interceptions', label: 'Intercepciones' },
+    { key: 'blocks', label: 'Bloqueos' },
+    { key: 'passes_accuracy', label: 'Prec. Pases' },
+    { key: 'rating', label: 'Rating' },
+    { key: 'passes_total', label: 'Pases' },
+  ],
+  LD: [
+    { key: 'duels_won_pct', label: 'Duelos %' },
+    { key: 'passes_key', label: 'Pases Clave' },
+    { key: 'dribbles_success', label: 'Regates' },
+    { key: 'assists', label: 'Asistencias' },
+    { key: 'tackles', label: 'Entradas' },
+    { key: 'passes_accuracy', label: 'Prec. Pases' },
+    { key: 'interceptions', label: 'Intercepciones' },
+    { key: 'rating', label: 'Rating' },
+  ],
+  LI: [
+    { key: 'duels_won_pct', label: 'Duelos %' },
+    { key: 'passes_key', label: 'Pases Clave' },
+    { key: 'dribbles_success', label: 'Regates' },
+    { key: 'assists', label: 'Asistencias' },
+    { key: 'tackles', label: 'Entradas' },
+    { key: 'passes_accuracy', label: 'Prec. Pases' },
+    { key: 'interceptions', label: 'Intercepciones' },
+    { key: 'rating', label: 'Rating' },
+  ],
+  VC: [
+    { key: 'tackles', label: 'Entradas' },
+    { key: 'duels_won_pct', label: 'Duelos %' },
+    { key: 'interceptions', label: 'Intercepciones' },
+    { key: 'passes_accuracy', label: 'Prec. Pases' },
+    { key: 'passes_total', label: 'Pases' },
+    { key: 'blocks', label: 'Bloqueos' },
+    { key: 'rating', label: 'Rating' },
+    { key: 'passes_key', label: 'Pases Clave' },
+  ],
+  VI: [
+    { key: 'duels_won_pct', label: 'Duelos %' },
+    { key: 'passes_key', label: 'Pases Clave' },
+    { key: 'dribbles_success', label: 'Regates' },
+    { key: 'assists', label: 'Asistencias' },
+    { key: 'goals', label: 'Goles' },
+    { key: 'passes_accuracy', label: 'Prec. Pases' },
+    { key: 'shots_on', label: 'Tiros al Arco' },
+    { key: 'rating', label: 'Rating' },
+  ],
+  EXT: [
+    { key: 'dribbles_success', label: 'Regates' },
+    { key: 'goals', label: 'Goles' },
+    { key: 'assists', label: 'Asistencias' },
+    { key: 'passes_key', label: 'Pases Clave' },
+    { key: 'shots_on', label: 'Tiros al Arco' },
+    { key: 'duels_won_pct', label: 'Duelos %' },
+    { key: 'rating', label: 'Rating' },
+  ],
+  DEL: [
+    { key: 'goals', label: 'Goles' },
+    { key: 'shots_on', label: 'Tiros al Arco' },
+    { key: 'assists', label: 'Asistencias' },
+    { key: 'passes_key', label: 'Pases Clave' },
+    { key: 'duels_won_pct', label: 'Duelos %' },
+    { key: 'dribbles_success', label: 'Regates' },
+    { key: 'rating', label: 'Rating' },
+  ],
+}
+
+// ─── RADAR CHART METRICS (WYSCOUT/CSV) ──────────────────────────────────────
+// 8 representative metrics per position for radar visualization (legacy CSV data)
 
 export const RADAR_METRICS: Record<string, string[]> = {
   'Arquero': [
