@@ -32,7 +32,7 @@ const DEFAULT_FILTERS: Filters = {
   search: '',
   position: '',
   league_id: undefined,
-  min_matches: 3,
+  min_matches: 0,
   min_score: 0,
   max_age: 0,
 }
