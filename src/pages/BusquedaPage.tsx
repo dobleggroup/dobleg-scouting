@@ -9,6 +9,9 @@ import { useData } from '@/context/DataContext'
 import type { EnrichedPlayer } from '@/types'
 import { POSITION_MAP, SCORING_CONFIG, METRIC_ABBREVIATIONS, DISPLAY_POSITION_MAP } from '@/constants/scoring'
 import { fuzzyMatch } from '@/lib/search'
+import { useScoreLookup } from '@/hooks/usePlayerStats'
+import { normalizeName } from '@/utils/scoring'
+import { getScoreColorClass, getScoreBgClass, type ScoreScale } from '@/components/ui/ScoreBar'
 
 // Normaliza una posición cruda del CSV (puede ser código Wyscout o string con comas)
 // a un nombre amigable en español para mostrar en dropdowns y filtros.
@@ -205,14 +208,14 @@ function getInitials(name: string): string {
   return name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('')
 }
 
-function scoreColor(s: number | null | undefined) {
-  if (s == null) return 'text-apple-gray-400'
-  return s >= 7 ? 'text-green-500' : s >= 5 ? 'text-amber-400' : 'text-red-400'
+// ─── Scale-aware color helpers (delegates to ScoreBar utilities) ──────────────
+
+function scoreColor(s: number | null | undefined, scale: ScoreScale = '100') {
+  return getScoreColorClass(s ?? null, scale)
 }
 
-function scoreBg(s: number | null | undefined) {
-  if (s == null) return 'bg-apple-gray-100 dark:bg-apple-gray-700'
-  return s >= 7 ? 'bg-green-100 dark:bg-green-900/30' : s >= 5 ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-red-100 dark:bg-red-900/30'
+function scoreBg(s: number | null | undefined, scale: ScoreScale = '100') {
+  return getScoreBgClass(s ?? null, scale)
 }
 
 // Kept for non-search uses (jitter, etc.)
@@ -251,6 +254,23 @@ interface SearchCandidate {
 export default function BusquedaPage() {
   const { external, internal, monitoring, loading } = useData()
   const navigate = useNavigate()
+
+  // ─── Supabase score lookup (1-10 scale) ───────────────────────────────────
+  const { lookup: scoreLookup } = useScoreLookup()
+
+  /**
+   * Returns the display score and its scale for a given player.
+   * Prefers Supabase (1-10) when available; falls back to CSV ggScore (0-100).
+   * NOTE: For league-level comparisons (rank, avg) we always use ggScore so
+   * that all players in the pool are on the same 0-100 scale.
+   */
+  function getPlayerScore(player: EnrichedPlayer): { score: number; scale: ScoreScale } | null {
+    const key = normalizeName(player.Jugador)
+    const entry = scoreLookup.get(key)
+    if (entry != null) return { score: entry.score, scale: '10' }
+    if (player.ggScore != null) return { score: player.ggScore, scale: '100' }
+    return null
+  }
 
   const [query, setQuery] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
@@ -1010,19 +1030,22 @@ export default function BusquedaPage() {
                     {selectedPlayer.Equipo}{selectedPlayer.Liga ? ` · ${selectedPlayer.Liga}` : ''}{selectedPlayer['Posición'] ? ` · ${selectedPlayer['Posición']}` : ''}{selectedPlayer.Edad ? ` · ${selectedPlayer.Edad} años` : ''}
                   </p>
                 </div>
-                {selectedPlayer.ggScore != null && (
-                  <div className={`flex-shrink-0 flex flex-col items-center justify-center w-16 h-16 rounded-2xl ${scoreBg(selectedPlayer.ggScore)}`}>
-                    <span className={`text-2xl font-bold ${scoreColor(selectedPlayer.ggScore)}`}>{selectedPlayer.ggScore.toFixed(1)}</span>
-                    <span className="text-xs text-apple-gray-500 dark:text-apple-gray-400">Score GG</span>
-                    {leagueScoreContext?.rank && (
-                      <span className="text-2xs text-apple-gray-400 dark:text-apple-gray-500 leading-none mt-0.5">
-                        {leagueScoreContext.rank}° / {leagueScoreContext.total}
-                      </span>
-                    )}
-                  </div>
-                )}
+                {(() => {
+                  const ps = getPlayerScore(selectedPlayer)
+                  return ps != null ? (
+                    <div className={`flex-shrink-0 flex flex-col items-center justify-center w-16 h-16 rounded-2xl ${scoreBg(ps.score, ps.scale)}`}>
+                      <span className={`text-2xl font-bold ${scoreColor(ps.score, ps.scale)}`}>{ps.score.toFixed(1)}</span>
+                      <span className="text-xs text-apple-gray-500 dark:text-apple-gray-400">Score GG</span>
+                      {leagueScoreContext?.rank && (
+                        <span className="text-2xs text-apple-gray-400 dark:text-apple-gray-500 leading-none mt-0.5">
+                          {leagueScoreContext.rank}° / {leagueScoreContext.total}
+                        </span>
+                      )}
+                    </div>
+                  ) : null
+                })()}
               </div>
-              {/* League score comparison */}
+              {/* League score comparison — uses ggScore (0-100) for consistent cross-player ranking */}
               {leagueScoreContext && selectedPlayer.ggScore != null && (
                 <div className="mt-3 pt-3 border-t border-apple-gray-100 dark:border-apple-gray-700/50 flex items-center gap-3 flex-wrap">
                   <span className="text-xs text-apple-gray-400 dark:text-apple-gray-500">Score en {leagueScoreContext.liga}:</span>
@@ -1435,25 +1458,30 @@ export default function BusquedaPage() {
                 )}
                 <div className="space-y-3">
                   {/* Score */}
-                  {conclusions.playerScore != null && conclusions.avgScore != null && (
-                    <div className="flex items-start gap-3 p-4 rounded-xl bg-apple-gray-50 dark:bg-apple-gray-700/40">
-                      <div className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg ${scoreBg(conclusions.playerScore)} ${scoreColor(conclusions.playerScore)}`}>
-                        {conclusions.playerScore.toFixed(1)}
+                  {conclusions.playerScore != null && conclusions.avgScore != null && selectedPlayer && (() => {
+                    const ps = getPlayerScore(selectedPlayer)
+                    const displayScore = ps?.score ?? conclusions.playerScore
+                    const displayScale = ps?.scale ?? '100'
+                    return (
+                      <div className="flex items-start gap-3 p-4 rounded-xl bg-apple-gray-50 dark:bg-apple-gray-700/40">
+                        <div className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg ${scoreBg(displayScore, displayScale)} ${scoreColor(displayScore, displayScale)}`}>
+                          {displayScore.toFixed(1)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-apple-gray-800 dark:text-white">Score GG</p>
+                          <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
+                            {conclusions.scorePct != null ? `Percentil ${conclusions.scorePct} del grupo (${conclusions.scoreRank}° de ${conclusions.poolSize}).` : `Promedio del grupo: ${conclusions.avgScore.toFixed(1)}.`}
+                            {' '}{Math.abs(conclusions.playerScore - conclusions.avgScore) > 0.3
+                              ? conclusions.playerScore > conclusions.avgScore
+                                ? `Supera el promedio por ${(conclusions.playerScore - conclusions.avgScore).toFixed(1)} puntos.`
+                                : `Está ${Math.abs(conclusions.playerScore - conclusions.avgScore).toFixed(1)} puntos por debajo.`
+                              : 'En línea con el promedio del grupo.'
+                            }
+                          </p>
+                        </div>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-apple-gray-800 dark:text-white">Score GG</p>
-                        <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
-                          {conclusions.scorePct != null ? `Percentil ${conclusions.scorePct} del grupo (${conclusions.scoreRank}° de ${conclusions.poolSize}).` : `Promedio del grupo: ${conclusions.avgScore.toFixed(1)}.`}
-                          {' '}{Math.abs(conclusions.playerScore - conclusions.avgScore) > 0.3
-                            ? conclusions.playerScore > conclusions.avgScore
-                              ? `Supera el promedio por ${(conclusions.playerScore - conclusions.avgScore).toFixed(1)} puntos.`
-                              : `Está ${Math.abs(conclusions.playerScore - conclusions.avgScore).toFixed(1)} puntos por debajo.`
-                            : 'En línea con el promedio del grupo.'
-                          }
-                        </p>
-                      </div>
-                    </div>
-                  )}
+                    )
+                  })()}
 
                   {/* Top rankings */}
                   {conclusions.top1.length > 0 && (

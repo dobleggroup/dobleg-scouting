@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { useData } from '@/context/DataContext'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { getRelativeScoreColorClass, getRelativeScoreBgClass } from '@/components/ui/ScoreBar'
+import type { ScoreScale } from '@/components/ui/ScoreBar'
 import { FILTER_POSITION_MAP } from '@/constants/scoring'
+import { normalizeName } from '@/utils/scoring'
+import { useScoreLookup } from '@/hooks/usePlayerStats'
 import type { EnrichedPlayer } from '@/types'
 
 interface Opportunity {
@@ -11,13 +14,30 @@ interface Opportunity {
   type: 'contract' | 'undervalued' | 'young_talent' | 'bargain'
   score: number
   reasons: string[]
+  playerScore: number
+  playerScoreScale: ScoreScale
 }
 
-function calculateOpportunities(players: EnrichedPlayer[]): Opportunity[] {
+/** Normalize a raw score to the 0-100 range for comparison logic, regardless of original scale. */
+function toScale100(score: number, scale: ScoreScale): number {
+  return scale === '10' ? score * 10 : score
+}
+
+function calculateOpportunities(
+  players: EnrichedPlayer[],
+  getPlayerScore: (player: EnrichedPlayer) => { score: number; scale: ScoreScale },
+): Opportunity[] {
   const opportunities: Opportunity[] = []
 
   for (const player of players) {
-    const score = player.ggScore ?? 0
+    const { score: rawScore, scale } = getPlayerScore(player)
+    // Normalise to 0-100 so all existing thresholds stay unchanged
+    const score = toScale100(rawScore, scale)
+
+    const minScore = 45
+    if (score < minScore) continue
+    if (player.minutesPlayed < 400) continue
+
     const age = player.ageNum
     const value = player.marketValueRaw
     const monthsRemaining = player.monthsRemaining
@@ -25,10 +45,6 @@ function calculateOpportunities(players: EnrichedPlayer[]): Opportunity[] {
     const isArgentina = league.toLowerCase().includes('argentina')
     const reasons: string[] = []
     let oppScore = 0
-
-    // Strict minimum requirements
-    if (score < 45) continue
-    if (player.minutesPlayed < 400) continue
 
     // 1. Contract expiring soon (< 6 months) + good player
     if (monthsRemaining !== null && monthsRemaining <= 6 && monthsRemaining >= 0 && score >= 50) {
@@ -43,7 +59,7 @@ function calculateOpportunities(players: EnrichedPlayer[]): Opportunity[] {
 
     if (score >= 65 && value > 0 && value <= lowValueThresholdElite) {
       oppScore += 50
-      reasons.push(`Score ${score.toFixed(1)} a solo ${formatValue(value)}`)
+      reasons.push(`Score ${rawScore.toFixed(1)} a solo ${formatValue(value)}`)
     } else if (score >= 55 && value > 0 && value <= lowValueThresholdGood) {
       oppScore += 40
       reasons.push(`Rendimiento alto, valor bajo (${formatValue(value)})`)
@@ -52,7 +68,7 @@ function calculateOpportunities(players: EnrichedPlayer[]): Opportunity[] {
     // 3. Young talent: must be exceptional for age
     if (age <= 18 && score >= 48) {
       oppScore += 55
-      reasons.push(`${age} años con score ${score.toFixed(1)}`)
+      reasons.push(`${age} años con score ${rawScore.toFixed(1)}`)
     } else if (age <= 20 && score >= 50) {
       oppScore += 45
       reasons.push(`${age} años, rendimiento destacado`)
@@ -97,6 +113,8 @@ function calculateOpportunities(players: EnrichedPlayer[]): Opportunity[] {
         type,
         score: oppScore,
         reasons,
+        playerScore: rawScore,
+        playerScoreScale: scale,
       })
     }
   }
@@ -122,6 +140,7 @@ type FilterType = 'all' | 'contract' | 'undervalued' | 'young_talent' | 'bargain
 export default function OpportunitiesPage() {
   const navigate = useNavigate()
   const { external, internal, loading, positionAverages } = useData()
+  const { lookup: scoreLookup } = useScoreLookup()
   const [typeFilter, setTypeFilter] = useState<FilterType>('all')
   const [leagueFilter, setLeagueFilter] = useState<string>('all')
   const [positionFilter, setPositionFilter] = useState<string>('all')
@@ -131,8 +150,23 @@ export default function OpportunitiesPage() {
   const [maxValue, setMaxValue] = useState<number>(10_000_000)
   const [maxContract, setMaxContract] = useState<number | null>(null)
 
+  /** Returns the best available score for a player along with its scale. */
+  const getPlayerScore = useMemo(() => {
+    return (player: EnrichedPlayer): { score: number; scale: ScoreScale } => {
+      const key = normalizeName(player.Jugador)
+      const entry = scoreLookup.get(key)
+      if (entry != null) {
+        return { score: entry.score, scale: '10' }
+      }
+      return { score: player.ggScore ?? 0, scale: '100' }
+    }
+  }, [scoreLookup])
+
   const allPlayers = useMemo(() => [...external, ...internal], [external, internal])
-  const opportunities = useMemo(() => calculateOpportunities(allPlayers), [allPlayers])
+  const opportunities = useMemo(
+    () => calculateOpportunities(allPlayers, getPlayerScore),
+    [allPlayers, getPlayerScore],
+  )
 
   // Get unique leagues from opportunities
   const leagues = useMemo(() => {
@@ -384,8 +418,13 @@ export default function OpportunitiesPage() {
           {filteredOpportunities.map((opp, idx) => {
             const normPos = FILTER_POSITION_MAP[opp.player['Posición']] ?? ''
             const posAvg = normPos ? (positionAverages[normPos] ?? null) : null
-            const scoreColor = getRelativeScoreColorClass(opp.player.ggScore ?? null, posAvg)
-            const scoreBg = getRelativeScoreBgClass(opp.player.ggScore ?? null, posAvg)
+            // Use the resolved score and scale stored on the opportunity
+            const displayScore = opp.playerScore
+            const scale = opp.playerScoreScale
+            // posAvg is always on the 0-100 scale; convert for relative comparison when needed
+            const posAvgForScale = scale === '10' && posAvg != null ? posAvg / 10 : posAvg
+            const scoreColor = getRelativeScoreColorClass(displayScore, posAvgForScale, scale)
+            const scoreBg = getRelativeScoreBgClass(displayScore, posAvgForScale, scale)
 
             return (
               <div
@@ -428,7 +467,7 @@ export default function OpportunitiesPage() {
                 {/* Stats row */}
                 <div className="flex items-center gap-3 mb-3 text-sm">
                   <span className={`px-2 py-0.5 rounded-full font-semibold ${scoreBg} ${scoreColor}`}>
-                    {opp.player.ggScore?.toFixed(1) ?? '—'}
+                    {displayScore.toFixed(1)}
                   </span>
                   <span className="text-apple-gray-600 dark:text-apple-gray-400">
                     {opp.player.ageNum} años

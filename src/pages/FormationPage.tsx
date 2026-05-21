@@ -16,7 +16,9 @@ import {
   type PositionPlayer,
 } from '@/services/formationService'
 import type { EnrichedPlayer } from '@/types'
-import { getRelativeScoreColorClass } from '@/components/ui/ScoreBar'
+import { getRelativeScoreColorClass, type ScoreScale } from '@/components/ui/ScoreBar'
+import { useScoreLookup } from '@/hooks/usePlayerStats'
+import { normalizeName } from '@/utils/scoring'
 
 const FORMATIONS: Record<string, { name: string; positions: { key: string; x: number; y: number }[] }> = {
   '4-3-3': {
@@ -198,6 +200,8 @@ interface PlayerSelectorProps {
   onRemovePlayer: (playerId: string) => void
   onClose: () => void
   userName: string
+  getPlayerScore: (player: EnrichedPlayer) => { score: number | null; scale: ScoreScale }
+  getPositionPlayerScore: (p: PositionPlayer) => { score: number | null; scale: ScoreScale }
 }
 
 function PlayerSelector({
@@ -214,23 +218,31 @@ function PlayerSelector({
   onRemovePlayer,
   onClose,
   userName,
+  getPlayerScore,
+  getPositionPlayerScore,
 }: PlayerSelectorProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState<'search' | 'suggestions'>('suggestions')
   const searchInputRef = useRef<HTMLInputElement>(null)
   const { positionAverages } = useData()
 
-  // Promedio de posición para un EnrichedPlayer
+  // Promedio de posición para un EnrichedPlayer (0-100 scale)
   function getPosAvg(p: EnrichedPlayer): number | null {
     const normPos = FILTER_POSITION_MAP[p['Posición']] ?? ''
     return normPos ? (positionAverages[normPos] ?? null) : null
   }
 
-  // Promedio de posición para los PositionPlayer de esta posición (usa allowedPositions)
+  // Promedio de posición para los PositionPlayer de esta posición (0-100 scale)
   function getPosAvgForAllowed(positions: string[]): number | null {
     const avgs = positions.map(pos => positionAverages[pos]).filter((v): v is number => v != null)
     if (!avgs.length) return null
     return avgs.reduce((a, b) => a + b, 0) / avgs.length
+  }
+
+  // Returns posAvg scaled to match the given score scale
+  function scaledPosAvg(avg: number | null, scale: ScoreScale): number | null {
+    if (avg === null) return null
+    return scale === '10' ? avg / 10 : avg
   }
 
   const allowedPositions =
@@ -273,10 +285,17 @@ function PlayerSelector({
         const playerPosKey = FILTER_POSITION_MAP[rawPos] ?? ''
         return allowedPositions.includes(playerPosKey)
       })
-      .filter(p => p.ggScore !== null)
-      .sort((a, b) => (b.ggScore ?? 0) - (a.ggScore ?? 0))
+      .filter(p => getPlayerScore(p).score !== null)
+      .sort((a, b) => {
+        const sa = getPlayerScore(a)
+        const sb = getPlayerScore(b)
+        // Normalize to 0-100 for comparison
+        const scoreA = sa.scale === '10' ? (sa.score ?? 0) * 10 : (sa.score ?? 0)
+        const scoreB = sb.scale === '10' ? (sb.score ?? 0) * 10 : (sb.score ?? 0)
+        return scoreB - scoreA
+      })
       .slice(0, 15)
-  }, [availablePlayers, selectedLeagues, nationality, minAge, maxAge, allowedPositions])
+  }, [availablePlayers, selectedLeagues, nationality, minAge, maxAge, allowedPositions, getPlayerScore])
 
   // Focus search when switching to search tab
   useEffect(() => {
@@ -285,34 +304,37 @@ function PlayerSelector({
     }
   }, [activeTab])
 
-  const renderPlayerCard = (p: EnrichedPlayer, i: number, showPosition = false) => (
-    <button
-      key={`${p.Jugador}-${i}`}
-      onClick={() => onAddPlayer(p)}
-      className="w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700 border border-apple-gray-100 dark:border-apple-gray-700 hover:border-brand-green/50"
-    >
-      {p.Imagen ? (
-        <img src={p.Imagen} alt="" className="w-10 h-10 rounded-lg object-cover bg-apple-gray-200" />
-      ) : (
-        <div className="w-10 h-10 rounded-lg bg-apple-gray-200 dark:bg-apple-gray-600 flex items-center justify-center text-sm font-bold text-apple-gray-500">
-          {p.Jugador.split(' ').map(w => w[0]).slice(0, 2).join('')}
+  const renderPlayerCard = (p: EnrichedPlayer, i: number, showPosition = false) => {
+    const { score: playerScore, scale: playerScale } = getPlayerScore(p)
+    return (
+      <button
+        key={`${p.Jugador}-${i}`}
+        onClick={() => onAddPlayer(p)}
+        className="w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700 border border-apple-gray-100 dark:border-apple-gray-700 hover:border-brand-green/50"
+      >
+        {p.Imagen ? (
+          <img src={p.Imagen} alt="" className="w-10 h-10 rounded-lg object-cover bg-apple-gray-200" />
+        ) : (
+          <div className="w-10 h-10 rounded-lg bg-apple-gray-200 dark:bg-apple-gray-600 flex items-center justify-center text-sm font-bold text-apple-gray-500">
+            {p.Jugador.split(' ').map(w => w[0]).slice(0, 2).join('')}
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">{p.Jugador}</p>
+          <p className="text-xs text-apple-gray-500 truncate">
+            {p.Equipo} · {p.ageNum} años
+            {showPosition && <span className="text-apple-gray-400"> · {p['Posición'] || p['Posicion']}</span>}
+          </p>
         </div>
-      )}
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">{p.Jugador}</p>
-        <p className="text-xs text-apple-gray-500 truncate">
-          {p.Equipo} · {p.ageNum} años
-          {showPosition && <span className="text-apple-gray-400"> · {p['Posición'] || p['Posicion']}</span>}
-        </p>
-      </div>
-      <div className="text-right flex-shrink-0">
-        <p className={`text-sm font-bold ${getRelativeScoreColorClass(p.ggScore ?? null, getPosAvg(p))}`}>
-          {p.ggScore?.toFixed(1)}
-        </p>
-        <p className="text-2xs text-apple-gray-400">{p.marketValueFormatted}</p>
-      </div>
-    </button>
-  )
+        <div className="text-right flex-shrink-0">
+          <p className={`text-sm font-bold ${getRelativeScoreColorClass(playerScore, scaledPosAvg(getPosAvg(p), playerScale), playerScale)}`}>
+            {playerScore?.toFixed(1)}
+          </p>
+          <p className="text-2xs text-apple-gray-400">{p.marketValueFormatted}</p>
+        </div>
+      </button>
+    )
+  }
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in" onClick={onClose}>
@@ -374,32 +396,35 @@ function PlayerSelector({
           <div className="p-4 bg-apple-gray-50 dark:bg-apple-gray-900/50 border-b border-apple-gray-200 dark:border-apple-gray-700">
             <p className="text-xs font-semibold text-apple-gray-500 uppercase tracking-wider mb-2">En esta posicion</p>
             <div className="space-y-2">
-              {currentPlayers.map((p, i) => (
-                <div key={p.playerId} className="flex items-center justify-between bg-white dark:bg-apple-gray-800 rounded-xl p-3 shadow-sm border border-apple-gray-100 dark:border-apple-gray-700">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-brand-green/20 flex items-center justify-center text-brand-green font-bold text-sm">
-                      {i + 1}
+              {currentPlayers.map((p, i) => {
+                const { score: posPlayerScore, scale: posPlayerScale } = getPositionPlayerScore(p)
+                return (
+                  <div key={p.playerId} className="flex items-center justify-between bg-white dark:bg-apple-gray-800 rounded-xl p-3 shadow-sm border border-apple-gray-100 dark:border-apple-gray-700">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-brand-green/20 flex items-center justify-center text-brand-green font-bold text-sm">
+                        {i + 1}
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm text-apple-gray-800 dark:text-white">{p.playerName}</p>
+                        <p className="text-xs text-apple-gray-500">{p.team}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium text-sm text-apple-gray-800 dark:text-white">{p.playerName}</p>
-                      <p className="text-xs text-apple-gray-500">{p.team}</p>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-bold ${getRelativeScoreColorClass(posPlayerScore, scaledPosAvg(getPosAvgForAllowed(allowedPositions), posPlayerScale), posPlayerScale)}`}>
+                        {posPlayerScore?.toFixed(1)}
+                      </span>
+                      <button
+                        onClick={() => onRemovePlayer(p.playerId)}
+                        className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-sm font-bold ${getRelativeScoreColorClass(p.ggScore ?? null, getPosAvgForAllowed(allowedPositions))}`}>
-                      {p.ggScore?.toFixed(1)}
-                    </span>
-                    <button
-                      onClick={() => onRemovePlayer(p.playerId)}
-                      className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}
@@ -485,6 +510,35 @@ export default function FormationPage() {
   const { external, internal, loading: dataLoading, positionAverages } = useData()
   const { user, userDisplayName } = useAuth()
   const allPlayers = useMemo(() => [...external, ...internal], [external, internal])
+
+  // Supabase 1-10 score lookup (falls back gracefully when not yet loaded)
+  const { lookup: scoreLookup } = useScoreLookup()
+
+  /**
+   * Returns the best available score for an EnrichedPlayer.
+   * Prefers the Supabase 1-10 score (scoreLookup) over the CSV ggScore (0-100).
+   */
+  const getPlayerScore = useCallback((player: EnrichedPlayer): { score: number | null; scale: ScoreScale } => {
+    const key = normalizeName(player.Jugador)
+    const entry = scoreLookup.get(key)
+    if (entry != null) {
+      return { score: entry.score, scale: '10' }
+    }
+    return { score: player.ggScore, scale: '100' }
+  }, [scoreLookup])
+
+  /**
+   * Returns the best available score for a PositionPlayer stored in formation state.
+   * Falls back to the ggScore saved at add-time (CSV, 0-100).
+   */
+  const getPositionPlayerScore = useCallback((p: PositionPlayer): { score: number | null; scale: ScoreScale } => {
+    const key = normalizeName(p.playerName)
+    const entry = scoreLookup.get(key)
+    if (entry != null) {
+      return { score: entry.score, scale: '10' }
+    }
+    return { score: p.ggScore ?? null, scale: '100' }
+  }, [scoreLookup])
 
   const [formation, setFormation] = useState('4-3-3')
   const [selectedLeagues, setSelectedLeagues] = useState<string[]>([])
@@ -833,7 +887,14 @@ export default function FormationPage() {
                     {/* Player badges */}
                     {hasPlayers && (
                       <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-0.5">
-                        {playersInPos.slice(0, 3).map((p, i) => (
+                        {playersInPos.slice(0, 3).map((p, i) => {
+                          const { score: pitchScore, scale: pitchScale } = getPositionPlayerScore(p)
+                          const posKeys = FORMATION_POSITION_OVERRIDES[formation]?.[pos.key] ?? POSITION_KEY_MAP[pos.key] ?? []
+                          const avgs = posKeys.map((k: string) => positionAverages[k]).filter((v: number | undefined): v is number => v != null)
+                          const posAvg = avgs.length ? avgs.reduce((a: number, b: number) => a + b, 0) / avgs.length : null
+                          // When scale is '10', positionAverages are 0-100 — scale down avg to match
+                          const adjustedPosAvg = pitchScale === '10' && posAvg !== null ? posAvg / 10 : posAvg
+                          return (
                           <div
                             key={p.playerId}
                             className="whitespace-nowrap bg-white dark:bg-apple-gray-800 rounded-md px-2 py-0.5 shadow-md text-xs"
@@ -841,15 +902,12 @@ export default function FormationPage() {
                             <span className="font-semibold text-apple-gray-800 dark:text-white">
                               {p.playerName.split(' ').slice(-1)[0]}
                             </span>
-                            <span className={`ml-1.5 font-bold ${getRelativeScoreColorClass(p.ggScore ?? null, (() => {
-                                const posKeys = FORMATION_POSITION_OVERRIDES[formation]?.[pos.key] ?? POSITION_KEY_MAP[pos.key] ?? []
-                                const avgs = posKeys.map((k: string) => positionAverages[k]).filter((v: number | undefined): v is number => v != null)
-                                return avgs.length ? avgs.reduce((a: number, b: number) => a + b, 0) / avgs.length : null
-                              })())}`}>
-                              {p.ggScore?.toFixed(0)}
+                            <span className={`ml-1.5 font-bold ${getRelativeScoreColorClass(pitchScore, adjustedPosAvg, pitchScale)}`}>
+                              {pitchScore?.toFixed(0)}
                             </span>
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
                   </div>
@@ -876,6 +934,8 @@ export default function FormationPage() {
           onRemovePlayer={(id) => handleRemovePlayer(selectedPos, id)}
           onClose={() => setSelectedPos(null)}
           userName={userDisplayName}
+          getPlayerScore={getPlayerScore}
+          getPositionPlayerScore={getPositionPlayerScore}
         />
       )}
 

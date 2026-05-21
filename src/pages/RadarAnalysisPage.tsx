@@ -3,11 +3,13 @@ import { Link } from 'react-router-dom'
 import { useData } from '@/context/DataContext'
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend, ResponsiveContainer, Tooltip } from 'recharts'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
-import { RADAR_METRICS as POSITION_RADAR_METRICS, METRIC_ABBREVIATIONS, sortLeaguesByPriority } from '@/constants/scoring'
+import { RADAR_METRICS as POSITION_RADAR_METRICS, METRIC_ABBREVIATIONS, sortLeaguesByPriority, API_RADAR_METRICS } from '@/constants/scoring'
 import { smartSearch } from '@/lib/search'
 import AddToReportButton from '@/components/pdf/AddToReportButton'
 import CopyChartButton from '@/components/ui/CopyChartButton'
 import type { EnrichedPlayer } from '@/types'
+import { useScoreLookup } from '@/hooks/usePlayerStats'
+import { normalizeName } from '@/utils/scoring'
 
 // Metrics organized by category for dropdown
 const METRIC_CATEGORIES = {
@@ -79,6 +81,23 @@ function normalizeToPercentile(value: number, sortedValues: number[]): number {
 export default function RadarAnalysisPage() {
   const { external, internal, loading } = useData()
   const allPlayers = useMemo(() => [...external, ...internal], [external, internal])
+
+  // Supabase score lookup (1-10 scale). Falls back to CSV ggScore (0-100) when not ready or not found.
+  const { lookup: scoreLookup, ready: scoreReady } = useScoreLookup()
+
+  function getPlayerScore(player: EnrichedPlayer): { score: number | null; scale: '100' | '10' } {
+    if (scoreReady && scoreLookup.size > 0) {
+      const key = normalizeName(player.Jugador)
+      const entry = scoreLookup.get(key)
+      if (entry) return { score: entry.score, scale: '10' }
+    }
+    return { score: player.ggScore ?? null, scale: '100' }
+  }
+
+  // TODO: When displaying radar for a player with Supabase data, use API_RADAR_METRICS[positionCode]
+  // instead of RADAR_METRICS[positionName]. Requires mapping Spanish position names from POSITION_MAP
+  // to 8-position codes (ARQ, CB, LD, LI, VC, VI, EXT, DEL). See API_RADAR_METRICS in scoring.ts.
+  void API_RADAR_METRICS // imported for future use
 
   // State
   const [selectedPlayers, setSelectedPlayers] = useState<EnrichedPlayer[]>([])
@@ -892,7 +911,7 @@ export default function RadarAnalysisPage() {
                         </div>
                         <div className="text-right">
                           <p className="text-lg font-bold text-brand-green">
-                            {player.ggScore?.toFixed(1)}
+                            {(() => { const s = getPlayerScore(player); return s.score?.toFixed(1) ?? '—' })()}
                           </p>
                           <p className="text-xs text-apple-gray-400">
                             P{Math.round(avgPercentile)} avg

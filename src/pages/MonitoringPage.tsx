@@ -13,6 +13,9 @@ import { SELECTABLE_METRICS } from '@/components/filters/FilterSidebar'
 import { FILTER_POSITION_MAP } from '@/constants/scoring'
 import { playerNamesMatch } from '@/utils/nameUtils'
 import { fuzzyMatch } from '@/lib/search'
+import { useScoreLookup } from '@/hooks/usePlayerStats'
+import { normalizeName } from '@/utils/scoring'
+import type { ScoreScale } from '@/components/ui/ScoreBar'
 // ScoreEvolutionMini removed - now showing status history instead
 import type { MonitoringPlayer, ManagementStatus, ScoutPlayer, ScoutPlayerStatusRecord, DatosTrackingStatus } from '@/types'
 import AddPlayerModal from '@/components/tracking/AddPlayerModal'
@@ -327,6 +330,7 @@ export default function MonitoringPage() {
     requiresAuth,
     loading: statusLoading,
   } = useMonitoringStatus()
+  const { lookup: scoreLookup } = useScoreLookup()
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showMobileFilters, setShowMobileFilters] = useState(false)
 
@@ -338,6 +342,15 @@ export default function MonitoringPage() {
   const [fichaPlayer, setFichaPlayer] = useState<ScoutPlayer | null>(null)
 
   const isAdmin = user?.email === ADMIN_EMAIL
+
+  const getScoreByName = useCallback(
+    (name: string, fallback: number | null = null): { score: number | null; scale: ScoreScale } => {
+      const entry = scoreLookup.get(normalizeName(name))
+      if (entry) return { score: entry.score, scale: '10' }
+      return { score: fallback, scale: '100' }
+    },
+    [scoreLookup]
+  )
 
   const loadManualPlayers = useCallback(async () => {
     const [players, statuses] = await Promise.all([
@@ -523,8 +536,8 @@ export default function MonitoringPage() {
     // Sort
     if (sortByScore) {
       result = [...result].sort((a, b) => {
-        const scoreA = a.ggScore ?? -1
-        const scoreB = b.ggScore ?? -1
+        const scoreA = getScoreByName(a.Jugador, a.ggScore ?? null).score ?? -1
+        const scoreB = getScoreByName(b.Jugador, b.ggScore ?? null).score ?? -1
         return sortByScore === 'desc' ? scoreB - scoreA : scoreA - scoreB
       })
     } else if (sortByOpportunity) {
@@ -544,7 +557,7 @@ export default function MonitoringPage() {
     }
 
     return result
-  }, [monitoring, search, posFilters, ligaFilters, clubSearch, rolFilter, repreFilter, statusFilter, sortByScore, sortByOpportunity, sortByMetric, getPlayerStatus, pie, minHeight, maxHeight])
+  }, [monitoring, search, posFilters, ligaFilters, clubSearch, rolFilter, repreFilter, statusFilter, sortByScore, sortByOpportunity, sortByMetric, getPlayerStatus, getScoreByName, pie, minHeight, maxHeight])
 
   // Unified combined list: sheets players + filtered manual-only players, sorted together
   const combinedList = useMemo((): CombinedEntry[] => {
@@ -581,8 +594,12 @@ export default function MonitoringPage() {
     }
 
     // Re-sort the combined list so manual players participate in ordering
-    const getScore = (e: CombinedEntry) =>
-      e.type === 'sheets' ? (e.player.ggScore ?? -1) : (e.player._extPlayer?.ggScore ?? -1)
+    const getScore = (e: CombinedEntry) => {
+      if (e.type === 'sheets') return getScoreByName(e.player.Jugador, e.player.ggScore ?? null).score ?? -1
+      const ext = e.player._extPlayer
+      if (ext) return getScoreByName(ext.Jugador, ext.ggScore ?? null).score ?? -1
+      return -1
+    }
     const getOpp = (e: CombinedEntry) =>
       e.type === 'sheets'
         ? (e.player.opportunityScore ?? -1)
@@ -595,7 +612,7 @@ export default function MonitoringPage() {
     }
 
     return entries
-  }, [filtered, manualOnlyPlayers, search, posFilters, ligaFilters, clubSearch, rolFilter, statusFilter, pie, minHeight, maxHeight, manualStatuses, sortByScore, sortByOpportunity])
+  }, [filtered, manualOnlyPlayers, search, posFilters, ligaFilters, clubSearch, rolFilter, statusFilter, pie, minHeight, maxHeight, manualStatuses, sortByScore, sortByOpportunity, getScoreByName])
 
   const activeFilters = posFilters.length + ligaFilters.length + (clubSearch ? 1 : 0) + (rolFilter ? 1 : 0) + (repreFilter ? 1 : 0) + (statusFilter ? 1 : 0) + (pie ? 1 : 0) + (minHeight > 0 ? 1 : 0) + (maxHeight > 0 ? 1 : 0)
   const resetFilters = () => {
@@ -946,8 +963,10 @@ export default function MonitoringPage() {
                   const club = p.club || ext?.Equipo || ''
                   const liga = p.liga || ext?.Liga || ''
                   const edad = p.edad || (ext?.Edad ? parseInt(String(ext.Edad)) : null)
-                  const ggScore = ext?.ggScore ?? null
-                  const hasScore = ggScore !== null && ggScore !== undefined
+                  const { score: playerScoreVal, scale: playerScaleVal } = ext
+                    ? getScoreByName(ext.Jugador, ext.ggScore ?? null)
+                    : { score: null, scale: '100' as ScoreScale }
+                  const hasScore = playerScoreVal !== null && playerScoreVal !== undefined
                   return (
                     <div
                       key={`manual-${p.id}`}
@@ -982,7 +1001,7 @@ export default function MonitoringPage() {
                           </p>
                           {hasScore ? (
                             <div className="flex-1">
-                              <ScoreBar score={ggScore} size="sm" posAvg={positionAverages[FILTER_POSITION_MAP[posicion] ?? ''] ?? null} />
+                              <ScoreBar score={playerScoreVal} size="sm" posAvg={positionAverages[FILTER_POSITION_MAP[posicion] ?? ''] ?? null} scale={playerScaleVal} />
                             </div>
                           ) : (
                             <span className="text-2xs text-apple-gray-400">Sin datos suficientes</span>
@@ -1046,13 +1065,13 @@ export default function MonitoringPage() {
                           {[player.Club, player.Liga, player['Posición'], player.Edad ? `${player.Edad}a` : null].filter(Boolean).join(' · ')}
                         </p>
                         <div className="flex items-center gap-2">
-                          {hasData && player.ggScore !== undefined && player.ggScore !== null ? (
+                          {hasData && (() => { const { score: ps, scale: psc } = getScoreByName(player.Jugador, player.ggScore ?? null); return ps !== undefined && ps !== null ? (
                             <div className="flex-1">
-                              <ScoreBar score={player.ggScore} size="sm" posAvg={positionAverages[FILTER_POSITION_MAP[player['Posición']] ?? ''] ?? null} />
+                              <ScoreBar score={ps} size="sm" posAvg={positionAverages[FILTER_POSITION_MAP[player['Posición']] ?? ''] ?? null} scale={psc} />
                             </div>
                           ) : (
                             <span className="text-2xs text-apple-gray-400">Sin datos suficientes</span>
-                          )}
+                          ) })()}
                           {player.opportunityScore !== undefined && player.opportunityScore !== null && (
                             <OpportunityBadge score={player.opportunityScore} />
                           )}
@@ -1179,8 +1198,10 @@ export default function MonitoringPage() {
                         const posicion = p.posicion || ext?.['Posición'] || ''
                         const club = p.club || ext?.Equipo || ''
                         const liga = p.liga || ext?.Liga || ''
-                        const ggScore = ext?.ggScore ?? null
-                        const hasScore = typeof ggScore === 'number' && ext?.hasEnoughData !== (false as unknown)
+                        const { score: manualScore, scale: manualScale } = ext
+                          ? getScoreByName(ext.Jugador, ext.ggScore ?? null)
+                          : { score: null, scale: '100' as ScoreScale }
+                        const hasScore = typeof manualScore === 'number' && ext?.hasEnoughData !== (false as unknown)
                         const tmUrl = p.transfermarkt_url || ext?.Transfermkt
                         return (
                           <tr
@@ -1250,7 +1271,7 @@ export default function MonitoringPage() {
                             </td>
                             <td className="px-3 py-3">
                               {hasScore ? (
-                                <ScoreBar score={ggScore!} size="sm" posAvg={positionAverages[FILTER_POSITION_MAP[posicion] ?? ''] ?? null} />
+                                <ScoreBar score={manualScore!} size="sm" posAvg={positionAverages[FILTER_POSITION_MAP[posicion] ?? ''] ?? null} scale={manualScale} />
                               ) : (
                                 <LowDataWarning />
                               )}
@@ -1375,15 +1396,20 @@ export default function MonitoringPage() {
 
                           {/* Score */}
                           <td className="px-3 py-3">
-                            {hasData && player.ggScore !== undefined && player.ggScore !== null ? (
-                              <ScoreBar
-                                score={player.ggScore}
-                                size="sm"
-                                posAvg={positionAverages[FILTER_POSITION_MAP[player['Posición']] ?? ''] ?? null}
-                              />
-                            ) : (
-                              <LowDataWarning />
-                            )}
+                            {hasData && (() => {
+                              const { score: ps, scale: psc } = getScoreByName(player.Jugador, player.ggScore ?? null)
+                              return ps !== undefined && ps !== null ? (
+                                <ScoreBar
+                                  score={ps}
+                                  size="sm"
+                                  posAvg={positionAverages[FILTER_POSITION_MAP[player['Posición']] ?? ''] ?? null}
+                                  scale={psc}
+                                />
+                              ) : (
+                                <LowDataWarning />
+                              )
+                            })()}
+                            {!hasData && <LowDataWarning />}
                           </td>
 
                           {/* Status changed by - only show for non-default statuses */}

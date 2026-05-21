@@ -7,6 +7,8 @@ import { smartSearch } from '@/lib/search'
 import AddToReportButton from '@/components/pdf/AddToReportButton'
 import ScoutsGGBadge from '@/components/ui/ScoutsGGBadge'
 import type { EnrichedPlayer } from '@/types'
+import { useScoreLookup } from '@/hooks/usePlayerStats'
+import { normalizeName } from '@/utils/scoring'
 
 const PLAYER_COLORS = ['#22C55E', '#3B82F6', '#F59E0B']
 
@@ -27,6 +29,28 @@ function PlayerSearch({ players, selected, onSelect, color, label, leagues }: Pl
   const [posFilter, setPosFilter] = useState('')
   const [playerFilter, setPlayerFilter] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
+
+  // Supabase score lookup (1-10 scale). Falls back to CSV ggScore (0-100) when not ready or not found.
+  const { lookup: scoreLookup, ready: scoreReady } = useScoreLookup()
+
+  function getPlayerScore(player: EnrichedPlayer): { score: number | null; scale: '100' | '10' } {
+    if (scoreReady && scoreLookup.size > 0) {
+      const key = normalizeName(player.Jugador)
+      const entry = scoreLookup.get(key)
+      if (entry) return { score: entry.score, scale: '10' }
+    }
+    return { score: player.ggScore ?? null, scale: '100' }
+  }
+
+  function getDisplayScore(player: EnrichedPlayer): string {
+    const { score } = getPlayerScore(player)
+    return score?.toFixed(1) ?? '—'
+  }
+
+  function getScoreForSort(player: EnrichedPlayer): number {
+    const { score } = getPlayerScore(player)
+    return score ?? 0
+  }
 
   // Search results (direct name search) - using smart search
   const searchResults = useMemo(() => {
@@ -57,7 +81,7 @@ function PlayerSearch({ players, selected, onSelect, color, label, leagues }: Pl
       if (teamFilter && p.Equipo !== teamFilter) return false
       if (posFilter && p['Posición'] !== posFilter) return false
       return true
-    }).sort((a, b) => (b.ggScore ?? 0) - (a.ggScore ?? 0))
+    }).sort((a, b) => getScoreForSort(b) - getScoreForSort(a))
   }, [players, leagueFilter, teamFilter, posFilter])
 
   const handleSelectPlayer = (jugador: string) => {
@@ -187,7 +211,7 @@ function PlayerSearch({ players, selected, onSelect, color, label, leagues }: Pl
                         </div>
                       </div>
                       <div className="text-xs font-semibold" style={{ color }}>
-                        {p.ggScore?.toFixed(1) ?? '—'}
+                        {getDisplayScore(p)}
                       </div>
                     </button>
                   ))}
@@ -238,7 +262,7 @@ function PlayerSearch({ players, selected, onSelect, color, label, leagues }: Pl
                   <option value="">4. Seleccionar jugador ({filteredPlayers.length})</option>
                   {filteredPlayers.slice(0, 50).map((p, i) => (
                     <option key={`${p.Jugador}-${i}`} value={p.Jugador}>
-                      {p.Jugador} ({p.ggScore?.toFixed(1) ?? '—'}) - {p.Equipo}
+                      {p.Jugador} ({getDisplayScore(p)}) - {p.Equipo}
                     </option>
                   ))}
                 </select>

@@ -10,6 +10,8 @@ import AddToReportButton from '@/components/pdf/AddToReportButton'
 import ScoutsGGBadge from '@/components/ui/ScoutsGGBadge'
 import { smartSearch } from '@/lib/search'
 import type { EnrichedPlayer } from '@/types'
+import { useScoreLookup } from '@/hooks/usePlayerStats'
+import { normalizeName } from '@/utils/scoring'
 
 // Color interpolation from red (bad) to yellow (medium) to green (good)
 function getColorForValue(value: number, min: number, max: number): string {
@@ -184,9 +186,16 @@ function getMetricExplanation(metric: string): string {
   return METRIC_EXPLANATIONS[metric] || `Métrica que mide ${getMetricDisplayName(metric).toLowerCase()}.`
 }
 
-// Get value from player
-function getPlayerValue(player: EnrichedPlayer, metric: string): number | null {
-  if (metric === 'ggScore') return player.ggScore ?? null
+// Get value from player. An optional ggScoreResolver supports dual-source scoring (CSV 0-100 or Supabase 1-10).
+function getPlayerValue(
+  player: EnrichedPlayer,
+  metric: string,
+  ggScoreResolver?: (player: EnrichedPlayer) => number | null
+): number | null {
+  if (metric === 'ggScore') {
+    if (ggScoreResolver) return ggScoreResolver(player)
+    return player.ggScore ?? null
+  }
   if (metric === 'minutesPlayed') return player.minutesPlayed
   if (metric === 'ageNum') return player.ageNum
   if (metric === 'marketValueRaw') return player.marketValueRaw || null
@@ -275,6 +284,18 @@ export default function ScatterChartPage() {
   const chartRef = useRef<HTMLDivElement>(null)
   const [exporting, setExporting] = useState(false)
 
+  // Supabase score lookup (1-10 scale). Falls back to CSV ggScore (0-100) when not ready or not found.
+  const { lookup: scoreLookup, ready: scoreReady } = useScoreLookup()
+
+  function getPlayerScoreValue(player: EnrichedPlayer): number | null {
+    if (scoreReady && scoreLookup.size > 0) {
+      const key = normalizeName(player.Jugador)
+      const entry = scoreLookup.get(key)
+      if (entry) return entry.score
+    }
+    return player.ggScore ?? null
+  }
+
   // State for metric selection
   const [xMetric, setXMetric] = useState('xG')
   const [yMetric, setYMetric] = useState('Goles')
@@ -342,9 +363,9 @@ export default function ScatterChartPage() {
         return true
       })
       .map(player => {
-        const x = getPlayerValue(player, xMetric)
-        const y = getPlayerValue(player, yMetric)
-        const z = getPlayerValue(player, zMetric)
+        const x = getPlayerValue(player, xMetric, getPlayerScoreValue)
+        const y = getPlayerValue(player, yMetric, getPlayerScoreValue)
+        const z = getPlayerValue(player, zMetric, getPlayerScoreValue)
         if (x === null || y === null || z === null) return null
         const id = `${player.Jugador}-${player.Equipo}`
         return { player, x, y, z, name: player.Jugador, id }

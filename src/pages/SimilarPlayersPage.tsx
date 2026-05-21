@@ -8,6 +8,8 @@ import CopyChartButton from '@/components/ui/CopyChartButton'
 import { POSITION_MAP, SCORING_CONFIG } from '@/constants/scoring'
 import { smartSearch } from '@/lib/search'
 import type { EnrichedPlayer } from '@/types'
+import { useScoreLookup } from '@/hooks/usePlayerStats'
+import { normalizeName } from '@/utils/scoring'
 
 const STORAGE_KEY = 'similar-players-state'
 
@@ -91,6 +93,18 @@ export default function SimilarPlayersPage() {
   const [search, setSearch] = useState('')
   const [selectedPlayer, setSelectedPlayer] = useState<EnrichedPlayer | null>(null)
   const [restored, setRestored] = useState(false)
+
+  // Supabase score lookup (1-10 scale). Falls back to CSV ggScore (0-100) when not ready or not found.
+  const { lookup: scoreLookup, ready: scoreReady } = useScoreLookup()
+
+  function getPlayerScore(player: EnrichedPlayer): { score: number | null; scale: '100' | '10' } {
+    if (scoreReady && scoreLookup.size > 0) {
+      const key = normalizeName(player.Jugador)
+      const entry = scoreLookup.get(key)
+      if (entry) return { score: entry.score, scale: '10' }
+    }
+    return { score: player.ggScore ?? null, scale: '100' }
+  }
 
   // Combine all players for search
   const allPlayers = useMemo(() => [...external, ...internal], [external, internal])
@@ -230,7 +244,7 @@ export default function SimilarPlayersPage() {
             </div>
             <div className="text-right">
               <div className="text-xs text-apple-gray-500 dark:text-apple-gray-400 mb-1">Score GG</div>
-              <ScoreBar score={selectedPlayer.ggScore} size="sm" />
+              {(() => { const s = getPlayerScore(selectedPlayer); return <ScoreBar score={s.score} size="sm" scale={s.scale} /> })()}
             </div>
             <button
               onClick={() => {
@@ -309,7 +323,7 @@ export default function SimilarPlayersPage() {
 
                   {/* Score */}
                   <div className="w-24">
-                    <ScoreBar score={player.ggScore} size="md" />
+                    {(() => { const s = getPlayerScore(player); return <ScoreBar score={s.score} size="md" scale={s.scale} /> })()}
                   </div>
 
                   {/* Similarity */}

@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { useData } from '@/context/DataContext'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { getRelativeScoreColorClass, getRelativeScoreBgClass } from '@/components/ui/ScoreBar'
+import type { ScoreScale } from '@/components/ui/ScoreBar'
 import { FILTER_POSITION_MAP } from '@/constants/scoring'
+import { normalizeName } from '@/utils/scoring'
+import { useScoreLookup } from '@/hooks/usePlayerStats'
 import PortfolioValueChart from '@/components/charts/PortfolioValueChart'
 import LeagueAnalysis from '@/components/dashboard/LeagueAnalysis'
 import type { EnrichedPlayer, MonitoringPlayer } from '@/types'
@@ -52,11 +55,14 @@ interface PlayerRowProps {
   metricValue?: string | number
   onClick: () => void
   posAvg?: number | null
+  score?: number | null
+  scale?: ScoreScale
 }
 
-function PlayerRow({ player, metric, metricValue, onClick, posAvg }: PlayerRowProps) {
-  const scoreColor = getRelativeScoreColorClass(player.ggScore ?? null, posAvg ?? null)
-  const scoreBg = getRelativeScoreBgClass(player.ggScore ?? null, posAvg ?? null)
+function PlayerRow({ player, metric, metricValue, onClick, posAvg, score, scale = '100' }: PlayerRowProps) {
+  const displayScore = score !== undefined ? score : player.ggScore
+  const scoreColor = getRelativeScoreColorClass(displayScore ?? null, posAvg ?? null, scale)
+  const scoreBg = getRelativeScoreBgClass(displayScore ?? null, posAvg ?? null, scale)
 
   return (
     <button
@@ -82,7 +88,7 @@ function PlayerRow({ player, metric, metricValue, onClick, posAvg }: PlayerRowPr
           </>
         ) : (
           <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${scoreBg} ${scoreColor}`}>
-            {player.ggScore?.toFixed(1) ?? '—'}
+            {displayScore?.toFixed(1) ?? '—'}
           </span>
         )}
       </div>
@@ -184,6 +190,26 @@ function MonitoringRow({ player, metric, metricValue, onClick, highlight, posAvg
 export default function DashboardPage() {
   const navigate = useNavigate()
   const { internal, monitoring, marketValueHistory, positionAverages, loading } = useData()
+  const { lookup: scoreLookup } = useScoreLookup()
+
+  function getPlayerScore(player: EnrichedPlayer): { score: number | null; scale: ScoreScale } {
+    const entry = scoreLookup.get(normalizeName(player.Jugador))
+    if (entry) return { score: entry.score, scale: '10' }
+    return { score: player.ggScore, scale: '100' }
+  }
+
+  // Determine whether most players are scored via Supabase (for threshold adaptation)
+  const useSupabaseScale = useMemo(() => {
+    if (scoreLookup.size === 0) return false
+    const withSupabase = internal.filter(p => scoreLookup.has(normalizeName(p.Jugador))).length
+    return withSupabase > internal.length / 2
+  }, [scoreLookup, internal])
+
+  // Score thresholds adapted to the active scale
+  const thresholds = useMemo(() => {
+    if (useSupabaseScale) return { elite: 8.0, good: 5.5, developing: 3.5 }
+    return { elite: 60, good: 45, developing: 35 }
+  }, [useSupabaseScale])
 
   function getPosAvg(posicion: string): number | null {
     const normPos = FILTER_POSITION_MAP[posicion] ?? ''
@@ -216,12 +242,13 @@ export default function DashboardPage() {
     // Promedio del interno por grupo
     const acc: Record<string, { scores: number[]; count: number }> = {}
     for (const p of internal) {
-      if (p.ggScore === null) continue
+      const { score: effectiveScore } = getPlayerScore(p)
+      if (effectiveScore === null) continue
       const normPos = FILTER_POSITION_MAP[p['Posición']] ?? ''
       const group = groups[normPos]
       if (!group) continue
       if (!acc[group]) acc[group] = { scores: [], count: 0 }
-      acc[group].scores.push(p.ggScore)
+      acc[group].scores.push(effectiveScore)
       acc[group].count++
     }
 
@@ -253,19 +280,19 @@ export default function DashboardPage() {
         count: acc[g].count,
         globalAvg: globalAvgByGroup[g] ?? null,
       }))
-  }, [internal, positionAverages])
+  }, [internal, positionAverages, scoreLookup])
 
 
   // Calculate KPIs
   const kpis = useMemo(() => {
     const totalPlayers = internal.length
-    const withScore = internal.filter(p => p.ggScore !== null)
+    const withScore = internal.filter(p => getPlayerScore(p).score !== null)
     const totalValue = internal.reduce((sum, p) => sum + (p.marketValueRaw || 0), 0)
     const avgAge = internal.length > 0
       ? internal.reduce((sum, p) => sum + p.ageNum, 0) / internal.length
       : 0
     const avgScore = withScore.length > 0
-      ? withScore.reduce((sum, p) => sum + (p.ggScore ?? 0), 0) / withScore.length
+      ? withScore.reduce((sum, p) => sum + (getPlayerScore(p).score ?? 0), 0) / withScore.length
       : 0
 
     // Contract situations
@@ -277,10 +304,13 @@ export default function DashboardPage() {
     const peak = internal.filter(p => p.ageNum > 21 && p.ageNum <= 28).length
     const veteran = internal.filter(p => p.ageNum > 28).length
 
-    // Score distribution
-    const elite = withScore.filter(p => (p.ggScore ?? 0) >= 60).length
-    const good = withScore.filter(p => (p.ggScore ?? 0) >= 45 && (p.ggScore ?? 0) < 60).length
-    const developing = withScore.filter(p => (p.ggScore ?? 0) < 45).length
+    // Score distribution (uses adaptive thresholds)
+    const elite = withScore.filter(p => (getPlayerScore(p).score ?? 0) >= thresholds.elite).length
+    const good = withScore.filter(p => {
+      const s = getPlayerScore(p).score ?? 0
+      return s >= thresholds.good && s < thresholds.elite
+    }).length
+    const developing = withScore.filter(p => (getPlayerScore(p).score ?? 0) < thresholds.good).length
 
     return {
       totalPlayers,
@@ -296,15 +326,15 @@ export default function DashboardPage() {
       good,
       developing,
     }
-  }, [internal])
+  }, [internal, scoreLookup, thresholds])
 
   // Top performers
   const topPerformers = useMemo(() =>
     [...internal]
-      .filter(p => p.ggScore !== null)
-      .sort((a, b) => (b.ggScore ?? 0) - (a.ggScore ?? 0))
+      .filter(p => getPlayerScore(p).score !== null)
+      .sort((a, b) => (getPlayerScore(b).score ?? 0) - (getPlayerScore(a).score ?? 0))
       .slice(0, 5),
-    [internal]
+    [internal, scoreLookup]
   )
 
   // Most valuable
@@ -326,22 +356,28 @@ export default function DashboardPage() {
   )
 
   // Young talents (high score for age)
-  const youngTalents = useMemo(() =>
-    [...internal]
-      .filter(p => p.ageNum <= 21 && p.ggScore !== null && (p.ggScore ?? 0) >= 40)
-      .sort((a, b) => (b.ggScore ?? 0) - (a.ggScore ?? 0))
-      .slice(0, 5),
-    [internal]
-  )
+  const youngTalents = useMemo(() => {
+    const youngThreshold = useSupabaseScale ? 4.0 : 40
+    return [...internal]
+      .filter(p => {
+        const { score } = getPlayerScore(p)
+        return p.ageNum <= 21 && score !== null && (score ?? 0) >= youngThreshold
+      })
+      .sort((a, b) => (getPlayerScore(b).score ?? 0) - (getPlayerScore(a).score ?? 0))
+      .slice(0, 5)
+  }, [internal, scoreLookup, useSupabaseScale])
 
   // Undervalued gems (high score, low value)
-  const undervalued = useMemo(() =>
-    [...internal]
-      .filter(p => p.ggScore !== null && (p.ggScore ?? 0) >= 50 && p.marketValueRaw > 0 && p.marketValueRaw <= 500_000)
-      .sort((a, b) => (b.ggScore ?? 0) / (b.marketValueRaw || 1) - (a.ggScore ?? 0) / (a.marketValueRaw || 1))
-      .slice(0, 5),
-    [internal]
-  )
+  const undervalued = useMemo(() => {
+    const undervaluedThreshold = useSupabaseScale ? 5.0 : 50
+    return [...internal]
+      .filter(p => {
+        const { score } = getPlayerScore(p)
+        return score !== null && (score ?? 0) >= undervaluedThreshold && p.marketValueRaw > 0 && p.marketValueRaw <= 500_000
+      })
+      .sort((a, b) => (getPlayerScore(b).score ?? 0) / (b.marketValueRaw || 1) - (getPlayerScore(a).score ?? 0) / (a.marketValueRaw || 1))
+      .slice(0, 5)
+  }, [internal, scoreLookup, useSupabaseScale])
 
   // ─── SEGUIMIENTO RECOMMENDATIONS ─────────────────────────────────────────────
 
@@ -457,22 +493,28 @@ export default function DashboardPage() {
           </p>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             {positionScores.map(({ label, avg, count, globalAvg }) => {
+              // Adapt color thresholds to the active scale
+              const eliteThreshold = useSupabaseScale ? 8.0 : 80
+              const goodThreshold = useSupabaseScale ? 5.5 : 55
+              const devThreshold = useSupabaseScale ? 3.5 : 35
               const colorClass =
-                avg >= 80 ? 'text-emerald-400' :
+                avg >= eliteThreshold ? 'text-emerald-400' :
                 globalAvg !== null
                   ? avg >= globalAvg ? 'text-emerald-500' :
                     avg >= globalAvg * 0.85 ? 'text-amber-500' :
                     avg >= globalAvg * 0.70 ? 'text-orange-500' : 'text-red-500'
-                  : avg >= 55 ? 'text-emerald-500' :
-                    avg >= 35 ? 'text-amber-500' : 'text-orange-500'
+                  : avg >= goodThreshold ? 'text-emerald-500' :
+                    avg >= devThreshold ? 'text-amber-500' : 'text-orange-500'
               const barColor =
-                avg >= 80 ? 'bg-emerald-400' :
+                avg >= eliteThreshold ? 'bg-emerald-400' :
                 globalAvg !== null
                   ? avg >= globalAvg ? 'bg-emerald-500' :
                     avg >= globalAvg * 0.85 ? 'bg-amber-500' :
                     avg >= globalAvg * 0.70 ? 'bg-orange-500' : 'bg-red-500'
-                  : avg >= 55 ? 'bg-emerald-500' :
-                    avg >= 35 ? 'bg-amber-500' : 'bg-orange-500'
+                  : avg >= goodThreshold ? 'bg-emerald-500' :
+                    avg >= devThreshold ? 'bg-amber-500' : 'bg-orange-500'
+              // Bar width: normalize avg to 0-100% regardless of scale
+              const barWidth = useSupabaseScale ? Math.min(100, ((avg - 1) / 9) * 100) : Math.min(100, avg)
               return (
                 <div key={label} className="flex flex-col gap-1.5">
                   <div className="flex items-end justify-between">
@@ -485,7 +527,7 @@ export default function DashboardPage() {
                   <div className="h-1.5 bg-apple-gray-100 dark:bg-apple-gray-700 rounded-full overflow-hidden">
                     <div
                       className={`h-full ${barColor} rounded-full transition-all duration-500`}
-                      style={{ width: `${Math.min(100, avg)}%` }}
+                      style={{ width: `${barWidth}%` }}
                     />
                   </div>
                 </div>
@@ -595,14 +637,14 @@ export default function DashboardPage() {
               </div>
               <div className="space-y-2">
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-apple-gray-500 w-24">Elite (60+)</span>
+                  <span className="text-xs text-apple-gray-500 w-24">{useSupabaseScale ? `Elite (${thresholds.elite}+)` : 'Elite (60+)'}</span>
                   <div className="flex-1">
                     <ProgressBar value={kpis.elite} max={kpis.totalPlayers} color="bg-emerald-500" />
                   </div>
                   <span className="text-sm font-medium text-apple-gray-700 dark:text-apple-gray-200 w-8 text-right">{kpis.elite}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-apple-gray-500 w-24">Buenos (45-59)</span>
+                  <span className="text-xs text-apple-gray-500 w-24">{useSupabaseScale ? `Buenos (${thresholds.good}-${thresholds.elite})` : 'Buenos (45-59)'}</span>
                   <div className="flex-1">
                     <ProgressBar value={kpis.good} max={kpis.totalPlayers} color="bg-blue-500" />
                   </div>
@@ -698,9 +740,14 @@ export default function DashboardPage() {
                   <p className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">{p.Jugador}</p>
                   <p className="text-xs text-apple-gray-500 truncate">{p.Equipo}</p>
                 </button>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${getRelativeScoreBgClass(p.ggScore ?? null, getPosAvg(p['Posición']))} ${getRelativeScoreColorClass(p.ggScore ?? null, getPosAvg(p['Posición']))}`}>
-                  {p.ggScore?.toFixed(1)}
-                </span>
+                {(() => {
+                  const { score: ps, scale: pScale } = getPlayerScore(p)
+                  return (
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${getRelativeScoreBgClass(ps ?? null, getPosAvg(p['Posición']), pScale)} ${getRelativeScoreColorClass(ps ?? null, getPosAvg(p['Posición']), pScale)}`}>
+                      {ps?.toFixed(1)}
+                    </span>
+                  )
+                })()}
               </div>
             ))}
           </div>
@@ -754,14 +801,19 @@ export default function DashboardPage() {
         >
           {youngTalents.length > 0 ? (
             <div className="space-y-1">
-              {youngTalents.map((p, i) => (
-                <PlayerRow
-                  key={i}
-                  player={p}
-                  posAvg={getPosAvg(p['Posición'])}
-                  onClick={() => navigateToPlayer(p)}
-                />
-              ))}
+              {youngTalents.map((p, i) => {
+                const { score: ps, scale: pScale } = getPlayerScore(p)
+                return (
+                  <PlayerRow
+                    key={i}
+                    player={p}
+                    posAvg={getPosAvg(p['Posición'])}
+                    score={ps}
+                    scale={pScale}
+                    onClick={() => navigateToPlayer(p)}
+                  />
+                )
+              })}
             </div>
           ) : (
             <p className="text-sm text-apple-gray-500 text-center py-8">
@@ -799,9 +851,14 @@ export default function DashboardPage() {
                     <p className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">{p.Jugador}</p>
                     <p className="text-xs text-apple-gray-500 truncate">{p.Equipo} · {p.ageNum} años</p>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${getRelativeScoreBgClass(p.ggScore ?? null, getPosAvg(p['Posición']))} ${getRelativeScoreColorClass(p.ggScore ?? null, getPosAvg(p['Posición']))}`}>
-                        {p.ggScore?.toFixed(1)}
-                      </span>
+                      {(() => {
+                        const { score: ps, scale: pScale } = getPlayerScore(p)
+                        return (
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${getRelativeScoreBgClass(ps ?? null, getPosAvg(p['Posición']), pScale)} ${getRelativeScoreColorClass(ps ?? null, getPosAvg(p['Posición']), pScale)}`}>
+                            {ps?.toFixed(1)}
+                          </span>
+                        )
+                      })()}
                       <span className="text-xs text-apple-gray-500">{p.marketValueFormatted}</span>
                     </div>
                   </div>
