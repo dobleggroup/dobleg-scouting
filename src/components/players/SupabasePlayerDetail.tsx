@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { usePlayerDetail, usePlayerMatchHistory, usePositionAverages } from '@/hooks/usePlayerStats'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import EmptyState from '@/components/ui/EmptyState'
@@ -17,7 +17,9 @@ function getAge(birthDate: string | null): number | null {
 
 export default function SupabasePlayerDetail() {
   const { id } = useParams<{ id: string }>()
-  const playerId = id ? parseInt(id) : null
+  const [searchParams] = useSearchParams()
+  const apiId = searchParams.get('apiId')
+  const playerId = apiId ? parseInt(apiId) : (id ? parseInt(id) : null)
   const { data, loading } = usePlayerDetail(playerId)
   const [selectedPosition, setSelectedPosition] = useState<Position | null>(null)
   const { averages: positionAverages } = usePositionAverages()
