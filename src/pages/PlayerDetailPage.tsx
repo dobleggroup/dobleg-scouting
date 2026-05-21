@@ -25,6 +25,8 @@ import BodyMapSVG from '@/components/health/BodyMapSVG'
 import ScoutsGGBadge from '@/components/ui/ScoutsGGBadge'
 import type { EnrichedPlayer, SubjectiveMetric } from '@/types'
 
+const SupabasePlayerDetailLazy = lazy(() => import('@/components/players/SupabasePlayerDetail'))
+
 // ─── PLAYER COMMENTS SYSTEM ───────────────────────────────────────────────────
 
 interface PlayerComment {
@@ -574,27 +576,11 @@ function MetricRowWithPercentile({ label, value, percentile }: MetricWithPercent
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function PlayerDetailPage() {
-  const [searchParams] = useSearchParams()
-  const source = searchParams.get('source')
-
-  if (source === 'supabase') {
-    return (
-      <Suspense fallback={<LoadingSpinner fullScreen message="Cargando ficha del jugador..." />}>
-        <SupabasePlayerDetailLazy />
-      </Suspense>
-    )
-  }
-
-  return <CsvPlayerDetail />
-}
-
-const SupabasePlayerDetailLazy = lazy(() => import('@/components/players/SupabasePlayerDetail'))
-
-function CsvPlayerDetail() {
   const { id } = useParams<{ id: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const source = (searchParams.get('source') ?? 'externo') as 'externo' | 'interno' | 'seguimiento'
+  const apiIdParam = searchParams.get('apiId')
   const overridePosition = searchParams.get('pos')
   const { external, internal, monitoring, normalized, evolution, subjectiveMetrics, marketValueHistory, gpsData, loading, error } = useData()
   const [activeTab, setActiveTab] = useState('General')
@@ -679,7 +665,7 @@ function CsvPlayerDetail() {
     ) ?? null
   }, [id, source, monitoring])
 
-  const apiPlayerId = (typeof player?.apiFootballId === 'number' ? player.apiFootballId : null) as number | null
+  const apiPlayerId = apiIdParam ? parseInt(apiIdParam) : (typeof player?.apiFootballId === 'number' ? player.apiFootballId : null) as number | null
   const { data: supabaseDetail } = usePlayerDetail(apiPlayerId)
   const { matches: supabaseMatches } = usePlayerMatchHistory(
     apiPlayerId,
@@ -936,6 +922,13 @@ function CsvPlayerDetail() {
 
   if (loading) return <LoadingSpinner fullScreen message="Cargando ficha del jugador..." />
   if (error) return <EmptyState title="Error" description={error} icon="error" />
+  if (!player && apiIdParam) {
+    return (
+      <Suspense fallback={<LoadingSpinner fullScreen message="Cargando ficha del jugador..." />}>
+        <SupabasePlayerDetailLazy />
+      </Suspense>
+    )
+  }
   if (!player) return (
     <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-8">
       <EmptyState title="Jugador no encontrado" description="No se encontró el jugador solicitado." icon="search" />

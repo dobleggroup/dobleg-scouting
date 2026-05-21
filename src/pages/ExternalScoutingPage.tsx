@@ -86,7 +86,7 @@ export default function ExternalScoutingPage() {
   }, [])
 
   const handlePlayerClick = (player: PlayerWithScore) => {
-    navigate(`/jugador/${player.id}?source=supabase`)
+    navigate(`/jugador/${encodeURIComponent(player.name)}?source=externo&apiId=${player.id}`)
   }
 
   const activeCount = [
@@ -270,7 +270,6 @@ export default function ExternalScoutingPage() {
                     <th className="text-center py-3 px-3 text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">Asist</th>
                     <th className="text-center py-3 px-3 text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">Rating</th>
                     <th className="text-center py-3 px-3 text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">Score</th>
-                    <th className="text-center py-3 px-3 text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">Percentil</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-apple-gray-100 dark:divide-apple-gray-800">
@@ -278,7 +277,6 @@ export default function ExternalScoutingPage() {
                     const age = getAge(player.birth_date)
                     const ss = player.season_scores[0]
                     const score = ss?.avg_score ?? null
-                    const pct = ss?.global_percentile ?? null
                     return (
                       <tr
                         key={`${player.id}-${ss?.position}`}
@@ -333,15 +331,6 @@ export default function ExternalScoutingPage() {
                           {score !== null ? (
                             <span className={`inline-block px-2.5 py-1 rounded-lg text-sm font-bold tabular-nums ${getScoreColorClass(score, '10')} ${getScoreBgClass(score, '10')}`}>
                               {score.toFixed(1)}
-                            </span>
-                          ) : (
-                            <span className="text-apple-gray-400 text-sm">—</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-3 text-center">
-                          {pct !== null ? (
-                            <span className="text-sm text-apple-gray-600 dark:text-apple-gray-300 tabular-nums">
-                              {pct.toFixed(0)}%
                             </span>
                           ) : (
                             <span className="text-apple-gray-400 text-sm">—</span>
