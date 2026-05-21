@@ -2,12 +2,14 @@ import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { EnrichedPlayer, SortState } from '@/types'
 import ContractBadge from '@/components/ui/ContractBadge'
-import ScoreBar from '@/components/ui/ScoreBar'
+import ScoreBar, { type ScoreScale } from '@/components/ui/ScoreBar'
 import EmptyState from '@/components/ui/EmptyState'
 import ScoutsGGBadge from '@/components/ui/ScoutsGGBadge'
 import { SELECTABLE_METRICS } from '@/components/filters/FilterSidebar'
 import { useData } from '@/context/DataContext'
 import { FILTER_POSITION_MAP } from '@/constants/scoring'
+import { useScoreLookup } from '@/hooks/usePlayerStats'
+import { normalizeName } from '@/utils/scoring'
 
 interface PlayerTableProps {
   players: EnrichedPlayer[]
@@ -76,8 +78,16 @@ function formatMetricValue(value: unknown): string {
 export default function PlayerTable({ players, source, isLoading, selectedMetrics = [] }: PlayerTableProps) {
   const navigate = useNavigate()
   const { positionAverages } = useData()
+  const { lookup: scoreLookup } = useScoreLookup()
   const [sort, setSort] = useState<SortState>({ column: 'ggScore', direction: 'desc' })
   const [page, setPage] = useState(1)
+
+  function getPlayerScore(player: EnrichedPlayer): { score: number | null; scale: ScoreScale } {
+    const key = normalizeName(player.Jugador)
+    const entry = scoreLookup.get(key)
+    if (entry) return { score: entry.score, scale: '10' }
+    return { score: player.ggScore, scale: '100' }
+  }
 
   const columns = useMemo(() => {
     const base = source === 'interno' ? BASE_COLUMNS_INTERNAL : BASE_COLUMNS
@@ -106,8 +116,8 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
   const sorted = useMemo(() => {
     const { column, direction } = sort
     return [...players].sort((a, b) => {
-      let aVal: unknown = a[column]
-      let bVal: unknown = b[column]
+      let aVal: unknown = column === 'ggScore' ? getPlayerScore(a).score : a[column]
+      let bVal: unknown = column === 'ggScore' ? getPlayerScore(b).score : b[column]
 
       if (typeof aVal === 'string') aVal = parseFloat((aVal as string).replace(',', '.')) || 0
       if (typeof bVal === 'string') bVal = parseFloat((bVal as string).replace(',', '.')) || 0
@@ -178,7 +188,10 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
                 </div>
                 {/* Score */}
                 <div className="flex-shrink-0">
-                  <ScoreBar score={player.ggScore} size="sm" posAvg={posAvg} />
+                  {(() => {
+                    const { score, scale } = getPlayerScore(player)
+                    return <ScoreBar score={score} size="sm" posAvg={posAvg} scale={scale} />
+                  })()}
                 </div>
               </div>
               {/* Tags row */}
@@ -301,11 +314,17 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
                   {/* Score GG */}
                   <td className="px-3 py-3">
                     <div className="flex justify-center">
-                      <ScoreBar
-                        score={player.ggScore}
-                        size="sm"
-                        posAvg={positionAverages[FILTER_POSITION_MAP[player['Posición']] ?? ''] ?? null}
-                      />
+                      {(() => {
+                        const { score, scale } = getPlayerScore(player)
+                        return (
+                          <ScoreBar
+                            score={score}
+                            size="sm"
+                            posAvg={positionAverages[FILTER_POSITION_MAP[player['Posición']] ?? ''] ?? null}
+                            scale={scale}
+                          />
+                        )
+                      })()}
                     </div>
                   </td>
                 </tr>

@@ -5,6 +5,8 @@ import {
   fetchPositionAverages,
   fetchLeagues,
   fetchPlayerMatchHistory,
+  fetchScoreLookup,
+  type ScoreLookupEntry,
 } from '@/services/playerStatsService';
 import type { PlayerWithScore, PlayerMatchStat, PositionAverage, LeagueInfo, Position } from '@/types/scoring';
 
@@ -123,6 +125,26 @@ export function useLeagues() {
   }, []);
 
   return leagues;
+}
+
+export function useScoreLookup(): { lookup: Map<string, ScoreLookupEntry>; ready: boolean } {
+  const [lookup, setLookup] = useState<Map<string, ScoreLookupEntry>>(new Map());
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const cached = getCached<Map<string, ScoreLookupEntry>>('scoreLookup', 60);
+    if (cached) { setLookup(cached); setReady(true); return; }
+
+    fetchScoreLookup()
+      .then(data => {
+        setLookup(data);
+        setCache('scoreLookup', data);
+        setReady(true);
+      })
+      .catch(() => setReady(true));
+  }, []);
+
+  return { lookup, ready };
 }
 
 export function usePlayerMatchHistory(playerId: number | null, position?: Position) {

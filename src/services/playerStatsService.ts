@@ -145,6 +145,50 @@ export async function fetchLeagues(): Promise<LeagueInfo[]> {
   return data ?? [];
 }
 
+export interface ScoreLookupEntry {
+  player_id: number;
+  name: string;
+  score: number;
+  position: Position;
+  percentile: number | null;
+  matches_played: number;
+}
+
+export async function fetchScoreLookup(
+  season?: number
+): Promise<Map<string, ScoreLookupEntry>> {
+  const s = season ?? new Date().getFullYear();
+
+  const { data, error } = await supabase
+    .from('player_season_scores')
+    .select(`
+      player_id, position, avg_score, percentile, matches_played,
+      player:players!inner(name)
+    `)
+    .eq('season', s)
+    .not('avg_score', 'is', null);
+
+  if (error) throw error;
+
+  const map = new Map<string, ScoreLookupEntry>();
+  for (const row of data ?? []) {
+    const name = (row as any).player?.name as string;
+    if (!name) continue;
+    const key = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const existing = map.get(key);
+    if (existing && existing.matches_played >= row.matches_played) continue;
+    map.set(key, {
+      player_id: row.player_id,
+      name,
+      score: row.avg_score,
+      position: row.position as Position,
+      percentile: row.percentile,
+      matches_played: row.matches_played,
+    });
+  }
+  return map;
+}
+
 export async function fetchPlayerMatchHistory(
   playerId: number,
   position?: Position,
