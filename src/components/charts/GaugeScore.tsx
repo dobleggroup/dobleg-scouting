@@ -7,52 +7,74 @@ interface GaugeScoreProps {
   animated?: boolean
   comparisonScore?: number | null  // e.g., league average
   comparisonLabel?: string
+  scale?: '100' | '10'
 }
 
 // Absolute color thresholds (fallback when no position average)
-function getScoreColorAbsolute(score: number): string {
-  if (score >= 80) return '#34D399'  // emerald-400 - Elite
-  if (score >= 55) return '#10B981'  // emerald-500 - Bueno
-  if (score >= 35) return '#F59E0B'  // amber-500 - Promedio
-  if (score >= 20) return '#F97316'  // orange-500 - Bajo
-  return '#EF4444'                   // red-500 - Crítico
-}
-
-// Relative color: green if above position average (matches ScoreBar relative logic)
-function getScoreColor(score: number, posAvg?: number | null): string {
-  if (score >= 80) return '#34D399'
-  if (posAvg != null) {
-    if (score >= posAvg) return '#10B981'         // verde: sobre el promedio
-    if (score >= posAvg * 0.85) return '#F59E0B'  // amarillo: cerca del promedio
-    if (score >= posAvg * 0.70) return '#F97316'  // naranja: por debajo
-    return '#EF4444'                               // rojo: muy por debajo
+function getScoreColorAbsolute(score: number, scale: '100' | '10' = '100'): string {
+  if (scale === '10') {
+    if (score >= 8.0) return '#34D399'
+    if (score >= 7.0) return '#10B981'
+    if (score >= 5.5) return '#F59E0B'
+    if (score >= 4.0) return '#F97316'
+    return '#EF4444'
   }
-  return getScoreColorAbsolute(score)
+  if (score >= 80) return '#34D399'
+  if (score >= 55) return '#10B981'
+  if (score >= 35) return '#F59E0B'
+  if (score >= 20) return '#F97316'
+  return '#EF4444'
 }
 
-function getScoreLabel(score: number, posAvg?: number | null): string {
-  if (score >= 80) return 'Elite'
+function getScoreColor(score: number, posAvg?: number | null, scale: '100' | '10' = '100'): string {
+  const elite = scale === '10' ? 8.0 : 80
+  if (score >= elite) return '#34D399'
+  if (posAvg != null) {
+    if (score >= posAvg) return '#10B981'
+    if (score >= posAvg * 0.85) return '#F59E0B'
+    if (score >= posAvg * 0.70) return '#F97316'
+    return '#EF4444'
+  }
+  return getScoreColorAbsolute(score, scale)
+}
+
+function getScoreLabel(score: number, posAvg?: number | null, scale: '100' | '10' = '100'): string {
+  const elite = scale === '10' ? 8.0 : 80
+  if (score >= elite) return 'Elite'
   if (posAvg != null) {
     if (score >= posAvg) return 'Sobre el promedio'
     if (score >= posAvg * 0.85) return 'Cerca del promedio'
     if (score >= posAvg * 0.70) return 'Bajo el promedio'
     return 'Muy bajo'
   }
+  if (scale === '10') {
+    if (score >= 7.0) return 'Bueno'
+    if (score >= 5.5) return 'Promedio'
+    if (score >= 4.0) return 'Bajo'
+    return 'Critico'
+  }
   if (score >= 55) return 'Bueno'
   if (score >= 35) return 'Promedio'
   if (score >= 20) return 'Bajo'
-  return 'Crítico'
+  return 'Critico'
 }
 
-function getScoreDescription(score: number, posAvg?: number | null): string {
-  if (score >= 80) return 'Rendimiento excepcional'
+function getScoreDescription(score: number, posAvg?: number | null, scale: '100' | '10' = '100'): string {
+  const elite = scale === '10' ? 8.0 : 80
+  if (score >= elite) return 'Rendimiento excepcional'
   if (posAvg != null) {
-    if (score >= posAvg) return 'Por encima del promedio de su posición'
-    if (score >= posAvg * 0.85) return 'Cerca del promedio de su posición'
-    if (score >= posAvg * 0.70) return 'Por debajo del promedio de su posición'
-    return 'Rendimiento bajo en su posición'
+    if (score >= posAvg) return 'Por encima del promedio de su posicion'
+    if (score >= posAvg * 0.85) return 'Cerca del promedio de su posicion'
+    if (score >= posAvg * 0.70) return 'Por debajo del promedio de su posicion'
+    return 'Rendimiento bajo en su posicion'
   }
-  if (score >= 55) return 'Rendimiento sólido'
+  if (scale === '10') {
+    if (score >= 7.0) return 'Rendimiento solido'
+    if (score >= 5.5) return 'Rendimiento regular'
+    if (score >= 4.0) return 'Necesita mejorar'
+    return 'Rendimiento bajo'
+  }
+  if (score >= 55) return 'Rendimiento solido'
   if (score >= 35) return 'Rendimiento regular'
   if (score >= 20) return 'Necesita mejorar'
   return 'Rendimiento bajo'
@@ -77,7 +99,8 @@ export default function GaugeScore({
   showLabel = true,
   animated = true,
   comparisonScore,
-  comparisonLabel = 'Promedio'
+  comparisonLabel = 'Promedio',
+  scale = '100',
 }: GaugeScoreProps) {
   const [displayValue, setDisplayValue] = useState(animated ? 0 : (score ?? 0))
 
@@ -118,10 +141,12 @@ export default function GaugeScore({
     )
   }
 
-  const clampedValue = Math.max(0, Math.min(100, displayValue))
-  const color = getScoreColor(score, comparisonScore)
-  const label = getScoreLabel(score, comparisonScore)
-  const description = getScoreDescription(score, comparisonScore)
+  const normalizedValue = scale === '10'
+    ? Math.max(0, Math.min(100, ((displayValue - 1) / 9) * 100))
+    : Math.max(0, Math.min(100, displayValue))
+  const color = getScoreColor(score, comparisonScore, scale)
+  const label = getScoreLabel(score, comparisonScore, scale)
+  const description = getScoreDescription(score, comparisonScore, scale)
 
   // Gauge dimensions based on size - cy positioned to leave room for score below arc
   const config = {
@@ -133,21 +158,30 @@ export default function GaugeScore({
   const { width, height, cx, cy, r, strokeW, fontSize, labelSize } = config[size]
   const startDeg = 135
   const endDeg = 405
-  const valueDeg = startDeg + (clampedValue / 100) * 270
+  const valueDeg = startDeg + (normalizedValue / 100) * 270
 
-  // Comparison needle angle
   const comparisonDeg = comparisonScore !== null && comparisonScore !== undefined
-    ? startDeg + (Math.max(0, Math.min(100, comparisonScore)) / 100) * 270
+    ? startDeg + ((scale === '10'
+        ? Math.max(0, Math.min(100, ((comparisonScore - 1) / 9) * 100))
+        : Math.max(0, Math.min(100, comparisonScore))
+      ) / 100) * 270
     : null
 
-  // Color gradient zones (very subtle background) — aligned with ScoreBar thresholds
-  const zones = [
-    { start: 0, end: 20, color: '#EF4444' },
-    { start: 20, end: 35, color: '#F97316' },
-    { start: 35, end: 55, color: '#F59E0B' },
-    { start: 55, end: 80, color: '#10B981' },
-    { start: 80, end: 100, color: '#34D399' },
-  ]
+  const zones = scale === '10'
+    ? [
+        { start: 0, end: ((4.0 - 1) / 9) * 100, color: '#EF4444' },
+        { start: ((4.0 - 1) / 9) * 100, end: ((5.5 - 1) / 9) * 100, color: '#F97316' },
+        { start: ((5.5 - 1) / 9) * 100, end: ((7.0 - 1) / 9) * 100, color: '#F59E0B' },
+        { start: ((7.0 - 1) / 9) * 100, end: ((8.0 - 1) / 9) * 100, color: '#10B981' },
+        { start: ((8.0 - 1) / 9) * 100, end: 100, color: '#34D399' },
+      ]
+    : [
+        { start: 0, end: 20, color: '#EF4444' },
+        { start: 20, end: 35, color: '#F97316' },
+        { start: 35, end: 55, color: '#F59E0B' },
+        { start: 55, end: 80, color: '#10B981' },
+        { start: 80, end: 100, color: '#34D399' },
+      ]
 
   return (
     <div className="flex flex-col items-center w-full">
@@ -220,7 +254,7 @@ export default function GaugeScore({
         />
 
         {/* Value arc (animated) */}
-        {clampedValue > 0 && (
+        {normalizedValue > 0 && (
           <path
             d={arcPath(cx, cy, r, startDeg, valueDeg)}
             stroke={color}
@@ -235,8 +269,9 @@ export default function GaugeScore({
         )}
 
         {/* Tick marks with labels */}
-        {[0, 25, 50, 75, 100].map(v => {
-          const deg = startDeg + (v / 100) * 270
+        {(scale === '10' ? [1, 3, 5, 7, 10] : [0, 25, 50, 75, 100]).map(v => {
+          const normalized = scale === '10' ? ((v - 1) / 9) * 100 : v
+          const deg = startDeg + (normalized / 100) * 270
           const inner = polarToCartesian(cx, cy, r + strokeW / 2 + 4, deg)
           const outer = polarToCartesian(cx, cy, r + strokeW / 2 + 12, deg)
           const labelPos = polarToCartesian(cx, cy, r + strokeW / 2 + 24, deg)
@@ -325,7 +360,7 @@ export default function GaugeScore({
 
         {/* Needle */}
         {(() => {
-          const needleAngle = startDeg + (clampedValue / 100) * 270
+          const needleAngle = startDeg + (normalizedValue / 100) * 270
           const needleRad = ((needleAngle - 90) * Math.PI) / 180
           const needleLen = r - (size === 'lg' ? 15 : 10)
 
@@ -373,7 +408,7 @@ export default function GaugeScore({
             letterSpacing: '-0.03em',
           }}
         >
-          {Math.round(displayValue)}
+          {scale === '10' ? displayValue.toFixed(1) : Math.round(displayValue)}
         </text>
       </svg>
 
@@ -424,14 +459,14 @@ export default function GaugeScore({
   )
 }
 
-// Mini version for tables/lists
-export function GaugeScoreMini({ score }: { score: number | null }) {
+export function GaugeScoreMini({ score, scale = '100' }: { score: number | null; scale?: '100' | '10' }) {
   if (score === null) {
     return <span className="text-apple-gray-400 text-sm">—</span>
   }
 
-  const color = getScoreColor(score)
-  const label = getScoreLabel(score)
+  const color = getScoreColor(score, undefined, scale)
+  const label = getScoreLabel(score, undefined, scale)
+  const progress = scale === '10' ? ((score - 1) / 9) : (score / 100)
 
   return (
     <div className="flex items-center gap-2">
@@ -439,7 +474,6 @@ export function GaugeScoreMini({ score }: { score: number | null }) {
         className="relative w-10 h-10 flex items-center justify-center"
       >
         <svg viewBox="0 0 40 40" className="w-full h-full">
-          {/* Background circle */}
           <circle
             cx="20"
             cy="20"
@@ -448,7 +482,6 @@ export function GaugeScoreMini({ score }: { score: number | null }) {
             className="stroke-apple-gray-200 dark:stroke-apple-gray-700"
             strokeWidth="4"
           />
-          {/* Progress arc */}
           <circle
             cx="20"
             cy="20"
@@ -457,7 +490,7 @@ export function GaugeScoreMini({ score }: { score: number | null }) {
             stroke={color}
             strokeWidth="4"
             strokeLinecap="round"
-            strokeDasharray={`${(score / 100) * 100.53} 100.53`}
+            strokeDasharray={`${progress * 100.53} 100.53`}
             transform="rotate(-90 20 20)"
             style={{ transition: 'stroke-dasharray 0.5s ease-out' }}
           />
@@ -466,7 +499,7 @@ export function GaugeScoreMini({ score }: { score: number | null }) {
           className="absolute inset-0 flex items-center justify-center text-xs font-bold tabular-nums"
           style={{ color }}
         >
-          {Math.round(score)}
+          {scale === '10' ? score.toFixed(1) : Math.round(score)}
         </span>
       </div>
       <span
