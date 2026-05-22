@@ -18,6 +18,7 @@ function currentSeasons(): number[] {
 export async function fetchPlayersList(filters: {
   position?: Position;
   league_id?: number;
+  team_id?: number;
   min_score?: number;
   max_age?: number;
   min_matches?: number;
@@ -45,6 +46,7 @@ export async function fetchPlayersList(filters: {
 
   if (filters.position) query = query.eq('position', filters.position);
   if (filters.league_id) query = query.eq('league_id', filters.league_id);
+  if (filters.team_id) query = query.eq('player.current_team_id', filters.team_id);
   if (filters.min_score) query = query.gte('avg_score', filters.min_score);
   if (filters.min_matches) query = query.gte('matches_played', filters.min_matches);
   if (filters.search) query = query.ilike('player.name', `%${filters.search}%`);
@@ -152,6 +154,24 @@ export async function fetchLeagues(): Promise<LeagueInfo[]> {
     .select('*')
     .eq('has_player_stats', true)
     .order('tier', { ascending: true });
+
+  if (error) throw error;
+  return data ?? [];
+}
+
+export interface TeamInfo {
+  id: number;
+  name: string;
+  logo: string | null;
+  league_id: number;
+}
+
+export async function fetchTeamsByLeague(leagueId: number): Promise<TeamInfo[]> {
+  const { data, error } = await supabase
+    .from('teams')
+    .select('id, name, logo, league_id')
+    .eq('league_id', leagueId)
+    .order('name');
 
   if (error) throw error;
   return data ?? [];

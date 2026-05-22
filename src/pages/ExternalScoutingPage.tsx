@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePlayersList, useLeagues } from '@/hooks/usePlayerStats'
+import { fetchTeamsByLeague, type TeamInfo } from '@/services/playerStatsService'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import EmptyState from '@/components/ui/EmptyState'
 import { getScoreColorClass, getScoreBgClass } from '@/components/ui/ScoreBar'
@@ -23,6 +24,7 @@ interface Filters {
   search: string
   position: Position | ''
   league_id: number | undefined
+  team_id: number | undefined
   min_matches: number
   min_score: number
   max_age: number
@@ -32,6 +34,7 @@ const DEFAULT_FILTERS: Filters = {
   search: '',
   position: '',
   league_id: undefined,
+  team_id: undefined,
   min_matches: 0,
   min_score: 0,
   max_age: 0,
@@ -58,6 +61,7 @@ export default function ExternalScoutingPage() {
   const leagues = useLeagues()
   const [filters, setFilters] = useState<Filters>(loadFilters)
   const [page, setPage] = useState(0)
+  const [teams, setTeams] = useState<TeamInfo[]>([])
 
   useEffect(() => {
     try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(filters)) } catch {}
@@ -65,9 +69,18 @@ export default function ExternalScoutingPage() {
 
   useEffect(() => { setPage(0) }, [filters])
 
+  useEffect(() => {
+    if (filters.league_id) {
+      fetchTeamsByLeague(filters.league_id).then(setTeams).catch(() => setTeams([]))
+    } else {
+      setTeams([])
+    }
+  }, [filters.league_id])
+
   const queryFilters = useMemo(() => ({
     position: filters.position || undefined,
     league_id: filters.league_id,
+    team_id: filters.team_id,
     min_score: filters.min_score || undefined,
     min_matches: filters.min_matches || undefined,
     max_age: filters.max_age || undefined,
@@ -92,6 +105,7 @@ export default function ExternalScoutingPage() {
   const activeCount = [
     filters.position,
     filters.league_id,
+    filters.team_id,
     filters.min_matches > 0,
     filters.min_score > 0,
     filters.max_age > 0,
@@ -154,7 +168,7 @@ export default function ExternalScoutingPage() {
         {/* League select */}
         <select
           value={filters.league_id ?? ''}
-          onChange={e => setFilters(f => ({ ...f, league_id: e.target.value ? Number(e.target.value) : undefined }))}
+          onChange={e => setFilters(f => ({ ...f, league_id: e.target.value ? Number(e.target.value) : undefined, team_id: undefined }))}
           className="input-apple text-xs py-1.5 px-3 min-w-0 w-auto"
         >
           <option value="">Todas las ligas</option>
@@ -162,6 +176,20 @@ export default function ExternalScoutingPage() {
             <option key={l.id} value={l.id}>{l.name} ({l.country})</option>
           ))}
         </select>
+
+        {/* Team select (visible when league is selected) */}
+        {filters.league_id && teams.length > 0 && (
+          <select
+            value={filters.team_id ?? ''}
+            onChange={e => setFilters(f => ({ ...f, team_id: e.target.value ? Number(e.target.value) : undefined }))}
+            className="input-apple text-xs py-1.5 px-3 min-w-0 w-auto"
+          >
+            <option value="">Todos los equipos</option>
+            {teams.map(t => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        )}
 
         {/* Min matches */}
         <select
