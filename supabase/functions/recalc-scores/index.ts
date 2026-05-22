@@ -4,16 +4,24 @@ import { getSupabaseAdmin } from '../_shared/supabase-client.ts';
 serve(async (req) => {
   const supabase = getSupabaseAdmin();
   const now = new Date();
-  let season = now.getMonth() < 7 ? now.getFullYear() - 1 : now.getFullYear();
+  let seasons: number[];
   try {
     const body = await req.json();
-    if (body?.season) season = body.season;
-  } catch { /* no body or invalid JSON — use default */ }
+    if (body?.season) {
+      seasons = [body.season];
+    } else {
+      const euroSeason = now.getMonth() < 7 ? now.getFullYear() - 1 : now.getFullYear();
+      seasons = euroSeason === now.getFullYear() ? [now.getFullYear()] : [euroSeason, now.getFullYear()];
+    }
+  } catch {
+    const euroSeason = now.getMonth() < 7 ? now.getFullYear() - 1 : now.getFullYear();
+    seasons = euroSeason === now.getFullYear() ? [now.getFullYear()] : [euroSeason, now.getFullYear()];
+  }
 
   try {
     const { data: leagues } = await supabase
       .from('leagues')
-      .select('id')
+      .select('id, season')
       .eq('has_player_stats', true);
 
     if (!leagues || leagues.length === 0) {
@@ -22,78 +30,80 @@ serve(async (req) => {
 
     let totalUpserted = 0;
 
-    for (const league of leagues) {
-      let allStats: any[] = [];
-      let page = 0;
-      const PAGE_SIZE = 1000;
+    for (const season of seasons) {
+      const leaguesForSeason = leagues.filter(l => l.season === season);
 
-      while (true) {
-        const { data: batch } = await supabase
-          .from('player_match_stats')
-          .select('player_id, detected_position, team_id, match_score, rating, goals, assists, fixture_id')
-          .not('match_score', 'is', null)
-          .not('detected_position', 'is', null)
-          .in('fixture_id',
-            (await supabase.from('fixtures').select('id').eq('league_id', league.id).eq('season', season)).data?.map((f: any) => f.id) ?? []
-          )
-          .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+      for (const league of leaguesForSeason) {
+        let allStats: any[] = [];
+        let page = 0;
+        const PAGE_SIZE = 1000;
 
-        if (!batch || batch.length === 0) break;
-        allStats = allStats.concat(batch);
-        if (batch.length < PAGE_SIZE) break;
-        page++;
-      }
+        while (true) {
+          const { data: batch } = await supabase
+            .from('player_match_stats')
+            .select('player_id, detected_position, team_id, match_score, rating, goals, assists, fixture_id')
+            .not('match_score', 'is', null)
+            .not('detected_position', 'is', null)
+            .in('fixture_id',
+              (await supabase.from('fixtures').select('id').eq('league_id', league.id).eq('season', season)).data?.map((f: any) => f.id) ?? []
+            )
+            .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
-      if (allStats.length === 0) continue;
-
-      const groups = new Map<string, typeof allStats>();
-      for (const s of allStats) {
-        const key = `${s.player_id}|${s.detected_position}`;
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key)!.push(s);
-      }
-
-      const upsertRows = [];
-      for (const [key, rows] of groups) {
-        const [playerId, position] = key.split('|');
-        const scores = rows.map(r => r.match_score).filter((s: any) => s !== null);
-        const ratings = rows.map(r => r.rating).filter((r: any) => r !== null);
-
-        upsertRows.push({
-          player_id: parseInt(playerId),
-          season,
-          position,
-          league_id: league.id,
-          matches_played: scores.length,
-          avg_score: scores.length > 0
-            ? Math.round((scores.reduce((a: number, b: number) => a + b, 0) / scores.length) * 10) / 10
-            : null,
-          avg_rating: ratings.length > 0
-            ? Math.round((ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length) * 10) / 10
-            : null,
-          total_goals: rows.reduce((s: number, r: any) => s + (r.goals ?? 0), 0),
-          total_assists: rows.reduce((s: number, r: any) => s + (r.assists ?? 0), 0),
-          updated_at: new Date().toISOString(),
-        });
-      }
-
-      if (upsertRows.length > 0) {
-        const CHUNK = 500;
-        for (let i = 0; i < upsertRows.length; i += CHUNK) {
-          await supabase.from('player_season_scores').upsert(
-            upsertRows.slice(i, i + CHUNK),
-            { onConflict: 'player_id,season,position,league_id' }
-          );
+          if (!batch || batch.length === 0) break;
+          allStats = allStats.concat(batch);
+          if (batch.length < PAGE_SIZE) break;
+          page++;
         }
-        totalUpserted += upsertRows.length;
+
+        if (allStats.length === 0) continue;
+
+        const groups = new Map<string, typeof allStats>();
+        for (const s of allStats) {
+          const key = `${s.player_id}|${s.detected_position}`;
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key)!.push(s);
+        }
+
+        const upsertRows = [];
+        for (const [key, rows] of groups) {
+          const [playerId, position] = key.split('|');
+          const scores = rows.map(r => r.match_score).filter((s: any) => s !== null);
+          const ratings = rows.map(r => r.rating).filter((r: any) => r !== null);
+
+          upsertRows.push({
+            player_id: parseInt(playerId),
+            season,
+            position,
+            league_id: league.id,
+            matches_played: scores.length,
+            avg_score: scores.length > 0
+              ? Math.round((scores.reduce((a: number, b: number) => a + b, 0) / scores.length) * 10) / 10
+              : null,
+            avg_rating: ratings.length > 0
+              ? Math.round((ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length) * 10) / 10
+              : null,
+            total_goals: rows.reduce((s: number, r: any) => s + (r.goals ?? 0), 0),
+            total_assists: rows.reduce((s: number, r: any) => s + (r.assists ?? 0), 0),
+            updated_at: new Date().toISOString(),
+          });
+        }
+
+        if (upsertRows.length > 0) {
+          const CHUNK = 500;
+          for (let i = 0; i < upsertRows.length; i += CHUNK) {
+            await supabase.from('player_season_scores').upsert(
+              upsertRows.slice(i, i + CHUNK),
+              { onConflict: 'player_id,season,position,league_id' }
+            );
+          }
+          totalUpserted += upsertRows.length;
+        }
       }
+
+      const { error: pctError } = await supabase.rpc('recalc_percentiles', { p_season: season });
+      if (pctError) throw new Error(`recalc_percentiles: ${pctError.message}`);
     }
 
-    // Percentiles via SQL window functions (single pass, no N+1)
-    const { error: pctError } = await supabase.rpc('recalc_percentiles', { p_season: season });
-    if (pctError) throw new Error(`recalc_percentiles: ${pctError.message}`);
-
-    // Position distribution via SQL aggregation (single pass)
     const { error: distError } = await supabase.rpc('recalc_position_distribution');
     if (distError) throw new Error(`recalc_position_distribution: ${distError.message}`);
 
@@ -103,7 +113,7 @@ serve(async (req) => {
       fixtures_processed: totalUpserted,
     });
 
-    return new Response(JSON.stringify({ success: true, scores_computed: totalUpserted }), { status: 200 });
+    return new Response(JSON.stringify({ success: true, scores_computed: totalUpserted, seasons }), { status: 200 });
   } catch (err) {
     await supabase.from('sync_log').insert({
       function_name: 'recalc-scores',

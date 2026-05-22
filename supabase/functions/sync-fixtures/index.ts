@@ -2,15 +2,29 @@ import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
 import { getSupabaseAdmin } from '../_shared/supabase-client.ts';
 import { fetchFinishedFixtures } from '../_shared/api-football.ts';
 
-serve(async () => {
+serve(async (req) => {
   const supabase = getSupabaseAdmin();
   const results = { processed: 0, inserted: 0, errors: [] as string[] };
 
+  let leagueIds: number[] | undefined;
   try {
-    const { data: leagues } = await supabase
+    const body = await req.json().catch(() => ({}));
+    if (body.league_ids && Array.isArray(body.league_ids)) {
+      leagueIds = body.league_ids;
+    }
+  } catch { /* empty body is fine */ }
+
+  try {
+    let query = supabase
       .from('leagues')
       .select('id, season, last_synced_at')
       .order('id');
+
+    if (leagueIds) {
+      query = query.in('id', leagueIds);
+    }
+
+    const { data: leagues } = await query;
 
     if (!leagues || leagues.length === 0) {
       return new Response(JSON.stringify({ message: 'No leagues configured' }), { status: 200 });

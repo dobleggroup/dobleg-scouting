@@ -16,7 +16,7 @@ serve(async () => {
       .from('fixtures')
       .select('id, league_id, season')
       .eq('stats_synced', false)
-      .order('date', { ascending: true })
+      .order('date', { ascending: false })
       .limit(BATCH_SIZE);
 
     if (!fixtures || fixtures.length === 0) {

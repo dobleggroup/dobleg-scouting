@@ -8,9 +8,11 @@ import type {
   LeagueInfo,
 } from '@/types/scoring';
 
-function currentSeason(): number {
+function currentSeasons(): number[] {
   const now = new Date();
-  return now.getMonth() < 7 ? now.getFullYear() - 1 : now.getFullYear();
+  const euroSeason = now.getMonth() < 7 ? now.getFullYear() - 1 : now.getFullYear();
+  const calendarSeason = now.getFullYear();
+  return euroSeason === calendarSeason ? [calendarSeason] : [euroSeason, calendarSeason];
 }
 
 export async function fetchPlayersList(filters: {
@@ -24,7 +26,7 @@ export async function fetchPlayersList(filters: {
   page?: number;
   pageSize?: number;
 }): Promise<{ players: PlayerWithScore[]; count: number }> {
-  const season = filters.season ?? currentSeason();
+  const seasons = filters.season ? [filters.season] : currentSeasons();
   const page = filters.page ?? 0;
   const pageSize = filters.pageSize ?? 50;
 
@@ -38,7 +40,7 @@ export async function fetchPlayersList(filters: {
         team:teams(id, name, logo, league_id)
       )
     `, { count: 'exact' })
-    .eq('season', season)
+    .in('season', seasons)
     .not('avg_score', 'is', null);
 
   if (filters.position) query = query.eq('position', filters.position);
@@ -75,7 +77,7 @@ export async function fetchPlayerDetail(playerId: number, season?: number): Prom
   matches: PlayerMatchStat[];
   allSeasonScores: PlayerSeasonScore[];
 } | null> {
-  const s = season ?? currentSeason();
+  const seasons = season ? [season] : currentSeasons();
 
   const [playerRes, scoresRes, matchesRes] = await Promise.all([
     supabase.from('players').select(`
@@ -83,7 +85,7 @@ export async function fetchPlayerDetail(playerId: number, season?: number): Prom
     `).eq('id', playerId).single(),
 
     supabase.from('player_season_scores').select('*')
-      .eq('player_id', playerId).eq('season', s),
+      .eq('player_id', playerId).in('season', seasons),
 
     supabase.from('player_match_stats').select(`
       *,
@@ -119,12 +121,12 @@ export async function fetchPlayerDetail(playerId: number, season?: number): Prom
 export async function fetchPositionAverages(
   season?: number
 ): Promise<PositionAverage[]> {
-  const s = season ?? currentSeason();
+  const seasons = season ? [season] : currentSeasons();
 
   const { data, error } = await supabase
     .from('player_season_scores')
     .select('position, league_id, avg_score')
-    .eq('season', s)
+    .in('season', seasons)
     .not('avg_score', 'is', null);
 
   if (error) throw error;
@@ -167,7 +169,7 @@ export interface ScoreLookupEntry {
 export async function fetchScoreLookup(
   season?: number
 ): Promise<Map<string, ScoreLookupEntry>> {
-  const s = season ?? currentSeason();
+  const seasons = season ? [season] : currentSeasons();
 
   const { data, error } = await supabase
     .from('player_season_scores')
@@ -175,7 +177,7 @@ export async function fetchScoreLookup(
       player_id, position, avg_score, percentile, matches_played,
       player:players!inner(name)
     `)
-    .eq('season', s)
+    .in('season', seasons)
     .not('avg_score', 'is', null);
 
   if (error) throw error;
