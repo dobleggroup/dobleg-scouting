@@ -75,7 +75,7 @@ interface ScoringWeight {
   isPercentage?: boolean;
 }
 
-// ─── Sofascore fetch via Playwright ──────────────────────────
+// ─── Sofascore fetch via Playwright page navigation ─────────
 let page: Page;
 let lastFetch = 0;
 
@@ -83,22 +83,26 @@ async function sofaFetch<T>(path: string): Promise<T> {
   const elapsed = Date.now() - lastFetch;
   if (elapsed < FETCH_DELAY) await delay(FETCH_DELAY - elapsed);
 
-  const result = await page.evaluate(async (p: string) => {
-    const res = await fetch(`https://api.sofascore.com/api/v1${p}`);
-    if (!res.ok) return { __error: res.status };
-    return res.json();
-  }, path);
-
+  const url = `https://api.sofascore.com/api/v1${path}`;
+  const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
   lastFetch = Date.now();
 
-  if (result && (result as any).__error) {
-    const status = (result as any).__error;
-    if (status === 403) throw new Error('SOFASCORE_BLOCKED');
-    if (status === 404) throw new Error('SOFASCORE_NOT_FOUND');
-    throw new Error(`Sofascore HTTP ${status}`);
-  }
+  const status = response?.status() ?? 0;
+  if (status === 403) throw new Error('SOFASCORE_BLOCKED');
+  if (status === 404) throw new Error('SOFASCORE_NOT_FOUND');
+  if (status !== 200) throw new Error(`Sofascore HTTP ${status}`);
 
-  return result as T;
+  const text = await page.evaluate(() => document.body.innerText);
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    // Might be a Cloudflare challenge page — wait and retry once
+    console.log(`  Retrying ${path} (got non-JSON response)`);
+    await delay(5000);
+    await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+    const retryText = await page.evaluate(() => document.body.innerText);
+    return JSON.parse(retryText) as T;
+  }
 }
 
 // ─── Position mapping ────────────────────────────────────────
@@ -381,12 +385,16 @@ async function main() {
   console.log(`sync-sofascore starting (pages=${DISCOVER_PAGES}, batch=${STATS_BATCH})`);
 
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
+  const context = await browser.newContext({
+    userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+  });
   page = await context.newPage();
 
-  // Navigate to Sofascore to establish origin + cookies
-  await page.goto('https://www.sofascore.com', { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await delay(2000);
+  // Navigate to Sofascore to pass Cloudflare challenge and get cookies
+  console.log('Loading sofascore.com to pass Cloudflare challenge...');
+  await page.goto('https://www.sofascore.com', { waitUntil: 'networkidle', timeout: 45000 });
+  await delay(3000);
+  console.log(`Page loaded: ${page.url()}`);
 
   const results = { fixtures_discovered: 0, fixtures_synced: 0, players_inserted: 0, errors: [] as string[] };
 
