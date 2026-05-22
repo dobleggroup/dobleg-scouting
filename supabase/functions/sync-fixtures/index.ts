@@ -17,7 +17,7 @@ serve(async (req) => {
   try {
     let query = supabase
       .from('leagues')
-      .select('id, season, last_synced_at')
+      .select('id, season, last_synced_at, has_player_stats')
       .order('id');
 
     if (leagueIds) {
@@ -55,10 +55,17 @@ serve(async (req) => {
 
           if (!error) results.inserted++;
 
-          await supabase.from('teams').upsert([
-            { id: f.teams.home.id, name: f.teams.home.name, logo: f.teams.home.logo, league_id: league.id },
-            { id: f.teams.away.id, name: f.teams.away.name, logo: f.teams.away.logo, league_id: league.id },
-          ], { onConflict: 'id' });
+          if (league.has_player_stats) {
+            await supabase.from('teams').upsert([
+              { id: f.teams.home.id, name: f.teams.home.name, logo: f.teams.home.logo, league_id: league.id },
+              { id: f.teams.away.id, name: f.teams.away.name, logo: f.teams.away.logo, league_id: league.id },
+            ], { onConflict: 'id' });
+          } else {
+            await supabase.from('teams').upsert([
+              { id: f.teams.home.id, name: f.teams.home.name, logo: f.teams.home.logo },
+              { id: f.teams.away.id, name: f.teams.away.name, logo: f.teams.away.logo },
+            ], { onConflict: 'id', ignoreDuplicates: true });
+          }
         }
 
         await supabase.from('leagues').update({ last_synced_at: new Date().toISOString() })

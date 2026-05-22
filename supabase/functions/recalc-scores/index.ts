@@ -19,21 +19,38 @@ serve(async (req) => {
   }
 
   try {
-    const { data: leagues } = await supabase
+    const { data: domesticLeagues } = await supabase
       .from('leagues')
       .select('id, season')
       .eq('has_player_stats', true);
 
-    if (!leagues || leagues.length === 0) {
+    if (!domesticLeagues || domesticLeagues.length === 0) {
       return new Response(JSON.stringify({ message: 'No leagues found' }), { status: 200 });
     }
 
     let totalUpserted = 0;
 
     for (const season of seasons) {
-      const leaguesForSeason = leagues.filter(l => l.season === season);
+      const leaguesForSeason = domesticLeagues.filter(l => l.season === season);
+
+      // Get ALL fixture IDs for this season (domestic + cups)
+      const { data: allFixtures } = await supabase
+        .from('fixtures')
+        .select('id')
+        .eq('season', season);
+      const allFixtureIds = allFixtures?.map(f => f.id) ?? [];
+      if (allFixtureIds.length === 0) continue;
 
       for (const league of leaguesForSeason) {
+        // Get teams that belong to this domestic league
+        const { data: teams } = await supabase
+          .from('teams')
+          .select('id')
+          .eq('league_id', league.id);
+        const teamIds = teams?.map(t => t.id) ?? [];
+        if (teamIds.length === 0) continue;
+
+        // Get ALL match stats for players on these teams (any competition)
         let allStats: any[] = [];
         let page = 0;
         const PAGE_SIZE = 1000;
@@ -44,9 +61,8 @@ serve(async (req) => {
             .select('player_id, detected_position, team_id, match_score, rating, goals, assists, fixture_id')
             .not('match_score', 'is', null)
             .not('detected_position', 'is', null)
-            .in('fixture_id',
-              (await supabase.from('fixtures').select('id').eq('league_id', league.id).eq('season', season)).data?.map((f: any) => f.id) ?? []
-            )
+            .in('team_id', teamIds)
+            .in('fixture_id', allFixtureIds)
             .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
           if (!batch || batch.length === 0) break;
