@@ -23,13 +23,21 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install dependencies
+      - name: Install Python dependencies
+        run: pip install curl_cffi
+
+      - name: Test Sofascore access via curl_cffi
+        run: |
+          python3 -c "
+          from curl_cffi import requests
+          r = requests.get('https://api.sofascore.com/api/v1/unique-tournament/703/season/87940/events/last/0', impersonate='chrome')
+          print(f'Status: {r.status_code}')
+          print(r.text[:300])
+          "
+
+      - name: Install Node dependencies
         working-directory: scripts/sync-sofascore
         run: npm install
-
-      - name: Install Playwright Chromium
-        working-directory: scripts/sync-sofascore
-        run: npx playwright install chromium --with-deps
 
       - name: Run sync
         working-directory: scripts/sync-sofascore
