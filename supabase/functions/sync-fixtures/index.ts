@@ -18,6 +18,7 @@ serve(async (req) => {
     let query = supabase
       .from('leagues')
       .select('id, season, last_synced_at, has_player_stats')
+      .neq('source', 'sofascore')
       .order('id');
 
     if (leagueIds) {

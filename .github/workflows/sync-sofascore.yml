@@ -1,0 +1,41 @@
+name: Sync Sofascore
+
+on:
+  schedule:
+    - cron: '30 */2 * * *'  # Every 2 hours at minute 30
+  workflow_dispatch:
+    inputs:
+      pages:
+        description: 'Pages to discover (default 3, backfill up to 30)'
+        default: '3'
+      batch:
+        description: 'Fixtures to process per run (default 5, backfill up to 30)'
+        default: '5'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: scripts/sync-sofascore
+        run: npm install
+
+      - name: Install Playwright Chromium
+        working-directory: scripts/sync-sofascore
+        run: npx playwright install chromium --with-deps
+
+      - name: Run sync
+        working-directory: scripts/sync-sofascore
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          DISCOVER_PAGES: ${{ github.event.inputs.pages || '3' }}
+          STATS_BATCH: ${{ github.event.inputs.batch || '5' }}
+        run: npx tsx index.ts

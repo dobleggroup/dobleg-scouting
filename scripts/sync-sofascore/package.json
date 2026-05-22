@@ -1,0 +1,13 @@
+{
+  "name": "sync-sofascore",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sync": "tsx index.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.0",
+    "playwright": "^1.52.0",
+    "tsx": "^4.19.0"
+  }
+}
