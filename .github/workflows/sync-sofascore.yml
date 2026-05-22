@@ -1,8 +1,6 @@
 name: Sync Sofascore
 
 on:
-  schedule:
-    - cron: '30 */2 * * *'  # Every 2 hours at minute 30
   workflow_dispatch:
     inputs:
       pages:
@@ -12,6 +10,10 @@ on:
         description: 'Fixtures to process per run (default 5, backfill up to 30)'
         default: '5'
 
+# NOTE: Sofascore blocks cloud provider IPs (GitHub Actions, Cloudflare Workers, etc.)
+# This workflow is for manual triggers only when running from a self-hosted runner
+# with residential IP. For automated sync, use Windows Task Scheduler with sync.py
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -19,25 +21,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: pip install curl_cffi
-
-      - name: Test Sofascore access via curl_cffi
-        run: |
-          python3 -c "
-          from curl_cffi import requests
-          r = requests.get('https://api.sofascore.com/api/v1/unique-tournament/703/season/87940/events/last/0', impersonate='chrome')
-          print(f'Status: {r.status_code}')
-          print(r.text[:300])
-          "
-
-      - name: Install Node dependencies
-        working-directory: scripts/sync-sofascore
-        run: npm install
 
       - name: Run sync
         working-directory: scripts/sync-sofascore
@@ -46,4 +31,4 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           DISCOVER_PAGES: ${{ github.event.inputs.pages || '3' }}
           STATS_BATCH: ${{ github.event.inputs.batch || '5' }}
-        run: npx tsx index.ts
+        run: python3 sync.py
