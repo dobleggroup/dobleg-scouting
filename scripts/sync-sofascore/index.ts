@@ -391,11 +391,17 @@ async function main() {
   const results = { fixtures_discovered: 0, fixtures_synced: 0, players_inserted: 0, errors: [] as string[] };
 
   try {
-    const { data: leagues } = await supabase
+    const { data: leagues, error: leagueErr } = await supabase
       .from('leagues')
       .select('id, season')
       .eq('source', 'sofascore')
       .eq('has_player_stats', true);
+
+    if (leagueErr) {
+      console.error('League query error:', leagueErr.message, leagueErr.details, leagueErr.hint);
+    }
+
+    console.log(`Leagues found: ${leagues?.length ?? 0}`, leagues);
 
     if (!leagues || leagues.length === 0) {
       console.log('No Sofascore leagues configured');
