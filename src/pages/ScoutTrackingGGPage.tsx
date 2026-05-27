@@ -3,40 +3,30 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import {
-  fetchScoutPlayers,
+  fetchScoutPlayersWithScores,
   fetchScoutPlayerStatuses,
   fetchScoutScores,
   setScoutPlayerStatus,
   removeScoutPlayerFromList,
   uploadScoutPlayerFile,
   removeScoutPlayerFile,
+  type ScoutPlayerWithScore,
 } from '@/services/scoutPlayersService'
 import AddPlayerModal from '@/components/tracking/AddPlayerModal'
 import LinkPlayerModal from '@/components/tracking/LinkPlayerModal'
 import FichaManualModal from '@/components/tracking/FichaManualModal'
-import type { ScoutPlayer, ScoutPlayerStatusRecord, ScoutsGGStatus, EnrichedPlayer } from '@/types'
+import type { ScoutPlayer, ScoutPlayerStatusRecord, TrackingStatus, EnrichedPlayer } from '@/types'
 import { fuzzyMatch } from '@/lib/search'
 
 const ADMIN_EMAIL = 'marcoscucho99@gmail.com'
 
 // ─── STATUS CONFIG ────────────────────────────────────────────────────────────
 
-export const GG_STATUS_CONFIG: Record<ScoutsGGStatus, { label: string; color: string; bg: string; dot: string }> = {
-  en_seguimiento_gg: { label: 'En Seguimiento GG', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20', dot: 'bg-blue-500' },
-  pre_seleccionado:  { label: 'Pre-seleccionado',  color: 'text-cyan-600 dark:text-cyan-400',  bg: 'bg-cyan-500/10 border-cyan-500/20',  dot: 'bg-cyan-500' },
-  contactado:        { label: 'Contactado',         color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20', dot: 'bg-amber-500' },
-  reunion_pactada:   { label: 'Reunión Pactada',    color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-500/10 border-orange-500/20', dot: 'bg-orange-500' },
-  en_negociacion:    { label: 'En Negociación',     color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20', dot: 'bg-purple-500' },
-  oferta_enviada:    { label: 'Oferta Enviada',     color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-500/10 border-indigo-500/20', dot: 'bg-indigo-500' },
-  contratado:        { label: 'Contratado',          color: 'text-green-600 dark:text-green-400',  bg: 'bg-green-500/10 border-green-500/20',  dot: 'bg-green-500' },
-  descartado:        { label: 'Descartado',          color: 'text-apple-gray-500',                 bg: 'bg-apple-gray-200/50 dark:bg-apple-gray-700/50 border-apple-gray-300/30 dark:border-apple-gray-600/30', dot: 'bg-apple-gray-400' },
-  no_disponible:     { label: 'No Disponible',       color: 'text-red-500',                        bg: 'bg-red-500/10 border-red-500/20',      dot: 'bg-red-500' },
-}
-
-const PRIORITY_CONFIG = {
-  alta:   { label: 'ALTA',   border: 'border-l-rose-500',   badge: 'bg-rose-500/10 text-rose-500 border-rose-500/20' },
-  normal: { label: 'NORMAL', border: 'border-l-blue-500',   badge: 'bg-blue-500/10 text-blue-500 border-blue-500/20' },
-  baja:   { label: 'BAJA',   border: 'border-l-apple-gray-400', badge: 'bg-apple-gray-200 text-apple-gray-500 border-apple-gray-300 dark:bg-apple-gray-700 dark:text-apple-gray-400' },
+const TRACKING_STATUS_CONFIG: Record<TrackingStatus, { label: string; color: string; bg: string; dot: string }> = {
+  en_seguimiento: { label: 'En Seguimiento', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20', dot: 'bg-blue-500' },
+  contactado:     { label: 'Contactado',     color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20', dot: 'bg-amber-500' },
+  en_negociacion: { label: 'En Negociación', color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20', dot: 'bg-purple-500' },
+  descartado:     { label: 'Descartado',     color: 'text-apple-gray-500', bg: 'bg-apple-gray-200/50 dark:bg-apple-gray-700/50 border-apple-gray-300/30 dark:border-apple-gray-600/30', dot: 'bg-apple-gray-400' },
 }
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -61,24 +51,24 @@ function StatusDropdown({
   requiresAuth,
 }: {
   playerId: string
-  currentStatus: ScoutsGGStatus
+  currentStatus: TrackingStatus
   currentRecord: ScoutPlayerStatusRecord | undefined
-  onStatusChange: (id: string, status: ScoutsGGStatus) => Promise<void>
+  onStatusChange: (id: string, status: TrackingStatus) => Promise<void>
   requiresAuth: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [dropdownStyle, setDropdownStyle] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const cfg = GG_STATUS_CONFIG[currentStatus]
+  const cfg = TRACKING_STATUS_CONFIG[currentStatus]
 
   const handleOpen = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (requiresAuth) return
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect()
-      // 9 opciones × ~36px + padding ≈ 340px
-      const dropdownH = 350
+      // 4 opciones × ~36px + padding ≈ 170px
+      const dropdownH = 180
       const spaceBelow = window.innerHeight - rect.bottom
       const top = spaceBelow >= dropdownH ? rect.bottom + 4 : rect.top - dropdownH - 4
       const left = Math.min(rect.left, window.innerWidth - 212)
@@ -87,7 +77,7 @@ function StatusDropdown({
     setOpen(o => !o)
   }
 
-  const handleSelect = async (status: ScoutsGGStatus) => {
+  const handleSelect = async (status: TrackingStatus) => {
     if (status === currentStatus) { setOpen(false); return }
     setLoading(true)
     await onStatusChange(playerId, status)
@@ -110,7 +100,7 @@ function StatusDropdown({
         </svg>
       </button>
 
-      {currentRecord?.changed_by_name && currentStatus !== 'en_seguimiento_gg' && (
+      {currentRecord?.changed_by_name && currentStatus !== 'en_seguimiento' && (
         <p className="text-2xs text-apple-gray-400 mt-0.5">por {currentRecord.changed_by_name}</p>
       )}
 
@@ -121,7 +111,7 @@ function StatusDropdown({
             className="fixed z-[301] bg-white dark:bg-apple-gray-800 rounded-xl shadow-2xl border border-apple-gray-200 dark:border-apple-gray-700 py-1 min-w-[200px] overflow-hidden"
             style={{ top: dropdownStyle.top, left: dropdownStyle.left }}
           >
-            {(Object.entries(GG_STATUS_CONFIG) as [ScoutsGGStatus, typeof cfg][]).map(([key, c]) => (
+            {(Object.entries(TRACKING_STATUS_CONFIG) as [TrackingStatus, typeof cfg][]).map(([key, c]) => (
               <button
                 key={key}
                 onClick={() => handleSelect(key)}
@@ -150,14 +140,6 @@ export default function ScoutTrackingGGPage() {
   const { external, internal } = useData()
   const navigate = useNavigate()
 
-  // Build a map: player_db_id (Jugador) → ggScore, for fast lookup
-  const ggScoreMap = useMemo(() => {
-    const map = new Map<string, number | null>()
-    for (const p of external) map.set(p.Jugador, p.ggScore)
-    for (const p of internal) map.set(p.Jugador, p.ggScore)
-    return map
-  }, [external, internal])
-
   // Build a map: player_db_id (Jugador) → full EnrichedPlayer, for real data when linked
   const dbPlayerMap = useMemo(() => {
     const map = new Map<string, EnrichedPlayer>()
@@ -167,7 +149,7 @@ export default function ScoutTrackingGGPage() {
   }, [external, internal])
 
   // Returns effective display data: real DB values when linked, manual values otherwise
-  const getEffective = useCallback((player: ScoutPlayer) => {
+  const getEffective = useCallback((player: ScoutPlayerWithScore) => {
     const db = player.player_db_id ? dbPlayerMap.get(player.player_db_id) : null
     return {
       name:   db ? db.Jugador       : player.full_name,
@@ -179,21 +161,20 @@ export default function ScoutTrackingGGPage() {
     }
   }, [dbPlayerMap])
 
-  const [players, setPlayers] = useState<ScoutPlayer[]>([])
+  const [players, setPlayers] = useState<ScoutPlayerWithScore[]>([])
   const [statuses, setStatuses] = useState<Record<string, ScoutPlayerStatusRecord>>({})
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [fileUploadPlayerId, setFileUploadPlayerId] = useState<string | null>(null)
-  const [linkingPlayer, setLinkingPlayer] = useState<ScoutPlayer | null>(null)
-  const [fichaPlayer, setFichaPlayer] = useState<ScoutPlayer | null>(null)
+  const [linkingPlayer, setLinkingPlayer] = useState<ScoutPlayerWithScore | null>(null)
+  const [fichaPlayer, setFichaPlayer] = useState<ScoutPlayerWithScore | null>(null)
 
   const isAdmin = user?.email === ADMIN_EMAIL
 
   // Filters
   const [search, setSearch] = useState('')
   const [posFilter, setPosFilter] = useState('')
-  const [statusFilter, setStatusFilter] = useState<ScoutsGGStatus | ''>('')
-  const [priorityFilter, setPriorityFilter] = useState<'alta' | 'normal' | 'baja' | ''>('')
+  const [statusFilter, setStatusFilter] = useState<TrackingStatus | ''>('')
   const [scoutFilter, setScoutFilter] = useState('')
   const [showFilters, setShowFilters] = useState(false)
 
@@ -202,7 +183,7 @@ export default function ScoutTrackingGGPage() {
   const load = useCallback(async () => {
     setLoading(true)
     const [playersData, statusesData] = await Promise.all([
-      fetchScoutPlayers('scouts_gg'),
+      fetchScoutPlayersWithScores('scouts_gg'),
       fetchScoutPlayerStatuses('scouts_gg'),
     ])
     // Fetch scout evaluation scores and merge into player objects
@@ -219,7 +200,7 @@ export default function ScoutTrackingGGPage() {
 
   useEffect(() => { load() }, [load])
 
-  const handleStatusChange = useCallback(async (playerId: string, status: ScoutsGGStatus) => {
+  const handleStatusChange = useCallback(async (playerId: string, status: TrackingStatus) => {
     if (!user) return
     const result = await setScoutPlayerStatus(playerId, 'scouts_gg', status, user.id, userDisplayName)
     if (result) {
@@ -247,9 +228,9 @@ export default function ScoutTrackingGGPage() {
   // Stats
   const stats = useMemo(() => {
     const counts: Record<string, number> = {}
-    Object.keys(GG_STATUS_CONFIG).forEach(k => counts[k] = 0)
+    Object.keys(TRACKING_STATUS_CONFIG).forEach(k => counts[k] = 0)
     players.forEach(p => {
-      const s = (statuses[p.id]?.status as ScoutsGGStatus) || 'en_seguimiento_gg'
+      const s = (statuses[p.id]?.status as TrackingStatus) || 'en_seguimiento'
       counts[s] = (counts[s] || 0) + 1
     })
     return counts
@@ -278,23 +259,18 @@ export default function ScoutTrackingGGPage() {
             !fuzzyMatch(search, p.liga || '')) return false
       }
       if (posFilter && p.posicion !== posFilter) return false
-      if (priorityFilter && p.prioridad !== priorityFilter) return false
       if (scoutFilter && p.added_by_scouts_name !== scoutFilter) return false
       if (statusFilter) {
-        const s = (statuses[p.id]?.status as ScoutsGGStatus) || 'en_seguimiento_gg'
+        const s = (statuses[p.id]?.status as TrackingStatus) || 'en_seguimiento'
         if (s !== statusFilter) return false
       }
       return true
-    }).sort((a, b) => {
-      // Sort: alta > normal > baja, then by date
-      const pOrder = { alta: 0, normal: 1, baja: 2 }
-      const diff = pOrder[a.prioridad] - pOrder[b.prioridad]
-      if (diff !== 0) return diff
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    })
-  }, [players, statuses, search, posFilter, statusFilter, priorityFilter, scoutFilter])
+    }).sort((a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+  }, [players, statuses, search, posFilter, statusFilter, scoutFilter])
 
-  const activeFilters = [search, posFilter, statusFilter, priorityFilter, scoutFilter].filter(Boolean).length
+  const activeFilters = [search, posFilter, statusFilter, scoutFilter].filter(Boolean).length
 
   return (
     <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6">
@@ -329,7 +305,7 @@ export default function ScoutTrackingGGPage() {
 
       {/* Status pipeline */}
       <div className="flex flex-wrap gap-2 mb-5">
-        {(Object.entries(GG_STATUS_CONFIG) as [ScoutsGGStatus, typeof GG_STATUS_CONFIG.en_seguimiento_gg][]).map(([key, cfg]) => (
+        {(Object.entries(TRACKING_STATUS_CONFIG) as [TrackingStatus, typeof TRACKING_STATUS_CONFIG.en_seguimiento][]).map(([key, cfg]) => (
           <button
             key={key}
             onClick={() => setStatusFilter(statusFilter === key ? '' : key)}
@@ -380,7 +356,7 @@ export default function ScoutTrackingGGPage() {
 
         {activeFilters > 0 && (
           <button
-            onClick={() => { setSearch(''); setPosFilter(''); setStatusFilter(''); setPriorityFilter(''); setScoutFilter('') }}
+            onClick={() => { setSearch(''); setPosFilter(''); setStatusFilter(''); setScoutFilter('') }}
             className="px-3 py-2.5 rounded-xl text-sm text-apple-gray-500 hover:text-apple-gray-700 dark:hover:text-apple-gray-300 transition-colors"
           >
             Limpiar
@@ -390,21 +366,12 @@ export default function ScoutTrackingGGPage() {
 
       {/* Filter panel */}
       {showFilters && (
-        <div className="mb-5 p-4 bg-white dark:bg-apple-gray-800 rounded-2xl border border-apple-gray-200 dark:border-apple-gray-700 grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="mb-5 p-4 bg-white dark:bg-apple-gray-800 rounded-2xl border border-apple-gray-200 dark:border-apple-gray-700 grid grid-cols-2 sm:grid-cols-3 gap-3">
           <div>
             <label className="block text-xs font-semibold text-apple-gray-500 uppercase tracking-wider mb-1.5">Posición</label>
             <select value={posFilter} onChange={e => setPosFilter(e.target.value)} className="w-full px-3 py-2 rounded-xl bg-apple-gray-50 dark:bg-apple-gray-700 border border-apple-gray-200 dark:border-apple-gray-600 text-sm text-apple-gray-800 dark:text-white focus:outline-none focus:border-brand-green transition-all">
               <option value="">Todas</option>
               {positions.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-apple-gray-500 uppercase tracking-wider mb-1.5">Prioridad</label>
-            <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value as typeof priorityFilter)} className="w-full px-3 py-2 rounded-xl bg-apple-gray-50 dark:bg-apple-gray-700 border border-apple-gray-200 dark:border-apple-gray-600 text-sm text-apple-gray-800 dark:text-white focus:outline-none focus:border-brand-green transition-all">
-              <option value="">Todas</option>
-              <option value="alta">Alta</option>
-              <option value="normal">Normal</option>
-              <option value="baja">Baja</option>
             </select>
           </div>
           <div>
@@ -472,23 +439,20 @@ export default function ScoutTrackingGGPage() {
                 <tbody className="divide-y divide-apple-gray-100 dark:divide-apple-gray-700/50">
                   {filtered.map(player => {
                     const statusRecord = statuses[player.id]
-                    const currentStatus: ScoutsGGStatus = (statusRecord?.status as ScoutsGGStatus) || 'en_seguimiento_gg'
+                    const currentStatus: TrackingStatus = (statusRecord?.status as TrackingStatus) || 'en_seguimiento'
                     const eff = getEffective(player)
                     const initials = eff.name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
                     const files = player.files ?? []
-                    const priorBorder = player.prioridad === 'alta'
-                      ? 'border-l-rose-500'
-                      : player.prioridad === 'baja'
-                        ? 'border-l-apple-gray-300 dark:border-l-apple-gray-600'
-                        : 'border-l-blue-400'
 
                     return (
                       <>
                         <tr
                           key={player.id}
-                          className={`border-l-4 ${priorBorder} hover:bg-brand-green/5 dark:hover:bg-brand-green/10 transition-colors cursor-pointer group`}
+                          className="hover:bg-brand-green/5 dark:hover:bg-brand-green/10 transition-colors cursor-pointer group"
                           onClick={() => {
-                            if (player.player_db_id) {
+                            if (player.supabase_player_id) {
+                              navigate(`/jugador/${encodeURIComponent(player.full_name)}?source=externo&apiId=${player.supabase_player_id}`)
+                            } else if (player.player_db_id) {
                               navigate(`/jugador/${encodeURIComponent(player.player_db_id)}?source=${player.player_db_source || 'externo'}`)
                             } else {
                               setFichaPlayer(player)
@@ -508,7 +472,9 @@ export default function ScoutTrackingGGPage() {
                                     title={player.comentario || undefined}
                                     onClick={e => {
                                       e.stopPropagation()
-                                      if (player.player_db_id) {
+                                      if (player.supabase_player_id) {
+                                        navigate(`/jugador/${encodeURIComponent(player.full_name)}?source=externo&apiId=${player.supabase_player_id}`)
+                                      } else if (player.player_db_id) {
                                         navigate(`/jugador/${encodeURIComponent(player.player_db_id)}?source=${player.player_db_source || 'externo'}`)
                                       } else {
                                         setFichaPlayer(player)
@@ -637,31 +603,31 @@ export default function ScoutTrackingGGPage() {
                             )}
                           </td>
 
-                          {/* Score GG (datos) */}
+                          {/* Score GG (Supabase 1-10) */}
                           <td className="px-4 py-3">
-                            {(() => {
-                              if (!player.player_db_id) {
-                                return (
-                                  <span className="text-apple-gray-400 dark:text-apple-gray-600 text-xs italic">
-                                    sin ficha en BD
-                                  </span>
-                                )
-                              }
-                              const gg = ggScoreMap.get(player.player_db_id)
-                              if (gg === undefined || gg === null) {
-                                return <span className="text-apple-gray-400 text-xs">—</span>
-                              }
-                              const color = gg >= 75 ? 'text-brand-green' : gg >= 55 ? 'text-emerald-500' : gg >= 40 ? 'text-amber-500' : 'text-red-500'
-                              const barColor = gg >= 75 ? 'bg-brand-green' : gg >= 55 ? 'bg-emerald-500' : gg >= 40 ? 'bg-amber-500' : 'bg-red-500'
-                              return (
-                                <div className="flex items-center gap-2">
-                                  <span className={`text-sm font-bold tabular-nums ${color}`}>{gg.toFixed(1)}</span>
-                                  <div className="w-14 h-1.5 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-full overflow-hidden">
-                                    <div className={`h-full rounded-full ${barColor}`} style={{ width: `${gg}%` }} />
-                                  </div>
+                            {player.gg_score !== null && player.gg_score !== undefined ? (
+                              <div className="flex items-center gap-2">
+                                <span className={`text-sm font-bold tabular-nums ${
+                                  player.gg_score >= 7.5 ? 'text-brand-green' :
+                                  player.gg_score >= 5.5 ? 'text-emerald-500' :
+                                  player.gg_score >= 4 ? 'text-amber-500' : 'text-red-500'
+                                }`}>
+                                  {player.gg_score.toFixed(1)}
+                                </span>
+                                <div className="w-14 h-1.5 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full ${
+                                      player.gg_score >= 7.5 ? 'bg-brand-green' :
+                                      player.gg_score >= 5.5 ? 'bg-emerald-500' :
+                                      player.gg_score >= 4 ? 'bg-amber-500' : 'bg-red-500'
+                                    }`}
+                                    style={{ width: `${(player.gg_score / 10) * 100}%` }}
+                                  />
                                 </div>
-                              )
-                            })()}
+                              </div>
+                            ) : (
+                              <span className="text-apple-gray-400 text-sm">—</span>
+                            )}
                           </td>
 
                           {/* Agregado */}
@@ -760,20 +726,15 @@ export default function ScoutTrackingGGPage() {
           <div className="block lg:hidden space-y-3">
             {filtered.map(player => {
               const statusRecord = statuses[player.id]
-              const currentStatus: ScoutsGGStatus = (statusRecord?.status as ScoutsGGStatus) || 'en_seguimiento_gg'
+              const currentStatus: TrackingStatus = (statusRecord?.status as TrackingStatus) || 'en_seguimiento'
               const eff = getEffective(player)
               const initials = eff.name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
               const files = player.files ?? []
-              const priorBorder = player.prioridad === 'alta'
-                ? 'border-l-rose-500'
-                : player.prioridad === 'baja'
-                  ? 'border-l-apple-gray-300 dark:border-l-apple-gray-600'
-                  : 'border-l-blue-400'
 
               return (
                 <div
                   key={player.id}
-                  className={`bg-white dark:bg-apple-gray-800 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 p-3 border-l-4 ${priorBorder}`}
+                  className="bg-white dark:bg-apple-gray-800 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 p-3"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-lg bg-apple-gray-200 dark:bg-apple-gray-700 flex items-center justify-center text-apple-gray-600 dark:text-apple-gray-300 font-bold text-xs flex-shrink-0">
@@ -783,7 +744,9 @@ export default function ScoutTrackingGGPage() {
                       <p
                         className="font-semibold text-sm truncate cursor-pointer hover:text-brand-green transition-colors"
                         onClick={() => {
-                          if (player.player_db_id) {
+                          if (player.supabase_player_id) {
+                            navigate(`/jugador/${encodeURIComponent(player.full_name)}?source=externo&apiId=${player.supabase_player_id}`)
+                          } else if (player.player_db_id) {
                             navigate(`/jugador/${encodeURIComponent(player.player_db_id)}?source=${player.player_db_source || 'externo'}`)
                           } else {
                             setFichaPlayer(player)
