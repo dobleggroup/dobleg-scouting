@@ -5,7 +5,7 @@ import {
   setPlayerStatus as setStatusInDb,
   type MonitoringStatusRecord,
 } from '@/services/monitoringService'
-import type { ManagementStatus } from '@/types'
+import type { ManagementStatus, TrackingStatus } from '@/types'
 
 export function useMonitoringStatus() {
   const { user, userDisplayName } = useAuth()
@@ -63,29 +63,16 @@ export function useMonitoringStatus() {
   }
 }
 
-// Status labels and colors
-export const STATUS_CONFIG: Record<ManagementStatus, { label: string; color: string; bgColor: string }> = {
-  en_seguimiento: {
-    label: 'En seguimiento',
-    color: 'text-blue-600 dark:text-blue-400',
-    bgColor: 'bg-blue-100 dark:bg-blue-900/30',
-  },
-  contactado: {
-    label: 'Contactado',
-    color: 'text-amber-600 dark:text-amber-400',
-    bgColor: 'bg-amber-100 dark:bg-amber-900/30',
-  },
-  en_negociacion: {
-    label: 'En negociacion',
-    color: 'text-purple-600 dark:text-purple-400',
-    bgColor: 'bg-purple-100 dark:bg-purple-900/30',
-  },
-  descartado: {
-    label: 'Descartado',
-    color: 'text-gray-500 dark:text-gray-400',
-    bgColor: 'bg-gray-100 dark:bg-gray-800/50',
-  },
+// Status labels and colors (unified config for all tracking lists)
+export const TRACKING_STATUS_CONFIG: Record<TrackingStatus, { label: string; color: string; bgColor: string }> = {
+  en_seguimiento: { label: 'En Seguimiento', color: 'text-blue-600 dark:text-blue-400', bgColor: 'bg-blue-500/10 border border-blue-500/20' },
+  contactado:     { label: 'Contactado',     color: 'text-amber-600 dark:text-amber-400', bgColor: 'bg-amber-500/10 border border-amber-500/20' },
+  en_negociacion: { label: 'En Negociación', color: 'text-purple-600 dark:text-purple-400', bgColor: 'bg-purple-500/10 border border-purple-500/20' },
+  descartado:     { label: 'Descartado',     color: 'text-apple-gray-500', bgColor: 'bg-apple-gray-200/60 border border-apple-gray-300/30 dark:bg-apple-gray-700/50 dark:border-apple-gray-600/30' },
 }
+
+// Legacy alias for backwards compat (ManagementStatus === TrackingStatus)
+export const STATUS_CONFIG = TRACKING_STATUS_CONFIG
 
 // Format status with scout name
 export function formatStatusWithScout(record: MonitoringStatusRecord | null): string {
