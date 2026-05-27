@@ -7,6 +7,7 @@ export interface NewScoutPlayer {
   // Link to Wyscout DB player — populated from reports when player was found in DB
   player_db_id?: string           // Value of "Jugador" field in the DB (e.g. "L. Messi")
   player_db_source?: 'interno' | 'externo'
+  supabase_player_id?: number
   club?: string
   liga?: string
   edad?: number
@@ -33,12 +34,22 @@ export interface NewScoutPlayer {
  */
 async function findExistingScoutPlayer(
   player: NewScoutPlayer
-): Promise<{ id: string; in_datos_list: boolean; in_scouts_gg_list: boolean; player_db_id: string | null } | null> {
+): Promise<{ id: string; in_datos_list: boolean; in_scouts_gg_list: boolean; player_db_id: string | null; supabase_player_id: number | null } | null> {
+  // Strategy 0: match by supabase_player_id — most precise
+  if (player.supabase_player_id) {
+    const { data } = await supabase
+      .from('scout_players')
+      .select('id, in_datos_list, in_scouts_gg_list, player_db_id, supabase_player_id')
+      .eq('supabase_player_id', player.supabase_player_id)
+      .maybeSingle()
+    if (data) return data
+  }
+
   // Strategy 1: match by player_db_id if provided
   if (player.player_db_id) {
     const { data } = await supabase
       .from('scout_players')
-      .select('id, in_datos_list, in_scouts_gg_list, player_db_id')
+      .select('id, in_datos_list, in_scouts_gg_list, player_db_id, supabase_player_id')
       .eq('player_db_id', player.player_db_id)
       .maybeSingle()
     if (data) return data
@@ -47,7 +58,7 @@ async function findExistingScoutPlayer(
   // Strategy 2: exact name match (case-insensitive)
   const { data: exactMatch } = await supabase
     .from('scout_players')
-    .select('id, in_datos_list, in_scouts_gg_list, player_db_id')
+    .select('id, in_datos_list, in_scouts_gg_list, player_db_id, supabase_player_id')
     .ilike('full_name', player.full_name.trim())
     .maybeSingle()
   if (exactMatch) return exactMatch
@@ -57,7 +68,7 @@ async function findExistingScoutPlayer(
   const key = nameKey(player.full_name)
   const { data: candidates } = await supabase
     .from('scout_players')
-    .select('id, in_datos_list, in_scouts_gg_list, player_db_id, full_name')
+    .select('id, in_datos_list, in_scouts_gg_list, player_db_id, supabase_player_id, full_name')
     .order('created_at', { ascending: false })
     .limit(500)
 
@@ -101,6 +112,9 @@ export async function addScoutPlayer(
       updates.player_db_id = player.player_db_id
       updates.player_db_source = player.player_db_source || null
     }
+    if (player.supabase_player_id && !existing.supabase_player_id) {
+      updates.supabase_player_id = player.supabase_player_id
+    }
 
     const { data, error } = await supabase
       .from('scout_players')
@@ -121,6 +135,7 @@ export async function addScoutPlayer(
       full_name: player.full_name.trim(),
       player_db_id: player.player_db_id || null,
       player_db_source: player.player_db_source || null,
+      supabase_player_id: player.supabase_player_id || null,
       in_datos_list: inDatos,
       in_scouts_gg_list: inScoutsGG,
       added_by_datos: inDatos ? userId : null,
@@ -148,6 +163,91 @@ export async function fetchScoutPlayers(list: 'datos' | 'scouts_gg'): Promise<Sc
 
   if (error) { console.error('Error fetching scout players:', error); return [] }
   return (data || []).map(p => ({ ...p, files: p.files || [] }))
+}
+
+export interface ScoutPlayerWithScore extends ScoutPlayer {
+  gg_score: number | null
+  gg_percentile: number | null
+  gg_position: string | null
+  gg_matches: number | null
+  player_photo: string | null
+  team_name: string | null
+  team_logo: string | null
+}
+
+export async function fetchScoutPlayersWithScores(
+  list: 'datos' | 'scouts_gg'
+): Promise<ScoutPlayerWithScore[]> {
+  const column = list === 'datos' ? 'in_datos_list' : 'in_scouts_gg_list'
+
+  const { data, error } = await supabase
+    .from('scout_players')
+    .select('*')
+    .eq(column, true)
+    .order('created_at', { ascending: false })
+
+  if (error) { console.error('Error fetching scout players:', error); return [] }
+  const players: ScoutPlayer[] = (data || []).map(p => ({ ...p, files: p.files || [] }))
+
+  const supabaseIds = players
+    .map(p => p.supabase_player_id)
+    .filter((id): id is number => id !== null)
+
+  let scoreMap = new Map<number, { score: number; percentile: number | null; position: string; matches: number }>()
+  let playerInfoMap = new Map<number, { photo: string | null; team_name: string | null; team_logo: string | null }>()
+
+  if (supabaseIds.length > 0) {
+    const { data: scores } = await supabase
+      .from('player_season_scores')
+      .select('player_id, avg_score, percentile, position, matches_played')
+      .in('player_id', supabaseIds)
+      .not('avg_score', 'is', null)
+      .order('matches_played', { ascending: false })
+
+    if (scores) {
+      for (const s of scores) {
+        if (!scoreMap.has(s.player_id)) {
+          scoreMap.set(s.player_id, {
+            score: s.avg_score,
+            percentile: s.percentile,
+            position: s.position,
+            matches: s.matches_played,
+          })
+        }
+      }
+    }
+
+    const { data: playerInfos } = await supabase
+      .from('players')
+      .select('id, photo, team:teams(name, logo)')
+      .in('id', supabaseIds)
+
+    if (playerInfos) {
+      for (const p of playerInfos) {
+        const team = p.team as any
+        playerInfoMap.set(p.id, {
+          photo: p.photo,
+          team_name: team?.name ?? null,
+          team_logo: team?.logo ?? null,
+        })
+      }
+    }
+  }
+
+  return players.map(p => {
+    const s = p.supabase_player_id ? scoreMap.get(p.supabase_player_id) : undefined
+    const info = p.supabase_player_id ? playerInfoMap.get(p.supabase_player_id) : undefined
+    return {
+      ...p,
+      gg_score: s?.score ?? null,
+      gg_percentile: s?.percentile ?? null,
+      gg_position: s?.position ?? null,
+      gg_matches: s?.matches ?? null,
+      player_photo: info?.photo ?? null,
+      team_name: info?.team_name ?? p.club,
+      team_logo: info?.team_logo ?? null,
+    }
+  })
 }
 
 // Fetch scout evaluation scores for all tracked players.
@@ -353,8 +453,18 @@ export async function uploadScoutPlayerFile(
 // Fetch a single scout_players record by player name or DB id (for profile pages)
 export async function fetchScoutPlayerRecord(
   playerName: string,
-  playerDbId?: string | null
+  playerDbId?: string | null,
+  supabasePlayerId?: number | null
 ): Promise<ScoutPlayer | null> {
+  if (supabasePlayerId) {
+    const { data } = await supabase
+      .from('scout_players')
+      .select('*')
+      .eq('supabase_player_id', supabasePlayerId)
+      .maybeSingle()
+    if (data) return { ...data, files: data.files || [] }
+  }
+
   if (playerDbId) {
     const { data } = await supabase
       .from('scout_players')
@@ -363,11 +473,13 @@ export async function fetchScoutPlayerRecord(
       .maybeSingle()
     if (data) return { ...data, files: data.files || [] }
   }
+
   const { data } = await supabase
     .from('scout_players')
     .select('*')
     .ilike('full_name', playerName.trim())
     .maybeSingle()
+
   return data ? { ...data, files: data.files || [] } : null
 }
 
