@@ -72,7 +72,7 @@ export default function PositionFieldMap({ position, className = '' }: Props) {
 
 const POSITION_NAMES: Record<Position, string> = {
   ARQ: 'Arquero',
-  CB: 'Defensor Central',
+  CB: 'DFC',
   LD: 'Lateral Derecho',
   LI: 'Lateral Izquierdo',
   VC: 'Volante Central',

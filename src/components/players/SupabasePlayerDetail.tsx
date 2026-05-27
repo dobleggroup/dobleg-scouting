@@ -14,6 +14,7 @@ import PositionFieldMap from '@/components/ui/PositionFieldMap'
 import TrackingWidget from '@/components/tracking/TrackingWidget'
 import AddToReportButton from '@/components/pdf/AddToReportButton'
 import type { Position, PlayerMatchStat } from '@/types/scoring'
+import { displayPosition } from '@/types/scoring'
 
 function getAge(birthDate: string | null): number | null {
   if (!birthDate) return null
@@ -98,7 +99,7 @@ export default function SupabasePlayerDetail() {
               <div className="flex flex-wrap gap-2 mb-4">
                 {player.primary_position && (
                   <span className="px-2.5 py-1 rounded-lg bg-brand-green/10 text-brand-green text-xs font-semibold">
-                    {player.primary_position}
+                    {displayPosition(player.primary_position)}
                   </span>
                 )}
                 {age !== null && (
@@ -177,7 +178,7 @@ export default function SupabasePlayerDetail() {
                       }`}
                     >
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-apple-gray-800 dark:text-white">{s.position}</span>
+                        <span className="text-sm font-semibold text-apple-gray-800 dark:text-white">{displayPosition(s.position)}</span>
                         <span className="text-xs text-apple-gray-500">{s.matches_played} PJ</span>
                       </div>
                       {s.avg_score !== null && (

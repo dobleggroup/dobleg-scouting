@@ -5,6 +5,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { getRelativeScoreColorClass, getRelativeScoreBgClass } from '@/components/ui/ScoreBar'
 import type { ScoreScale } from '@/components/ui/ScoreBar'
 import { FILTER_POSITION_MAP } from '@/constants/scoring'
+import { displayPosition } from '@/types/scoring'
 import { normalizeName } from '@/utils/scoring'
 import { useScoreLookup } from '@/hooks/usePlayerStats'
 import type { EnrichedPlayer } from '@/types'
@@ -385,7 +386,7 @@ export default function OpportunitiesPage() {
             >
               <option value="all">Todas</option>
               {positions.map(pos => (
-                <option key={pos} value={pos}>{pos}</option>
+                <option key={pos} value={pos}>{displayPosition(pos)}</option>
               ))}
             </select>
           </div>

@@ -22,6 +22,9 @@ from datetime import datetime
 from unicodedata import normalize as unicode_normalize
 from html import unescape as html_unescape
 
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 # ─── Config ──────────────────────────────────────────────────
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
@@ -181,6 +184,14 @@ def tm_profile(tm_id):
         return None
 
 
+def extract_birth_date(profile):
+    ld = profile.get("lifeDates", {})
+    dob = ld.get("dateOfBirth") or profile.get("dateOfBirth") or profile.get("birthDate")
+    if dob and isinstance(dob, str) and re.match(r"\d{4}-\d{2}-\d{2}", dob):
+        return dob[:10]
+    return None
+
+
 def extract_contract_end(profile):
     attrs = profile.get("attributes", {})
     val = attrs.get("contractUntil") or profile.get("contractEndDate") or profile.get("contractExpiryDate")
@@ -277,7 +288,7 @@ def main():
     print("Loading players from Supabase...")
     params = "select=id,name,birth_date,current_team_id,market_value_eur,transfermarkt_id"
     if ONLY_MISSING:
-        params += "&transfermarkt_id=is.null"
+        params += "&or=(transfermarkt_id.is.null,birth_date.is.null)"
 
     players = sb_select_all("players", params)
     print(f"  {len(players)} players to process\n")
@@ -302,6 +313,32 @@ def main():
         if team_name:
             print(f" ({team_name})", end="")
         print(" ... ", end="", flush=True)
+
+        existing_tm_id = player.get("transfermarkt_id")
+
+        if existing_tm_id:
+            # Already has TM ID, just need birth_date or other missing fields
+            profile = tm_profile(existing_tm_id)
+            if profile:
+                patch = {}
+                birth_date = extract_birth_date(profile)
+                if birth_date and not player.get("birth_date"):
+                    patch["birth_date"] = birth_date
+                if not player.get("market_value_eur"):
+                    mv = extract_market_value(profile)
+                    if mv:
+                        patch["market_value_eur"] = mv
+                if patch:
+                    sb_patch("players", pid, patch)
+                    stats["updated"] += 1
+                    print(f"patched: {', '.join(f'{k}={v}' for k,v in patch.items())}")
+                else:
+                    print("already complete")
+            else:
+                print("profile fetch failed")
+            stats["found"] += 1
+            time.sleep(DELAY_MS / 2000)
+            continue
 
         # Search TM website HTML
         results = search_tm_html(name)
@@ -337,6 +374,9 @@ def main():
             agent = extract_agent(profile)
             if agent:
                 update["agent"] = agent
+            birth_date = extract_birth_date(profile)
+            if birth_date:
+                update["birth_date"] = birth_date
             update["transfermarkt_url"] = build_tm_url(profile, tm_id)
         else:
             if mv_from_search:
@@ -350,6 +390,8 @@ def main():
             mv = update.get("market_value_eur")
             if mv:
                 parts_log.append(f"€{mv:,}")
+            if update.get("birth_date"):
+                parts_log.append(f"born:{update['birth_date']}")
             if update.get("contract_end_date"):
                 parts_log.append(f"contract:{update['contract_end_date']}")
             if update.get("agent"):

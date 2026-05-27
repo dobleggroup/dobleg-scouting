@@ -5,6 +5,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { getRelativeScoreColorClass, getRelativeScoreBgClass } from '@/components/ui/ScoreBar'
 import type { ScoreScale } from '@/components/ui/ScoreBar'
 import { FILTER_POSITION_MAP } from '@/constants/scoring'
+import { displayPosition } from '@/types/scoring'
 import { normalizeName } from '@/utils/scoring'
 import { useScoreLookup } from '@/hooks/usePlayerStats'
 import PortfolioValueChart from '@/components/charts/PortfolioValueChart'
@@ -669,7 +670,7 @@ export default function DashboardPage() {
                 {Object.entries(positionDistribution).map(([pos, count]) => (
                   <div key={pos} className="bg-apple-gray-50 dark:bg-apple-gray-700/50 rounded-lg p-3 text-center">
                     <p className="text-lg font-bold text-apple-gray-800 dark:text-white">{count}</p>
-                    <p className="text-xs text-apple-gray-500">{pos}</p>
+                    <p className="text-xs text-apple-gray-500">{displayPosition(pos)}</p>
                   </div>
                 ))}
               </div>

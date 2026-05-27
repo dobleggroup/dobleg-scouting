@@ -52,7 +52,10 @@ export async function fetchPlayersList(filters: {
     .not('avg_score', 'is', null);
 
   if (filters.positions?.length) query = query.in('position', filters.positions);
-  if (filters.league_id) query = query.eq('league_id', filters.league_id);
+  if (filters.league_id) {
+    query = query.eq('league_id', filters.league_id);
+    query = query.eq('player.team.league_id', filters.league_id);
+  }
   if (filters.team_id) query = query.eq('player.current_team_id', filters.team_id);
   if (filters.min_score) query = query.gte('avg_score', filters.min_score);
   if (filters.min_matches) query = query.gte('matches_played', filters.min_matches);
@@ -91,20 +94,28 @@ export async function fetchPlayersList(filters: {
 
   const rows = data ?? [];
 
-  // Deduplicate: when not filtering by position, keep only the row
-  // with the most matches_played for each player (their primary position)
+  // Deduplicate by player ID (position), then by name+team (API-Football vs Sofascore)
   let deduped = rows;
-  if (!filters.positions?.length) {
-    const best = new Map<number, any>();
+  {
+    const bestById = new Map<number, any>();
     for (const row of rows) {
       const pid = (row as any).player?.id;
       if (!pid) continue;
-      const existing = best.get(pid);
+      const existing = bestById.get(pid);
       if (!existing || row.matches_played > existing.matches_played) {
-        best.set(pid, row);
+        bestById.set(pid, row);
       }
     }
-    deduped = Array.from(best.values());
+    const byNameTeam = new Map<string, any>();
+    for (const row of bestById.values()) {
+      const p = (row as any).player;
+      const key = `${p?.name}|${p?.current_team_id}`;
+      const existing = byNameTeam.get(key);
+      if (!existing || row.matches_played > existing.matches_played) {
+        byNameTeam.set(key, row);
+      }
+    }
+    deduped = Array.from(byNameTeam.values());
   }
 
   const players: PlayerWithScore[] = deduped.map((row: any) => ({

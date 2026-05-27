@@ -1,5 +1,20 @@
 export type Position = 'ARQ' | 'LD' | 'CB' | 'LI' | 'VC' | 'VI' | 'EXT' | 'DEL';
 
+export const POSITION_DISPLAY: Record<Position, string> = {
+  ARQ: 'ARQ',
+  LD: 'LD',
+  CB: 'DFC',
+  LI: 'LI',
+  VC: 'VC',
+  VI: 'VI',
+  EXT: 'EXT',
+  DEL: 'DEL',
+};
+
+export function displayPosition(pos: string | null | undefined): string {
+  return POSITION_DISPLAY[pos as Position] ?? pos ?? '';
+}
+
 export interface PlayerProfile {
   id: number;
   name: string;

@@ -1,4 +1,5 @@
 import type { Position } from '@/types/scoring';
+import { displayPosition } from '@/types/scoring';
 
 interface PositionBarProps {
   distribution: Record<string, number>;
@@ -20,7 +21,7 @@ const POSITION_COLORS: Record<string, string> = {
 const POSITION_LABELS: Record<string, string> = {
   ARQ: 'Arquero',
   LD: 'Lateral Der.',
-  CB: 'Defensor Central',
+  CB: 'DFC',
   LI: 'Lateral Izq.',
   VC: 'Volante Central',
   VI: 'Volante Interno',
@@ -53,7 +54,7 @@ export default function PositionBar({ distribution, selectedPosition, onSelectPo
             <div className="flex-1">
               <div className="flex items-center justify-between mb-1">
                 <span className={`text-xs font-medium ${isSelected ? 'text-white' : 'text-gray-300'}`}>
-                  {pos}
+                  {displayPosition(pos)}
                 </span>
                 <span className="text-xs text-gray-500">{pct}%</span>
               </div>

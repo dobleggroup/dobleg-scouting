@@ -7,21 +7,15 @@ import EmptyState from '@/components/ui/EmptyState'
 import { getScoreColorClass, getScoreBgClass } from '@/components/ui/ScoreBar'
 import { PlayerPhoto, TeamLogo } from '@/components/ui/PlayerPhoto'
 import type { Position, PlayerWithScore } from '@/types/scoring'
+import { POSITION_DISPLAY, displayPosition } from '@/types/scoring'
 import { useAuth } from '@/context/AuthContext'
 import { addScoutPlayer } from '@/services/scoutPlayersService'
 import Slider from 'rc-slider'
 import 'rc-slider/assets/index.css'
 
-const POSITIONS: { key: Position; label: string }[] = [
-  { key: 'ARQ', label: 'ARQ' },
-  { key: 'LD', label: 'LD' },
-  { key: 'CB', label: 'CB' },
-  { key: 'LI', label: 'LI' },
-  { key: 'VC', label: 'VC' },
-  { key: 'VI', label: 'VI' },
-  { key: 'EXT', label: 'EXT' },
-  { key: 'DEL', label: 'DEL' },
-]
+const POSITIONS: { key: Position; label: string }[] = (
+  Object.entries(POSITION_DISPLAY) as [Position, string][]
+).map(([key, label]) => ({ key, label }))
 
 const PAGE_SIZE = 50
 
@@ -586,7 +580,7 @@ export default function ExternalScoutingPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-apple-gray-800 dark:text-white truncate">{player.name}</p>
                     <p className="text-xs text-apple-gray-500 truncate">
-                      {player.team?.name ?? '—'} · {player.primary_position ?? '—'}
+                      {player.team?.name ?? '—'} · {displayPosition(player.primary_position) || '—'}
                       {age !== null && <span> · {age} años</span>}
                     </p>
                   </div>
@@ -663,7 +657,7 @@ export default function ExternalScoutingPage() {
                         </td>
                         <td className="py-2.5 px-3 text-center">
                           <span className="inline-block px-2 py-0.5 rounded-md bg-apple-gray-100 dark:bg-apple-gray-800 text-xs font-semibold text-apple-gray-600 dark:text-apple-gray-300">
-                            {ss?.position ?? player.primary_position ?? '—'}
+                            {displayPosition(ss?.position ?? player.primary_position) || '—'}
                           </span>
                         </td>
                         <td className="py-2.5 px-3 text-center text-sm text-apple-gray-600 dark:text-apple-gray-300 tabular-nums">

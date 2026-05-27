@@ -20,6 +20,7 @@ import {
 } from '@/services/scoutPlayersService'
 import type { TrackingStatus, ScoutPlayerStatusRecord, ScoutPlayer } from '@/types'
 import { TRACKING_STATUS_CONFIG } from '@/hooks/useMonitoringStatus'
+import { displayPosition } from '@/types/scoring'
 
 const ADMIN_EMAIL = 'marcoscucho99@gmail.com'
 
@@ -390,7 +391,7 @@ export default function MonitoringPage() {
                         onChange={() => setPositionFilter(positionFilter === pos ? '' : pos)}
                         className="w-4 h-4 rounded-full border-apple-gray-300 dark:border-apple-gray-600 text-brand-green focus:ring-brand-green"
                       />
-                      <span className="text-sm text-apple-gray-700 dark:text-apple-gray-300 group-hover:text-apple-gray-900 dark:group-hover:text-white transition-colors">{pos}</span>
+                      <span className="text-sm text-apple-gray-700 dark:text-apple-gray-300 group-hover:text-apple-gray-900 dark:group-hover:text-white transition-colors">{displayPosition(pos)}</span>
                     </label>
                   ))}
                 </div>
@@ -430,7 +431,7 @@ export default function MonitoringPage() {
                             </span>
                           </div>
                           <p className="text-xs text-apple-gray-500 truncate mb-1.5">
-                            {[player.team_name, player.posicion || player.gg_position, player.edad ? `${player.edad}a` : null].filter(Boolean).join(' · ') || '—'}
+                            {[player.team_name, displayPosition(player.posicion || player.gg_position) || null, player.edad ? `${player.edad}a` : null].filter(Boolean).join(' · ') || '—'}
                           </p>
                           <div className="flex items-center gap-2">
                             {player.gg_score !== null && player.gg_score !== undefined ? (
@@ -606,7 +607,7 @@ export default function MonitoringPage() {
                             {/* Position */}
                             <td className="px-3 py-3">
                               <span className="inline-flex px-2 py-0.5 bg-apple-gray-100 dark:bg-apple-gray-700 rounded text-xs text-apple-gray-600 dark:text-apple-gray-300">
-                                {player.gg_position || player.posicion || '—'}
+                                {displayPosition(player.gg_position || player.posicion) || '—'}
                               </span>
                             </td>
 
@@ -764,7 +765,7 @@ export default function MonitoringPage() {
                     onChange={() => setPositionFilter(positionFilter === pos ? '' : pos)}
                     className="w-4 h-4 rounded-full border-apple-gray-300 dark:border-apple-gray-600 text-brand-green focus:ring-brand-green"
                   />
-                  <span className="text-sm text-apple-gray-700 dark:text-apple-gray-300">{pos}</span>
+                  <span className="text-sm text-apple-gray-700 dark:text-apple-gray-300">{displayPosition(pos)}</span>
                 </label>
               ))}
             </div>

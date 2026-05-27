@@ -12,6 +12,7 @@ import PositionBar from '@/components/ui/PositionBar'
 import ScoreEvolutionChart from '@/components/charts/ScoreEvolutionChart'
 import { usePlayerDetail, usePlayerMatchHistory, usePositionAverages, usePositionMetricAverages, useLeagues, useScoreLookup } from '@/hooks/usePlayerStats'
 import type { Position } from '@/types/scoring'
+import { displayPosition as formatPosition } from '@/types/scoring'
 import MetricsRadarChart from '@/components/charts/MetricsRadarChart'
 import MetricsBarComparison from '@/components/charts/MetricsBarComparison'
 import PositionFieldMap from '@/components/ui/PositionFieldMap'
@@ -1217,7 +1218,7 @@ export default function PlayerDetailPage() {
               </h2>
               {supabaseDetail?.player?.primary_position && supabaseAvgScore != null && (
                 <p className="text-2xs text-apple-gray-400 mt-1">
-                  {supabaseDetail.player.primary_position} · {supabaseDetail.allSeasonScores.find(s => s.position === (selectedPosition ?? supabaseDetail.player.primary_position))?.matches_played ?? 0} partidos
+                  {formatPosition(supabaseDetail.player.primary_position)} · {supabaseDetail.allSeasonScores.find(s => s.position === (selectedPosition ?? supabaseDetail.player.primary_position))?.matches_played ?? 0} partidos
                 </p>
               )}
             </div>
@@ -1226,7 +1227,7 @@ export default function PlayerDetailPage() {
               size="lg"
               scale={supabaseAvgScore != null ? '10' : '100'}
               comparisonScore={supabaseAvgScore != null ? supabasePosAverage : positionAverageScore}
-              comparisonLabel={`Promedio ${supabaseDetail?.player?.primary_position || posKey || 'posición'}`}
+              comparisonLabel={`Promedio ${formatPosition(supabaseDetail?.player?.primary_position) || posKey || 'posición'}`}
             />
             {subjectiveGroups.length > 0 && (
               <div className="mt-6 pt-5 border-t border-apple-gray-100 dark:border-apple-gray-700/50">

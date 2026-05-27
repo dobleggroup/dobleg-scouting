@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import type { FilterState, EnrichedPlayer } from '@/types'
 import { FILTER_POSITION_MAP, sortLeaguesByPriority } from '@/constants/scoring'
+import { displayPosition } from '@/types/scoring'
 import { fuzzyMatch } from '@/lib/search'
 
 // Available metrics for column selection
@@ -240,7 +241,7 @@ export default function FilterSidebar({ players, filters, onChange, onReset }: F
                     className="w-4 h-4 rounded border-apple-gray-300 dark:border-apple-gray-600 text-brand-green focus:ring-brand-green"
                   />
                   <span className="text-sm text-apple-gray-700 dark:text-apple-gray-300 truncate group-hover:text-apple-gray-900 dark:group-hover:text-white transition-colors">
-                    {pos}
+                    {displayPosition(pos)}
                   </span>
                 </label>
               ))}
