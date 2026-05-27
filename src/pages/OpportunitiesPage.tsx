@@ -25,13 +25,13 @@ function toScale100(score: number, scale: ScoreScale): number {
 
 function calculateOpportunities(
   players: EnrichedPlayer[],
-  getPlayerScore: (player: EnrichedPlayer) => { score: number; scale: ScoreScale },
+  getPlayerScore: (player: EnrichedPlayer) => { score: number | null; scale: ScoreScale },
 ): Opportunity[] {
   const opportunities: Opportunity[] = []
 
   for (const player of players) {
     const { score: rawScore, scale } = getPlayerScore(player)
-    // Normalise to 0-100 so all existing thresholds stay unchanged
+    if (rawScore === null) continue
     const score = toScale100(rawScore, scale)
 
     const minScore = 45
@@ -150,15 +150,12 @@ export default function OpportunitiesPage() {
   const [maxValue, setMaxValue] = useState<number>(10_000_000)
   const [maxContract, setMaxContract] = useState<number | null>(null)
 
-  /** Returns the best available score for a player along with its scale. */
   const getPlayerScore = useMemo(() => {
-    return (player: EnrichedPlayer): { score: number; scale: ScoreScale } => {
+    return (player: EnrichedPlayer): { score: number | null; scale: ScoreScale } => {
       const key = normalizeName(player.Jugador)
       const entry = scoreLookup.get(key)
-      if (entry != null) {
-        return { score: entry.score, scale: '10' }
-      }
-      return { score: player.ggScore ?? 0, scale: '100' }
+      if (entry != null) return { score: entry.score, scale: '10' }
+      return { score: null, scale: '10' }
     }
   }, [scoreLookup])
 

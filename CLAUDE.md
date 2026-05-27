@@ -124,7 +124,7 @@ Cuando el usuario envíe datos GPS, **solo extraer datos de estos jugadores**. E
 
 | Clave corta | Nombre completo |
 |-------------|----------------|
-| J. Paradela | Juan Paradela |
+| J. Paradela | José Paradela |
 | M. Palacios | Matías Palacios |
 | M. Vera | Mauricio Vera |
 | L. Orellano | Luca Orellano |
@@ -136,7 +136,7 @@ Cuando el usuario envíe datos GPS, **solo extraer datos de estos jugadores**. E
 | A. Mulet | Agustín Mulet |
 | A. Massaccesi | Agustín Massaccesi |
 | I. Erquiaga | Iván Erquiaga |
-| J. Díaz | Juan Díaz |
+| J. Díaz | Juan Ignacio Díaz |
 | M. Kabalin | Matías Kabalin |
 | G. Prestianni | Gianluca Prestianni |
 | Gonzalo González | Gonzalo González |
@@ -144,7 +144,7 @@ Cuando el usuario envíe datos GPS, **solo extraer datos de estos jugadores**. E
 | J. López | Julián López |
 | D. Mastrángelo | Diego Mastrángelo |
 | A. Melano | Agustín Melano |
-| J. Postigo | Juan Postigo |
+| J. Postigo | Joaquin Postigo |
 | C. Bravo | Claudio Bravo |
 | Nicolás Leguizamón | Nicolás Leguizamón |
 | M. Sanabria | Mario Sanabria |

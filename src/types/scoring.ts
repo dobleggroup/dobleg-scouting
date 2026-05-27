@@ -11,6 +11,11 @@ export interface PlayerProfile {
   current_team_id: number | null;
   primary_position: Position | null;
   position_distribution: Record<string, number>;
+  market_value_eur: number | null;
+  contract_end_date: string | null;
+  agent: string | null;
+  transfermarkt_url: string | null;
+  transfermarkt_id: number | null;
   team?: { id: number; name: string; logo: string | null; league_id: number | null };
 }
 
@@ -97,5 +102,31 @@ export interface PositionAverage {
   position: Position;
   league_id: number;
   avg_score: number;
+  player_count: number;
+}
+
+export interface PositionMetricAverages {
+  position: Position;
+  league_id: number;
+  season: number;
+  tackles_p90: number;
+  interceptions_p90: number;
+  blocks_p90: number;
+  duels_won_pct: number;
+  passes_accuracy: number;
+  passes_key_p90: number;
+  passes_total_p90: number;
+  dribbles_success_p90: number;
+  dribbles_pct: number;
+  shots_on_p90: number;
+  shots_pct: number;
+  goals_p90: number;
+  assists_p90: number;
+  rating_avg: number;
+  fouls_drawn_p90: number;
+  saves_p90: number;
+  goals_conceded_p90: number;
+  penalty_saved_avg: number;
+  clean_sheet_pct: number;
   player_count: number;
 }

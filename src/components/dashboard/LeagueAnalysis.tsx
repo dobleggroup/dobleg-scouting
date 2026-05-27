@@ -10,6 +10,8 @@ import {
 import { getRelativeScoreColorClass, getRelativeScoreBgClass } from '@/components/ui/ScoreBar'
 import { FILTER_POSITION_MAP } from '@/constants/scoring'
 import { useData } from '@/context/DataContext'
+import { useScoreLookup } from '@/hooks/usePlayerStats'
+import { normalizeName } from '@/utils/scoring'
 import type { EnrichedPlayer } from '@/types'
 
 interface LeagueAnalysisProps {
@@ -19,6 +21,18 @@ interface LeagueAnalysisProps {
 export default function LeagueAnalysis({ players }: LeagueAnalysisProps) {
   const navigate = useNavigate()
   const { positionAverages } = useData()
+  const { lookup: scoreLookup } = useScoreLookup()
+
+  function getScore(player: EnrichedPlayer): number | null {
+    const entry = scoreLookup.get(normalizeName(player.Jugador))
+    if (entry) return entry.score * 10
+    return null
+  }
+
+  function getDisplayScore(player: EnrichedPlayer): number | null {
+    const entry = scoreLookup.get(normalizeName(player.Jugador))
+    return entry?.score ?? null
+  }
 
   function getPosAvg(posicion: string): number | null {
     const normPos = FILTER_POSITION_MAP[posicion] ?? ''
@@ -60,28 +74,27 @@ export default function LeagueAnalysis({ players }: LeagueAnalysisProps) {
     }[] = []
 
     for (const player of players) {
-      // Strict criteria: score >= 50 to be considered for a leap
-      if (!player.ggScore || player.ggScore < 50) continue
+      const score100 = getScore(player)
+      if (!score100 || score100 < 50) continue
 
       const currentLeague = getLeagueInfo(player.Liga || '')
-      if (!currentLeague || currentLeague.tier <= 2) continue // Already in top leagues
+      if (!currentLeague || currentLeague.tier <= 2) continue
 
       const jumps = getLeagueJumpOpportunities(
         player.Liga || '',
         player.ageNum,
-        player.ggScore
+        score100
       )
 
       const contractAnalysis = analyzeContractOpportunity(
         player.monthsRemaining ?? null,
         currentLeague.tier,
-        player.ggScore
+        score100
       )
 
       for (const jump of jumps) {
-        // Only HIGH likelihood, or MEDIUM with good contract situation
         const isReady = jump.likelihood === 'high' ||
-          (jump.likelihood === 'medium' && player.ggScore >= 55)
+          (jump.likelihood === 'medium' && score100 >= 55)
 
         if (isReady) {
           opportunities.push({
@@ -111,7 +124,7 @@ export default function LeagueAnalysis({ players }: LeagueAnalysisProps) {
         return tierImproveB - tierImproveA
       })
       .slice(0, 5)
-  }, [players])
+  }, [players, scoreLookup])
 
   // Players ready for Europe - strict criteria
   // Must be in Sudamerica (tier 4-5), high score, good age
@@ -119,18 +132,17 @@ export default function LeagueAnalysis({ players }: LeagueAnalysisProps) {
     return players
       .filter(p => {
         const league = getLeagueInfo(p.Liga || '')
-        // Only tier 4-5 (Top Sudamerica / Sudamerica), not development leagues
-        // Score >= 55, age <= 25 for real European potential
+        const s = getScore(p)
         return league &&
           league.tier >= 4 &&
           league.tier <= 5 &&
-          p.ggScore &&
-          p.ggScore >= 55 &&
+          s !== null &&
+          s >= 55 &&
           p.ageNum <= 25
       })
-      .sort((a, b) => (b.ggScore ?? 0) - (a.ggScore ?? 0))
+      .sort((a, b) => (getScore(b) ?? 0) - (getScore(a) ?? 0))
       .slice(0, 4)
-  }, [players])
+  }, [players, scoreLookup])
 
   const navigateToPlayer = (player: EnrichedPlayer) => {
     navigate(`/jugador/${encodeURIComponent(player.Jugador)}?source=interno`)
@@ -224,9 +236,14 @@ export default function LeagueAnalysis({ players }: LeagueAnalysisProps) {
                         <p className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">
                           {opp.player.Jugador}
                         </p>
-                        <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${getRelativeScoreBgClass(opp.player.ggScore ?? null, getPosAvg(opp.player['Posición']))} ${getRelativeScoreColorClass(opp.player.ggScore ?? null, getPosAvg(opp.player['Posición']))}`}>
-                          {opp.player.ggScore?.toFixed(1)}
-                        </span>
+                        {(() => {
+                          const ds = getDisplayScore(opp.player)
+                          return ds !== null ? (
+                            <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${getRelativeScoreBgClass(ds, getPosAvg(opp.player['Posición']), '10')} ${getRelativeScoreColorClass(ds, getPosAvg(opp.player['Posición']), '10')}`}>
+                              {ds.toFixed(1)}
+                            </span>
+                          ) : null
+                        })()}
                       </div>
                       <p className="text-xs text-apple-gray-500 truncate">
                         {opp.player.ageNum} años · {opp.player.Equipo}
@@ -280,7 +297,7 @@ export default function LeagueAnalysis({ players }: LeagueAnalysisProps) {
               const jumps = getLeagueJumpOpportunities(
                 player.Liga || '',
                 player.ageNum,
-                player.ggScore ?? 0
+                getScore(player) ?? 0
               )
               const bestJump = jumps[0]
 
@@ -302,7 +319,7 @@ export default function LeagueAnalysis({ players }: LeagueAnalysisProps) {
                       {player.Jugador}
                     </p>
                     <p className="text-xs text-apple-gray-500">
-                      {player.ageNum} años · Score {player.ggScore?.toFixed(1)}
+                      {player.ageNum} años · Score {getDisplayScore(player)?.toFixed(1) ?? '—'}
                     </p>
                     {bestJump && (
                       <p className="text-2xs text-purple-600 dark:text-purple-400 mt-0.5">

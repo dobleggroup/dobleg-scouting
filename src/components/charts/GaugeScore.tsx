@@ -30,9 +30,10 @@ function getScoreColor(score: number, posAvg?: number | null, scale: '100' | '10
   const elite = scale === '10' ? 8.0 : 80
   if (score >= elite) return '#34D399'
   if (posAvg != null) {
-    if (score >= posAvg) return '#10B981'
-    if (score >= posAvg * 0.85) return '#F59E0B'
-    if (score >= posAvg * 0.70) return '#F97316'
+    const avg = scale === '10' && posAvg > 10 ? posAvg / 10 : posAvg
+    if (score >= avg) return '#10B981'
+    if (score >= avg * 0.85) return '#F59E0B'
+    if (score >= avg * 0.70) return '#F97316'
     return '#EF4444'
   }
   return getScoreColorAbsolute(score, scale)
@@ -42,9 +43,10 @@ function getScoreLabel(score: number, posAvg?: number | null, scale: '100' | '10
   const elite = scale === '10' ? 8.0 : 80
   if (score >= elite) return 'Elite'
   if (posAvg != null) {
-    if (score >= posAvg) return 'Sobre el promedio'
-    if (score >= posAvg * 0.85) return 'Cerca del promedio'
-    if (score >= posAvg * 0.70) return 'Bajo el promedio'
+    const avg = scale === '10' && posAvg > 10 ? posAvg / 10 : posAvg
+    if (score >= avg) return 'Sobre el promedio'
+    if (score >= avg * 0.85) return 'Cerca del promedio'
+    if (score >= avg * 0.70) return 'Bajo el promedio'
     return 'Muy bajo'
   }
   if (scale === '10') {
@@ -63,9 +65,10 @@ function getScoreDescription(score: number, posAvg?: number | null, scale: '100'
   const elite = scale === '10' ? 8.0 : 80
   if (score >= elite) return 'Rendimiento excepcional'
   if (posAvg != null) {
-    if (score >= posAvg) return 'Por encima del promedio de su posicion'
-    if (score >= posAvg * 0.85) return 'Cerca del promedio de su posicion'
-    if (score >= posAvg * 0.70) return 'Por debajo del promedio de su posicion'
+    const avg = scale === '10' && posAvg > 10 ? posAvg / 10 : posAvg
+    if (score >= avg) return 'Por encima del promedio de su posicion'
+    if (score >= avg * 0.85) return 'Cerca del promedio de su posicion'
+    if (score >= avg * 0.70) return 'Por debajo del promedio de su posicion'
     return 'Rendimiento bajo en su posicion'
   }
   if (scale === '10') {

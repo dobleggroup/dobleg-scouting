@@ -10,6 +10,7 @@ import { useData } from '@/context/DataContext'
 import { FILTER_POSITION_MAP } from '@/constants/scoring'
 import { useScoreLookup } from '@/hooks/usePlayerStats'
 import { normalizeName } from '@/utils/scoring'
+import { AGENCY_PLAYERS } from '@/constants/agencyPlayers'
 
 interface PlayerTableProps {
   players: EnrichedPlayer[]
@@ -75,6 +76,17 @@ function formatMetricValue(value: unknown): string {
   return num.toFixed(2)
 }
 
+function NoScoreIndicator({ reason }: { reason: string }) {
+  return (
+    <span className="relative group cursor-help">
+      <span className="text-apple-gray-400 text-sm font-medium">*</span>
+      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1.5 bg-apple-gray-800 dark:bg-apple-gray-700 text-white text-2xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg">
+        {reason}
+      </span>
+    </span>
+  )
+}
+
 export default function PlayerTable({ players, source, isLoading, selectedMetrics = [] }: PlayerTableProps) {
   const navigate = useNavigate()
   const { positionAverages } = useData()
@@ -82,11 +94,18 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
   const [sort, setSort] = useState<SortState>({ column: 'ggScore', direction: 'desc' })
   const [page, setPage] = useState(1)
 
-  function getPlayerScore(player: EnrichedPlayer): { score: number | null; scale: ScoreScale } {
+  function getPlayerScore(player: EnrichedPlayer): { score: number | null; scale: ScoreScale; noScoreReason?: string } {
     const key = normalizeName(player.Jugador)
     const entry = scoreLookup.get(key)
     if (entry) return { score: entry.score, scale: '10' }
-    return { score: player.ggScore, scale: '100' }
+
+    const ap = AGENCY_PLAYERS.find(a =>
+      normalizeName(a.shortName) === key || normalizeName(a.fullName) === key
+    )
+    let reason = 'Sin datos suficientes en la temporada actual'
+    if (ap?.isReserve) reason = 'Jugador reserva — sin participación regular'
+
+    return { score: null, scale: '10', noScoreReason: reason }
   }
 
   const columns = useMemo(() => {
@@ -133,7 +152,7 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
       const cmp = aStr.localeCompare(bStr, 'es')
       return direction === 'asc' ? cmp : -cmp
     })
-  }, [players, sort])
+  }, [players, sort, scoreLookup])
 
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE)
   const paginated = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -189,7 +208,8 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
                 {/* Score */}
                 <div className="flex-shrink-0">
                   {(() => {
-                    const { score, scale } = getPlayerScore(player)
+                    const { score, scale, noScoreReason } = getPlayerScore(player)
+                    if (score === null) return <NoScoreIndicator reason={noScoreReason!} />
                     return <ScoreBar score={score} size="sm" posAvg={posAvg} scale={scale} />
                   })()}
                 </div>
@@ -315,7 +335,8 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
                   <td className="px-3 py-3">
                     <div className="flex justify-center">
                       {(() => {
-                        const { score, scale } = getPlayerScore(player)
+                        const { score, scale, noScoreReason } = getPlayerScore(player)
+                        if (score === null) return <NoScoreIndicator reason={noScoreReason!} />
                         return (
                           <ScoreBar
                             score={score}

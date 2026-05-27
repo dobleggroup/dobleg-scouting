@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useData } from '@/context/DataContext'
 import { POSITION_MAP, FILTER_POSITION_MAP } from '@/constants/scoring'
 import { getRelativeScoreColorClass, getRelativeScoreBgClass } from '@/components/ui/ScoreBar'
+import { useScoreLookup } from '@/hooks/usePlayerStats'
+import { normalizeName } from '@/utils/scoring'
 import type { EnrichedPlayer } from '@/types'
 
 interface Message {
@@ -432,7 +434,13 @@ function generateResponse(criteria: SearchCriteria, results: EnrichedPlayer[]): 
 export default function AIAnalystChat() {
   const navigate = useNavigate()
   const { external, internal, positionAverages } = useData()
+  const { lookup: scoreLookup } = useScoreLookup()
   const allPlayers = useMemo(() => [...external, ...internal], [external, internal])
+
+  function getSupabaseScore(player: EnrichedPlayer): number | null {
+    const entry = scoreLookup.get(normalizeName(player.Jugador))
+    return entry?.score ?? null
+  }
 
   const [isOpen, setIsOpen] = useState(false)
   const [isMinimized, setIsMinimized] = useState(false)
@@ -614,9 +622,10 @@ export default function AIAnalystChat() {
                           {msg.players.map((p, i) => {
                             const normPos = FILTER_POSITION_MAP[p['Posición']] ?? ''
                             const posAvg = normPos ? (positionAverages[normPos] ?? null) : null
-                            const scoreColor = getRelativeScoreColorClass(p.ggScore ?? null, posAvg)
-                            const scoreBg = getRelativeScoreBgClass(p.ggScore ?? null, posAvg)
-                            const isElite = (p.ggScore ?? 0) >= 80
+                            const displayScore = getSupabaseScore(p)
+                            const scoreColor = displayScore !== null ? getRelativeScoreColorClass(displayScore, posAvg, '10') : 'text-apple-gray-400'
+                            const scoreBg = displayScore !== null ? getRelativeScoreBgClass(displayScore, posAvg, '10') : 'bg-apple-gray-400/10'
+                            const isElite = (displayScore ?? 0) >= 8.0
 
                             return (
                               <button
@@ -640,7 +649,7 @@ export default function AIAnalystChat() {
                                 </div>
                                 <div className="text-right flex flex-col items-end gap-0.5">
                                   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold tabular-nums ${scoreBg} ${scoreColor} ${isElite ? 'shadow-sm shadow-emerald-400/40' : ''}`}>
-                                    {p.ggScore?.toFixed(1) ?? '—'}
+                                    {displayScore?.toFixed(1) ?? '—'}
                                     {isElite && <span className="ml-0.5 text-2xs">★</span>}
                                   </span>
                                   <p className="text-2xs text-apple-gray-500 dark:text-apple-gray-400">{p.marketValueFormatted}</p>

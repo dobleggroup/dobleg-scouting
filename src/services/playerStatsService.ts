@@ -4,6 +4,7 @@ import type {
   PlayerMatchStat,
   PlayerSeasonScore,
   PositionAverage,
+  PositionMetricAverages,
   Position,
   LeagueInfo,
 } from '@/types/scoring';
@@ -16,12 +17,17 @@ function currentSeasons(): number[] {
 }
 
 export async function fetchPlayersList(filters: {
-  position?: Position;
+  positions?: Position[];
   league_id?: number;
   team_id?: number;
   min_score?: number;
+  min_age?: number;
   max_age?: number;
   min_matches?: number;
+  min_market_value?: number;
+  max_market_value?: number;
+  max_contract_months?: number;
+  agents?: string[];
   search?: string;
   season?: number;
   page?: number;
@@ -38,22 +44,42 @@ export async function fetchPlayersList(filters: {
       player:players!inner(
         id, name, photo, birth_date, nationality, preferred_foot, height_cm,
         primary_position, position_distribution, current_team_id,
+        market_value_eur, contract_end_date, agent, transfermarkt_url, transfermarkt_id,
         team:teams(id, name, logo, league_id)
       )
     `, { count: 'exact' })
     .in('season', seasons)
     .not('avg_score', 'is', null);
 
-  if (filters.position) query = query.eq('position', filters.position);
+  if (filters.positions?.length) query = query.in('position', filters.positions);
   if (filters.league_id) query = query.eq('league_id', filters.league_id);
   if (filters.team_id) query = query.eq('player.current_team_id', filters.team_id);
   if (filters.min_score) query = query.gte('avg_score', filters.min_score);
   if (filters.min_matches) query = query.gte('matches_played', filters.min_matches);
   if (filters.search) query = query.ilike('player.name', `%${filters.search}%`);
+  if (filters.min_age) {
+    const maxBirth = new Date();
+    maxBirth.setFullYear(maxBirth.getFullYear() - filters.min_age);
+    query = query.lte('player.birth_date', maxBirth.toISOString().split('T')[0]);
+  }
   if (filters.max_age) {
     const minBirth = new Date();
     minBirth.setFullYear(minBirth.getFullYear() - filters.max_age);
     query = query.gte('player.birth_date', minBirth.toISOString().split('T')[0]);
+  }
+  if (filters.min_market_value) {
+    query = query.gte('player.market_value_eur', filters.min_market_value);
+  }
+  if (filters.max_market_value) {
+    query = query.lte('player.market_value_eur', filters.max_market_value);
+  }
+  if (filters.max_contract_months) {
+    const limit = new Date();
+    limit.setMonth(limit.getMonth() + filters.max_contract_months);
+    query = query.lte('player.contract_end_date', limit.toISOString().split('T')[0]);
+  }
+  if (filters.agents?.length) {
+    query = query.in('player.agent', filters.agents);
   }
 
   query = query
@@ -63,7 +89,25 @@ export async function fetchPlayersList(filters: {
   const { data, count, error } = await query;
   if (error) throw error;
 
-  const players: PlayerWithScore[] = (data ?? []).map((row: any) => ({
+  const rows = data ?? [];
+
+  // Deduplicate: when not filtering by position, keep only the row
+  // with the most matches_played for each player (their primary position)
+  let deduped = rows;
+  if (!filters.positions?.length) {
+    const best = new Map<number, any>();
+    for (const row of rows) {
+      const pid = (row as any).player?.id;
+      if (!pid) continue;
+      const existing = best.get(pid);
+      if (!existing || row.matches_played > existing.matches_played) {
+        best.set(pid, row);
+      }
+    }
+    deduped = Array.from(best.values());
+  }
+
+  const players: PlayerWithScore[] = deduped.map((row: any) => ({
     ...row.player,
     team: row.player.team,
     season_scores: [row],
@@ -148,6 +192,18 @@ export async function fetchPositionAverages(
   }));
 }
 
+export async function fetchDistinctAgents(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('players')
+    .select('agent')
+    .not('agent', 'is', null)
+    .order('agent');
+
+  if (error) throw error;
+  const unique = [...new Set((data ?? []).map((r: any) => r.agent as string).filter(Boolean))];
+  return unique;
+}
+
 export async function fetchLeagues(): Promise<LeagueInfo[]> {
   const { data, error } = await supabase
     .from('leagues')
@@ -191,33 +247,60 @@ export async function fetchScoreLookup(
 ): Promise<Map<string, ScoreLookupEntry>> {
   const seasons = season ? [season] : currentSeasons();
 
-  const { data, error } = await supabase
-    .from('player_season_scores')
-    .select(`
-      player_id, position, avg_score, percentile, matches_played,
-      player:players!inner(name)
-    `)
-    .in('season', seasons)
-    .not('avg_score', 'is', null);
+  const PAGE_SIZE = 1000;
+  let allRows: any[] = [];
+  let from = 0;
 
-  if (error) throw error;
+  while (true) {
+    const { data, error } = await supabase
+      .from('player_season_scores')
+      .select(`
+        player_id, position, avg_score, percentile, matches_played,
+        player:players!inner(name)
+      `)
+      .in('season', seasons)
+      .not('avg_score', 'is', null)
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) throw error;
+    const rows = data ?? [];
+    allRows = allRows.concat(rows);
+    if (rows.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  const norm = (s: string) =>
+    s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
   const map = new Map<string, ScoreLookupEntry>();
-  for (const row of data ?? []) {
+  for (const row of allRows) {
     const name = (row as any).player?.name as string;
     if (!name) continue;
-    const key = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-    const existing = map.get(key);
-    if (existing && existing.matches_played >= row.matches_played) continue;
-    map.set(key, {
+    const key = norm(name);
+    const entry: ScoreLookupEntry = {
       player_id: row.player_id,
       name,
       score: row.avg_score,
       position: row.position as Position,
       percentile: row.percentile,
       matches_played: row.matches_played,
-    });
+    };
+    const existing = map.get(key);
+    if (!existing || entry.matches_played > existing.matches_played) {
+      map.set(key, entry);
+    }
   }
+
+  const { AGENCY_PLAYERS } = await import('@/constants/agencyPlayers');
+  for (const ap of AGENCY_PLAYERS) {
+    const fullKey = norm(ap.fullName);
+    const shortKey = norm(ap.shortName);
+    const entry = map.get(fullKey);
+    if (entry && shortKey !== fullKey && !map.has(shortKey)) {
+      map.set(shortKey, entry);
+    }
+  }
+
   return map;
 }
 
@@ -243,6 +326,20 @@ export async function fetchPlayerMatchHistory(
   query = query.order('fixture(date)', { ascending: true });
 
   const { data, error } = await query;
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchPositionMetricAverages(
+  season?: number
+): Promise<PositionMetricAverages[]> {
+  const seasons = season ? [season] : currentSeasons();
+
+  const { data, error } = await supabase
+    .from('position_metric_averages')
+    .select('*')
+    .in('season', seasons);
+
   if (error) throw error;
   return data ?? [];
 }

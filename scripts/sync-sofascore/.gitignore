@@ -1,3 +1,6 @@
 run-sync.bat
+run-resync.bat
 sync.log
+resync.log
+position_cache.json
 node_modules/

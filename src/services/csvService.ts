@@ -155,12 +155,10 @@ export interface AllRawData {
 }
 
 export async function loadAllData(): Promise<AllRawData> {
-  const [extRaw, arqueroRaw, intRaw, monRaw, segMetRaw, normRaw, evoRaw, metRaw, tmRaw, masDatosRaw, mvHistRaw, gpsRaw] = await Promise.all([
+  const [extRaw, arqueroRaw, intRaw, normRaw, evoRaw, metRaw, tmRaw, masDatosRaw, mvHistRaw, gpsRaw] = await Promise.all([
     fetchCSV(SHEET_URLS.externo),
     fetchCSV(SHEET_URLS.arqueros),
     fetchCSV(SHEET_URLS.interno),
-    fetchCSV(SHEET_URLS.seguimiento),
-    fetchCSV(SHEET_URLS.seguimientoMetricas),
     fetchCSV(SHEET_URLS.normalizado),
     fetchCSV(SHEET_URLS.evolucion),
     fetchCSV(SHEET_URLS.metricas),
@@ -179,48 +177,9 @@ export async function loadAllData(): Promise<AllRawData> {
   const external = deduplicatePlayers(externalCombined) as RawExternalPlayer[]
   const internal = resolveAliases(intRaw).filter(r => r['Jugador']?.trim()) as RawInternalPlayer[]
 
-  const monitoring: MonitoringPlayer[] = monRaw
-    .filter(r => r['Jugador']?.trim() || r['Nombre jugador']?.trim())
-    .map(r => ({
-      Jugador: r['Jugador'] ?? '',
-      'Nombre jugador': r['Nombre jugador'] ?? '',
-      Club: r['Club'] ?? '',
-      Liga: normalizeLiga(r['Liga'] ?? ''),
-      Nacionalidad: r['Nacionalidad'] ?? '',
-      'Fecha de nacimiento': r['Fecha de nacimiento'] ?? '',
-      Edad: r['Edad'] ?? '',
-      'Posición': r['Posición'] ?? '',
-      Rol: r['Rol'] ?? '',
-      Repre: r['Repre (Transfermkt)'] ?? r['Repre'] ?? '',
-      Datos: r['Datos'] ?? '',
-      'Ficha técnica': r['Ficha técnica'] ?? '',
-      Transfermkt: r['Transfermkt'] ?? r['Ficha técnica'] ?? '',
-      WyscoutVideo: r['WyscoutVideo'] ?? r['Video Wyscout'] ?? '',
-    }))
+  const monitoring: MonitoringPlayer[] = []
 
-  // Parse seguimiento metrics (Wyscout data for monitoring players)
-  const seguimientoMetrics: SeguimientoMetricsPlayer[] = resolveAliases(segMetRaw)
-    .filter(r => r['Jugador']?.trim())
-    .map(r => {
-      const player: SeguimientoMetricsPlayer = {
-        Jugador: r['Jugador'] ?? '',
-        Equipo: r['Equipo'] ?? '',
-        Liga: normalizeLiga(r['Liga'] ?? ''),
-        'Posición': r['Posición'] ?? r['Posición específica'] ?? '',
-        'Posición específica': r['Posición específica'] ?? '',
-        Edad: r['Edad'] ?? '',
-        'Minutos jugados': r['Minutos jugados'] ?? '',
-        'Partidos jugados': r['Partidos jugados'] ?? '',
-        Transfermkt: r['Transfermkt'] ?? '',
-      }
-      // Copy all other columns (metrics)
-      for (const [key, value] of Object.entries(r)) {
-        if (!(key in player)) {
-          player[key] = value
-        }
-      }
-      return player
-    })
+  const seguimientoMetrics: SeguimientoMetricsPlayer[] = []
 
   const normalized: NormalizedPlayer[] = resolveAliases(normRaw)
     .filter(r => r['Jugador']?.trim())

@@ -287,22 +287,14 @@ export interface MonitoringPlayerStatus {
 export type ScoutPlayerPriority = 'alta' | 'normal' | 'baja'
 export type ScoutPlayerFoot = 'derecho' | 'izquierdo' | 'ambos'
 
-export type ScoutsGGStatus =
-  | 'en_seguimiento_gg'
-  | 'pre_seleccionado'
-  | 'contactado'
-  | 'reunion_pactada'
-  | 'en_negociacion'
-  | 'oferta_enviada'
-  | 'contratado'
-  | 'descartado'
-  | 'no_disponible'
-
-export type DatosTrackingStatus =
+export type TrackingStatus =
   | 'en_seguimiento'
   | 'contactado'
   | 'en_negociacion'
   | 'descartado'
+
+export type ScoutsGGStatus = TrackingStatus
+export type DatosTrackingStatus = TrackingStatus
 
 export interface ScoutPlayerFile {
   name: string
@@ -318,6 +310,7 @@ export interface ScoutPlayer {
   // Link to Wyscout DB player (when found via report or search)
   player_db_id: string | null        // The "Jugador" field value from the DB (e.g. "L. Messi")
   player_db_source: 'interno' | 'externo' | null  // Which DB this player is in
+  supabase_player_id: number | null   // Link to Supabase players.id (API-Football/Sofascore)
   club: string | null
   liga: string | null
   edad: number | null

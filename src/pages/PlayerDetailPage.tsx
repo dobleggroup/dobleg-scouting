@@ -10,8 +10,11 @@ import MarketValueChart from '@/components/charts/MarketValueChart'
 import GaugeScore from '@/components/charts/GaugeScore'
 import PositionBar from '@/components/ui/PositionBar'
 import ScoreEvolutionChart from '@/components/charts/ScoreEvolutionChart'
-import { usePlayerDetail, usePlayerMatchHistory, usePositionAverages } from '@/hooks/usePlayerStats'
+import { usePlayerDetail, usePlayerMatchHistory, usePositionAverages, usePositionMetricAverages, useLeagues, useScoreLookup } from '@/hooks/usePlayerStats'
 import type { Position } from '@/types/scoring'
+import MetricsRadarChart from '@/components/charts/MetricsRadarChart'
+import MetricsBarComparison from '@/components/charts/MetricsBarComparison'
+import PositionFieldMap from '@/components/ui/PositionFieldMap'
 import GPSTab from '@/components/charts/GPSTab'
 import ExportPDFModal, { type PDFTheme } from '@/components/ui/ExportPDFModal'
 import { exportPlayerToPdfFull } from '@/utils/pdfExport'
@@ -20,6 +23,7 @@ import { normalizeName } from '@/utils/scoring'
 import { fuzzyMatch } from '@/lib/search'
 import { POSITION_MAP, DISPLAY_POSITION_MAP, DISPLAY_METRICS, RADAR_METRICS, METRIC_ABBREVIATIONS } from '@/constants/scoring'
 import { fetchPlayerEvaluations, fetchEvaluationsByName, type ScoutEvaluation } from '@/services/scoutEvaluationService'
+import { useApiFootballPlayerId, usePlayerInjuries, usePlayerTransfers } from '@/hooks/usePlayerApiData'
 import TrackingWidget from '@/components/tracking/TrackingWidget'
 import BodyMapSVG from '@/components/health/BodyMapSVG'
 import ScoutsGGBadge from '@/components/ui/ScoutsGGBadge'
@@ -599,11 +603,8 @@ export default function PlayerDetailPage() {
     if (source === 'interno') {
       return internal.sort((a, b) => a.Jugador.localeCompare(b.Jugador))
     }
-    if (source === 'seguimiento') {
-      return monitoring.map(m => m.metricsPlayer).filter(Boolean).sort((a, b) => a!.Jugador.localeCompare(b!.Jugador)) as EnrichedPlayer[]
-    }
     return external.sort((a, b) => a.Jugador.localeCompare(b.Jugador))
-  }, [source, internal, external, monitoring])
+  }, [source, internal, external])
 
   // Filter players by search query
   const filteredPlayers = useMemo(() => {
@@ -665,13 +666,53 @@ export default function PlayerDetailPage() {
     ) ?? null
   }, [id, source, monitoring])
 
-  const apiPlayerId = apiIdParam ? parseInt(apiIdParam) : (typeof player?.apiFootballId === 'number' ? player.apiFootballId : null) as number | null
+  const { lookup: scoreLookup, ready: scoreLookupReady } = useScoreLookup()
+  const { metricAverages } = usePositionMetricAverages()
+  const leagues = useLeagues()
+
+  const apiPlayerId = useMemo(() => {
+    if (apiIdParam) return parseInt(apiIdParam)
+    if (typeof player?.apiFootballId === 'number') return player.apiFootballId
+    if (source === 'interno' && player && scoreLookupReady) {
+      const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      // Try short name first (e.g. "Luca Orellano")
+      const shortKey = normalize(player.Jugador)
+      const entry = scoreLookup.get(shortKey)
+      if (entry) return entry.player_id
+      // Try "Nombre completo" field (e.g. "Juan Paradela")
+      const fullName = (player['Nombre completo'] as string) ?? ''
+      if (fullName) {
+        const fullKey = normalize(fullName)
+        const fullEntry = scoreLookup.get(fullKey)
+        if (fullEntry) return fullEntry.player_id
+      }
+      // Fuzzy: abbreviated "J. Ginzo" → match "Juan Martin Ginzo" by initial + last name + team's league
+      const parts = player.Jugador.split(/[.\s]+/).filter(Boolean)
+      if (parts.length >= 2) {
+        const initial = normalize(parts[0])[0]
+        const lastName = normalize(parts[parts.length - 1])
+        for (const [key, val] of scoreLookup) {
+          const keyParts = key.split(' ')
+          if (keyParts[keyParts.length - 1] === lastName && key[0] === initial) return val.player_id
+        }
+      }
+    }
+    return null
+  }, [apiIdParam, player, source, scoreLookup, scoreLookupReady]) as number | null
+
   const { data: supabaseDetail } = usePlayerDetail(apiPlayerId)
   const { matches: supabaseMatches } = usePlayerMatchHistory(
     apiPlayerId,
     selectedPosition ?? supabaseDetail?.player?.primary_position ?? undefined
   )
   const { averages: positionAverages } = usePositionAverages()
+  const { apiPlayerId: resolvedApiId } = useApiFootballPlayerId(
+    source === 'interno' ? player?.Jugador ?? null : null,
+    apiPlayerId,
+  )
+  const effectiveApiId = apiPlayerId ?? resolvedApiId
+  const { injuries: playerInjuries, loading: injuriesLoading } = usePlayerInjuries(effectiveApiId)
+  const { transfers: playerTransfers, loading: transfersLoading } = usePlayerTransfers(effectiveApiId)
 
   const supabaseAvgScore = useMemo(() => {
     if (!supabaseDetail) return null
@@ -922,7 +963,7 @@ export default function PlayerDetailPage() {
 
   if (loading) return <LoadingSpinner fullScreen message="Cargando ficha del jugador..." />
   if (error) return <EmptyState title="Error" description={error} icon="error" />
-  if (!player && apiIdParam) {
+  if (apiIdParam && source === 'externo') {
     return (
       <Suspense fallback={<LoadingSpinner fullScreen message="Cargando ficha del jugador..." />}>
         <SupabasePlayerDetailLazy />
@@ -1168,19 +1209,24 @@ export default function PlayerDetailPage() {
             </div>
           </div>
 
-          {/* Score GG - THE HERO */}
+          {/* Score — uses Supabase when available, falls back to GG */}
           <div className="card-apple p-6" id="player-score-card">
             <div className="text-center mb-4">
               <h2 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">
                 Score GG
               </h2>
+              {supabaseDetail?.player?.primary_position && supabaseAvgScore != null && (
+                <p className="text-2xs text-apple-gray-400 mt-1">
+                  {supabaseDetail.player.primary_position} · {supabaseDetail.allSeasonScores.find(s => s.position === (selectedPosition ?? supabaseDetail.player.primary_position))?.matches_played ?? 0} partidos
+                </p>
+              )}
             </div>
             <GaugeScore
               score={supabaseAvgScore ?? player.ggScore}
               size="lg"
               scale={supabaseAvgScore != null ? '10' : '100'}
               comparisonScore={supabaseAvgScore != null ? supabasePosAverage : positionAverageScore}
-              comparisonLabel={`Promedio ${posKey || 'posición'}`}
+              comparisonLabel={`Promedio ${supabaseDetail?.player?.primary_position || posKey || 'posición'}`}
             />
             {subjectiveGroups.length > 0 && (
               <div className="mt-6 pt-5 border-t border-apple-gray-100 dark:border-apple-gray-700/50">
@@ -1381,33 +1427,54 @@ export default function PlayerDetailPage() {
             {/* GENERAL TAB */}
             {activeTab === 'General' && (
               <div className="space-y-6 animate-fade-in" id="tab-content-general">
-                {/* Key info cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-gradient-to-br from-apple-gray-50 to-white dark:from-apple-gray-800/50 dark:to-apple-gray-800 rounded-xl p-4 border border-apple-gray-100 dark:border-apple-gray-700">
-                    <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mb-1">Partidos</p>
-                    <p className="text-2xl font-bold text-apple-gray-800 dark:text-white tabular-nums">
-                      {player['Partidos jugados'] || '—'}
-                    </p>
-                  </div>
-                  <div className="bg-gradient-to-br from-apple-gray-50 to-white dark:from-apple-gray-800/50 dark:to-apple-gray-800 rounded-xl p-4 border border-apple-gray-100 dark:border-apple-gray-700">
-                    <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mb-1">Minutos</p>
-                    <p className="text-2xl font-bold text-apple-gray-800 dark:text-white tabular-nums">
-                      {player.minutesPlayed?.toLocaleString() || '—'}
-                    </p>
-                  </div>
-                  <div className="bg-gradient-to-br from-apple-gray-50 to-white dark:from-apple-gray-800/50 dark:to-apple-gray-800 rounded-xl p-4 border border-apple-gray-100 dark:border-apple-gray-700">
-                    <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mb-1">Valor</p>
-                    <p className="text-2xl font-bold text-brand-green tabular-nums">
-                      {player.marketValueFormatted || '—'}
-                    </p>
-                  </div>
-                  <div className="bg-gradient-to-br from-apple-gray-50 to-white dark:from-apple-gray-800/50 dark:to-apple-gray-800 rounded-xl p-4 border border-apple-gray-100 dark:border-apple-gray-700">
-                    <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mb-1">Contrato</p>
-                    <p className={`text-2xl font-bold tabular-nums ${contractColor}`}>
-                      {player['Vencimiento contrato']?.slice(-4) || '—'}
-                    </p>
-                  </div>
-                </div>
+                {/* Key info cards — use Supabase match stats when available */}
+                {(() => {
+                  const activeSeasonScore = supabaseDetail?.allSeasonScores.find(s => s.position === (selectedPosition ?? supabaseDetail?.player?.primary_position))
+                  const totalGoals = activeSeasonScore?.total_goals ?? null
+                  const totalAssists = activeSeasonScore?.total_assists ?? null
+                  const matchesPlayed = activeSeasonScore?.matches_played ?? null
+
+                  return (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-gradient-to-br from-apple-gray-50 to-white dark:from-apple-gray-800/50 dark:to-apple-gray-800 rounded-xl p-4 border border-apple-gray-100 dark:border-apple-gray-700">
+                        <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mb-1">Partidos</p>
+                        <p className="text-2xl font-bold text-apple-gray-800 dark:text-white tabular-nums">
+                          {matchesPlayed ?? player['Partidos jugados'] ?? '—'}
+                        </p>
+                        {matchesPlayed != null && <p className="text-2xs text-apple-gray-400 mt-0.5">temporada actual</p>}
+                      </div>
+                      <div className="bg-gradient-to-br from-apple-gray-50 to-white dark:from-apple-gray-800/50 dark:to-apple-gray-800 rounded-xl p-4 border border-apple-gray-100 dark:border-apple-gray-700">
+                        {totalGoals != null ? (
+                          <>
+                            <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mb-1">Goles / Asist</p>
+                            <p className="text-2xl font-bold text-apple-gray-800 dark:text-white tabular-nums">
+                              {totalGoals} / {totalAssists ?? 0}
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mb-1">Minutos</p>
+                            <p className="text-2xl font-bold text-apple-gray-800 dark:text-white tabular-nums">
+                              {player.minutesPlayed?.toLocaleString() || '—'}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                      <div className="bg-gradient-to-br from-apple-gray-50 to-white dark:from-apple-gray-800/50 dark:to-apple-gray-800 rounded-xl p-4 border border-apple-gray-100 dark:border-apple-gray-700">
+                        <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mb-1">Valor</p>
+                        <p className="text-2xl font-bold text-brand-green tabular-nums">
+                          {player.marketValueFormatted || '—'}
+                        </p>
+                      </div>
+                      <div className="bg-gradient-to-br from-apple-gray-50 to-white dark:from-apple-gray-800/50 dark:to-apple-gray-800 rounded-xl p-4 border border-apple-gray-100 dark:border-apple-gray-700">
+                        <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mb-1">Contrato</p>
+                        <p className={`text-2xl font-bold tabular-nums ${contractColor}`}>
+                          {player['Vencimiento contrato']?.slice(-4) || '—'}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })()}
 
                 {/* Personal info */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1468,7 +1535,18 @@ export default function PlayerDetailPage() {
                           {' '}es un <span className="font-medium">{displayPosition}</span>
                           {' '}de <span className="font-medium">{player.Edad} años</span>
                           {player.Liga && <> que juega en <span className="font-medium">{player.Liga}</span></>}.
-                          {player.ggScore !== null && (
+                          {supabaseAvgScore != null ? (
+                            <> Su Score GG de <span className="font-bold text-brand-green">{supabaseAvgScore.toFixed(1)}</span>/10
+                            {supabasePosAverage && supabaseAvgScore > supabasePosAverage ? (
+                              <> está <span className="text-emerald-600 font-medium">por encima</span> del promedio de su posición ({supabasePosAverage.toFixed(1)})</>
+                            ) : supabasePosAverage && supabaseAvgScore < supabasePosAverage ? (
+                              <> está por debajo del promedio de su posición ({supabasePosAverage.toFixed(1)})</>
+                            ) : null}.
+                            {supabaseMatches.length > 0 && (
+                              <> Basado en <span className="font-medium">{supabaseMatches.length} partidos</span> analizados.</>
+                            )}
+                            </>
+                          ) : player.ggScore !== null ? (
                             <> Su Score GG de <span className="font-bold text-brand-green">{player.ggScore.toFixed(1)}</span>
                             {positionAverageScore && player.ggScore > positionAverageScore ? (
                               <> está <span className="text-emerald-600 font-medium">por encima</span> del promedio de su posición</>
@@ -1476,7 +1554,7 @@ export default function PlayerDetailPage() {
                               <> está por debajo del promedio de su posición</>
                             ) : null}.
                             </>
-                          )}
+                          ) : null}
                           {player.contractStatus === 'critical' && (
                             <> <span className="text-orange-500 font-medium">Contrato por vencer pronto.</span></>
                           )}
@@ -1579,9 +1657,55 @@ export default function PlayerDetailPage() {
                   <p className="text-center text-xs text-apple-gray-500 dark:text-apple-gray-400 mt-1">{displayPosition}</p>
                 </div>
 
-                {/* Score Evolution Chart */}
+                {/* Score Evolution Chart - prominent when Supabase data available */}
                 {supabaseMatches.length > 0 && (
                   <div className="mt-6">
+                    <h3 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-3">
+                      Evolución del Score
+                    </h3>
+
+                    {/* Season stats bar */}
+                    {(() => {
+                      const activeSeasonScore = supabaseDetail?.allSeasonScores.find(s => s.position === (selectedPosition ?? supabaseDetail?.player?.primary_position))
+                      if (!activeSeasonScore) return null
+                      return (
+                        <div className="flex flex-wrap gap-4 mb-4 p-3 bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl">
+                          <div className="text-center">
+                            <p className="text-lg font-bold text-brand-green">{activeSeasonScore.avg_score?.toFixed(1)}</p>
+                            <p className="text-2xs text-apple-gray-400">Score</p>
+                          </div>
+                          {activeSeasonScore.avg_rating && (
+                            <div className="text-center">
+                              <p className="text-lg font-bold text-apple-gray-800 dark:text-white">{activeSeasonScore.avg_rating.toFixed(1)}</p>
+                              <p className="text-2xs text-apple-gray-400">Rating</p>
+                            </div>
+                          )}
+                          <div className="text-center">
+                            <p className="text-lg font-bold text-apple-gray-800 dark:text-white">{activeSeasonScore.matches_played}</p>
+                            <p className="text-2xs text-apple-gray-400">Partidos</p>
+                          </div>
+                          {activeSeasonScore.total_goals != null && (
+                            <div className="text-center">
+                              <p className="text-lg font-bold text-apple-gray-800 dark:text-white">{activeSeasonScore.total_goals}</p>
+                              <p className="text-2xs text-apple-gray-400">Goles</p>
+                            </div>
+                          )}
+                          {activeSeasonScore.total_assists != null && (
+                            <div className="text-center">
+                              <p className="text-lg font-bold text-apple-gray-800 dark:text-white">{activeSeasonScore.total_assists}</p>
+                              <p className="text-2xs text-apple-gray-400">Asistencias</p>
+                            </div>
+                          )}
+                          {activeSeasonScore.percentile != null && (
+                            <div className="text-center">
+                              <p className="text-lg font-bold text-emerald-500">Top {(100 - activeSeasonScore.percentile).toFixed(0)}%</p>
+                              <p className="text-2xs text-apple-gray-400">Percentil</p>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
+
                     <ScoreEvolutionChart
                       matches={supabaseMatches}
                       avgScore={supabaseAvgScore}
@@ -1611,6 +1735,30 @@ export default function PlayerDetailPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
                         </div>
+                        {supabaseMatches.length > 0 ? (
+                          <div className="space-y-2">
+                            {(() => {
+                              const avgRating = supabaseMatches.reduce((s, m) => s + (m.rating ?? 0), 0) / supabaseMatches.filter(m => m.rating).length
+                              const avgPass = supabaseMatches.reduce((s, m) => s + ((m as any).passes_accuracy ?? 0), 0) / supabaseMatches.filter(m => (m as any).passes_accuracy).length
+                              return (
+                                <>
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-apple-gray-500 dark:text-apple-gray-400">Rating</span>
+                                    <span className="font-semibold text-apple-gray-800 dark:text-white tabular-nums">{isNaN(avgRating) ? '—' : avgRating.toFixed(1)}</span>
+                                  </div>
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-apple-gray-500 dark:text-apple-gray-400">Score</span>
+                                    <span className="font-semibold text-brand-green tabular-nums">{supabaseAvgScore?.toFixed(1) ?? '—'}</span>
+                                  </div>
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-apple-gray-500 dark:text-apple-gray-400">Pases %</span>
+                                    <span className="font-semibold text-apple-gray-800 dark:text-white tabular-nums">{isNaN(avgPass) ? '—' : avgPass.toFixed(0) + '%'}</span>
+                                  </div>
+                                </>
+                              )
+                            })()}
+                          </div>
+                        ) : (
                         <div className="space-y-2">
                           {(DISPLAY_METRICS[posKey] ?? DISPLAY_METRICS['_default']).slice(2, 5).map((metric: string) => {
                             const val = player[metric]
@@ -1625,6 +1773,7 @@ export default function PlayerDetailPage() {
                             )
                           })}
                         </div>
+                        )}
                         <p className="text-2xs text-brand-green mt-3 group-hover:underline">Ver radar completo →</p>
                       </button>
 
@@ -1697,17 +1846,27 @@ export default function PlayerDetailPage() {
 
                       {/* Preview Evolución */}
                       <button
-                        onClick={() => setActiveTab('Evolución')}
+                        onClick={() => setActiveTab('Rendimiento evolutivo')}
                         className="group bg-white dark:bg-apple-gray-800/50 rounded-xl p-4 border border-apple-gray-100 dark:border-apple-gray-700 hover:border-brand-green dark:hover:border-brand-green transition-all hover:shadow-lg text-left"
                       >
                         <div className="flex items-center justify-between mb-3">
-                          <span className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">Evolución</span>
+                          <span className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">Rendimiento</span>
                           <svg className="w-4 h-4 text-apple-gray-400 group-hover:text-brand-green transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
                         </div>
                         <div className="text-center py-2">
-                          {player.ggScore !== null ? (
+                          {supabaseAvgScore != null ? (
+                            <>
+                              <p className="text-3xl font-bold text-brand-green">{supabaseAvgScore.toFixed(1)}<span className="text-lg text-apple-gray-400">/10</span></p>
+                              <p className="text-xs text-apple-gray-400 mt-1">Score · {supabaseMatches.length} partidos</p>
+                              {supabasePosAverage && (
+                                <p className={`text-xs mt-2 font-medium ${supabaseAvgScore >= supabasePosAverage ? 'text-emerald-500' : 'text-orange-500'}`}>
+                                  {supabaseAvgScore >= supabasePosAverage ? '↑' : '↓'} {Math.abs(supabaseAvgScore - supabasePosAverage).toFixed(1)} vs promedio
+                                </p>
+                              )}
+                            </>
+                          ) : player.ggScore !== null ? (
                             <>
                               <p className="text-3xl font-bold text-apple-gray-800 dark:text-white">{player.ggScore.toFixed(1)}</p>
                               <p className="text-xs text-apple-gray-400 mt-1">Score GG actual</p>
@@ -1801,26 +1960,171 @@ export default function PlayerDetailPage() {
                   </div>
                 </div>
                 <MarketValueChart data={playerMarketValueHistory} playerName={player.Jugador} />
+
+                {/* Transfer history from API-Football */}
+                {playerTransfers.length > 0 && (
+                  <div className="mt-8">
+                    <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-1">
+                      Historial de Traspasos
+                    </h3>
+                    <p className="text-xs text-apple-gray-400 mb-4">
+                      Movimientos registrados en API-Football
+                    </p>
+                    <div className="relative">
+                      <div className="absolute left-4 top-0 bottom-0 w-px bg-apple-gray-200 dark:bg-apple-gray-700" />
+                      <div className="space-y-3">
+                        {playerTransfers
+                          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                          .map((transfer, idx) => {
+                            const date = new Date(transfer.date)
+                            const typeLabel = transfer.type === 'Loan' ? 'Préstamo'
+                              : transfer.type === 'N/A' ? 'Transferencia'
+                              : transfer.type === 'Free' ? 'Libre'
+                              : transfer.type
+                            return (
+                              <div key={idx} className="relative pl-10">
+                                <div className="absolute left-2 top-3 w-4 h-4 rounded-full border-2 bg-brand-green/10 border-brand-green/30 flex items-center justify-center">
+                                  <div className="w-2 h-2 rounded-full bg-brand-green" />
+                                </div>
+                                <div className="p-4 rounded-xl border border-apple-gray-100 dark:border-apple-gray-700/50 bg-apple-gray-50/50 dark:bg-apple-gray-800/30">
+                                  <div className="flex items-center justify-between gap-3 mb-2">
+                                    <span className="text-xs text-apple-gray-500">
+                                      {date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                    </span>
+                                    <span className="text-2xs font-medium px-2 py-0.5 rounded-full bg-brand-green/10 text-brand-green border border-brand-green/20">
+                                      {typeLabel}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-sm">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      {transfer.teams.out.logo && (
+                                        <img src={transfer.teams.out.logo} alt="" className="w-5 h-5 object-contain" />
+                                      )}
+                                      <span className="text-apple-gray-500 truncate">{transfer.teams.out.name}</span>
+                                    </div>
+                                    <svg className="w-4 h-4 text-apple-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                    </svg>
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      {transfer.teams.in.logo && (
+                                        <img src={transfer.teams.in.logo} alt="" className="w-5 h-5 object-contain" />
+                                      )}
+                                      <span className="font-medium text-apple-gray-800 dark:text-white truncate">{transfer.teams.in.name}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {transfersLoading && (
+                  <div className="mt-6 flex items-center justify-center py-4">
+                    <div className="animate-spin w-5 h-5 border-2 border-brand-green border-t-transparent rounded-full" />
+                    <span className="ml-2 text-xs text-apple-gray-400">Cargando traspasos...</span>
+                  </div>
+                )}
               </div>
             )}
 
             {/* EVOLUCIÓN TAB */}
             {activeTab === 'Rendimiento evolutivo' && source === 'interno' && (
               <div className="animate-fade-in" id="tab-content-evolution">
-                <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-1">
-                  Rendimiento por partido
-                </h3>
-                <p className="text-xs text-apple-gray-400 mb-5">
-                  La línea punteada indica el promedio del jugador
-                </p>
-                {playerJugadorSK ? (
-                  <EvolutionChart evolution={evolution} playerSK={playerJugadorSK} />
+                {supabaseMatches.length > 0 ? (
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-1">
+                        Evolución del Score
+                      </h3>
+                      <p className="text-xs text-apple-gray-400 mb-4">
+                        Score por partido · La línea punteada indica el promedio
+                      </p>
+                      <ScoreEvolutionChart
+                        matches={supabaseMatches}
+                        avgScore={supabaseAvgScore}
+                      />
+                    </div>
+
+                    {/* Match history table */}
+                    <div>
+                      <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-3">
+                        Historial de Partidos
+                      </h3>
+                      <div className="overflow-x-auto rounded-xl border border-apple-gray-100 dark:border-apple-gray-700">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-apple-gray-50 dark:bg-apple-gray-800/50">
+                              <th className="text-left px-3 py-2 text-2xs font-semibold text-apple-gray-500 uppercase">Fecha</th>
+                              <th className="text-left px-3 py-2 text-2xs font-semibold text-apple-gray-500 uppercase">Rival</th>
+                              <th className="text-center px-3 py-2 text-2xs font-semibold text-apple-gray-500 uppercase">Resultado</th>
+                              <th className="text-center px-3 py-2 text-2xs font-semibold text-apple-gray-500 uppercase">Min</th>
+                              <th className="text-center px-3 py-2 text-2xs font-semibold text-apple-gray-500 uppercase">Goles</th>
+                              <th className="text-center px-3 py-2 text-2xs font-semibold text-apple-gray-500 uppercase">Asist</th>
+                              <th className="text-center px-3 py-2 text-2xs font-semibold text-apple-gray-500 uppercase">Rating</th>
+                              <th className="text-center px-3 py-2 text-2xs font-semibold text-apple-gray-500 uppercase">Score</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {[...supabaseMatches].reverse().slice(0, 20).map((match) => {
+                              const fixture = (match as any).fixture
+                              const date = fixture?.date ? new Date(fixture.date) : null
+                              const isHome = match.team_id === fixture?.home_team_id
+                              const rivalName = isHome ? fixture?.away_team?.name : fixture?.home_team?.name
+                              const scoreHome = fixture?.score_home
+                              const scoreAway = fixture?.score_away
+                              const result = scoreHome != null && scoreAway != null ? `${scoreHome}-${scoreAway}` : '—'
+                              const scoreColor = match.match_score != null
+                                ? match.match_score >= 8 ? 'text-brand-green' : match.match_score >= 6 ? 'text-emerald-500' : match.match_score >= 4.5 ? 'text-amber-500' : 'text-red-500'
+                                : ''
+                              return (
+                                <tr key={match.fixture_id} className="border-t border-apple-gray-50 dark:border-apple-gray-800/50 hover:bg-apple-gray-50/50 dark:hover:bg-apple-gray-800/30">
+                                  <td className="px-3 py-2 text-apple-gray-500 tabular-nums">
+                                    {date ? date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }) : '—'}
+                                  </td>
+                                  <td className="px-3 py-2 font-medium text-apple-gray-800 dark:text-white truncate max-w-[140px]">
+                                    {rivalName ?? '—'}
+                                  </td>
+                                  <td className="px-3 py-2 text-center font-semibold text-apple-gray-700 dark:text-apple-gray-300 tabular-nums">{result}</td>
+                                  <td className="px-3 py-2 text-center text-apple-gray-500 tabular-nums">{match.minutes ?? '—'}</td>
+                                  <td className="px-3 py-2 text-center tabular-nums">{match.goals || '—'}</td>
+                                  <td className="px-3 py-2 text-center tabular-nums">{match.assists || '—'}</td>
+                                  <td className="px-3 py-2 text-center text-apple-gray-600 dark:text-apple-gray-400 tabular-nums">{match.rating?.toFixed(1) ?? '—'}</td>
+                                  <td className={`px-3 py-2 text-center font-bold tabular-nums ${scoreColor}`}>
+                                    {match.match_score?.toFixed(1) ?? '—'}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      {supabaseMatches.length > 20 && (
+                        <p className="text-xs text-apple-gray-400 mt-2 text-center">
+                          Mostrando últimos 20 de {supabaseMatches.length} partidos
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 ) : (
-                  <EmptyState
-                    title="Sin datos de evolución"
-                    description="No se encontraron datos de evolución para este jugador."
-                    icon="search"
-                  />
+                  <>
+                    <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-1">
+                      Rendimiento por partido
+                    </h3>
+                    <p className="text-xs text-apple-gray-400 mb-5">
+                      La línea punteada indica el promedio del jugador
+                    </p>
+                    {playerJugadorSK ? (
+                      <EvolutionChart evolution={evolution} playerSK={playerJugadorSK} />
+                    ) : (
+                      <EmptyState
+                        title="Sin datos de evolución"
+                        description="No se encontraron datos de evolución para este jugador."
+                        icon="search"
+                      />
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -1828,6 +2132,58 @@ export default function PlayerDetailPage() {
             {/* MÉTRICAS TAB - Radar + Métricas detalladas */}
             {activeTab === 'Métricas' && (
               <div className="animate-fade-in" id="tab-content-metrics">
+                {/* ─── Supabase-powered advanced metrics (shown first when available) ─── */}
+                {supabaseDetail && supabaseMatches.length > 0 && (
+                  <div className="space-y-6 mb-8">
+                    {/* Score evolution */}
+                    <div className="bg-apple-gray-50/30 dark:bg-apple-gray-800/20 rounded-2xl p-5">
+                      <ScoreEvolutionChart
+                        matches={supabaseMatches}
+                        avgScore={supabaseAvgScore}
+                      />
+                    </div>
+
+                    {/* Radar chart vs league average */}
+                    {(selectedPosition ?? supabaseDetail.player.primary_position) && (
+                      <div className="bg-apple-gray-50/30 dark:bg-apple-gray-800/20 rounded-2xl p-5">
+                        <MetricsRadarChart
+                          matches={supabaseMatches}
+                          position={(selectedPosition ?? supabaseDetail.player.primary_position) as Position}
+                          metricAverages={metricAverages}
+                          playerLeagueId={supabaseDetail.player.team?.league_id ?? 0}
+                          leagues={leagues}
+                        />
+                      </div>
+                    )}
+
+                    {/* Bar comparison with analysis */}
+                    {(selectedPosition ?? supabaseDetail.player.primary_position) && (
+                      <div className="bg-apple-gray-50/30 dark:bg-apple-gray-800/20 rounded-2xl p-5">
+                        <MetricsBarComparison
+                          matches={supabaseMatches}
+                          position={(selectedPosition ?? supabaseDetail.player.primary_position) as Position}
+                          metricAverages={metricAverages}
+                          playerLeagueId={supabaseDetail.player.team?.league_id ?? 0}
+                          leagues={leagues}
+                        />
+                      </div>
+                    )}
+
+                    {/* Position field map */}
+                    {(selectedPosition ?? supabaseDetail.player.primary_position) && (
+                      <div className="bg-apple-gray-50/30 dark:bg-apple-gray-800/20 rounded-2xl p-5">
+                        <h3 className="text-sm font-semibold text-apple-gray-800 dark:text-white mb-3">
+                          Posición en el campo
+                        </h3>
+                        <PositionFieldMap position={(selectedPosition ?? supabaseDetail.player.primary_position) as Position} />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Old Google Sheets metrics — hidden when Supabase data available */}
+                {!(supabaseDetail && supabaseMatches.length > 0) && (
+                <>
                 {/* Header con controles */}
                 <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
                   <div>
@@ -1998,6 +2354,8 @@ export default function PlayerDetailPage() {
                     Posición no reconocida para mostrar métricas específicas.
                   </p>
                 )}
+                </>
+                )}
               </div>
             )}
 
@@ -2013,16 +2371,39 @@ export default function PlayerDetailPage() {
                   </p>
                 </div>
 
+                {injuriesLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin w-6 h-6 border-2 border-brand-green border-t-transparent rounded-full" />
+                    <span className="ml-3 text-sm text-apple-gray-500">Cargando historial médico...</span>
+                  </div>
+                ) : (
                 <div className="grid md:grid-cols-2 gap-6">
                   {/* Professional Body Map */}
                   <div className="bg-gradient-to-b from-apple-gray-50 to-white dark:from-apple-gray-800/50 dark:to-apple-gray-900/30 rounded-2xl p-6 border border-apple-gray-100 dark:border-apple-gray-700/50">
                     <h4 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-5 flex items-center gap-2">
-                      <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                      <span className={`w-2 h-2 rounded-full animate-pulse ${playerInjuries.some(i => !i.end || new Date(i.end) > new Date()) ? 'bg-red-500' : 'bg-green-500'}`}></span>
                       Mapa Corporal
                     </h4>
                     <div className="py-2">
                       <BodyMapSVG
-                        injuries={[]}
+                        injuries={playerInjuries
+                          .filter(i => !i.end || new Date(i.end) > new Date())
+                          .map(i => {
+                            const reason = i.type.toLowerCase()
+                            const zone = reason.includes('knee') ? 'knee_right' :
+                              reason.includes('hamstring') || reason.includes('thigh') ? 'thigh_right' :
+                              reason.includes('ankle') ? 'ankle_right' :
+                              reason.includes('calf') ? 'calf_right' :
+                              reason.includes('groin') || reason.includes('adductor') ? 'hip_right' :
+                              reason.includes('shoulder') ? 'shoulder_right' :
+                              reason.includes('back') || reason.includes('lumbar') ? 'lower_back' :
+                              reason.includes('head') || reason.includes('concussion') ? 'head' :
+                              reason.includes('foot') ? 'foot_right' :
+                              reason.includes('hip') ? 'hip_right' :
+                              reason.includes('muscle') ? 'thigh_right' :
+                              'torso_front'
+                            return { zone, severity: 'moderada' as const, label: i.type }
+                          })}
                         interactive={false}
                         className="w-full"
                       />
@@ -2030,10 +2411,17 @@ export default function PlayerDetailPage() {
 
                     {/* Status badge */}
                     <div className="flex justify-center mt-4">
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
-                        Sin lesiones activas
-                      </span>
+                      {playerInjuries.some(i => !i.end || new Date(i.end) > new Date()) ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                          <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                          Lesión activa
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                          <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
+                          Sin lesiones activas
+                        </span>
+                      )}
                     </div>
 
                     {/* Legend */}
@@ -2065,33 +2453,98 @@ export default function PlayerDetailPage() {
                       Historial de Lesiones
                     </h4>
 
-                    <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-6 text-center border border-dashed border-apple-gray-200 dark:border-apple-gray-700">
-                      <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-gradient-to-br from-apple-gray-100 to-apple-gray-50 dark:from-apple-gray-700 dark:to-apple-gray-800 flex items-center justify-center">
-                        <svg className="w-7 h-7 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                        </svg>
+                    {playerInjuries.length === 0 ? (
+                      <div className="bg-apple-gray-50/50 dark:bg-apple-gray-800/30 rounded-xl p-6 text-center border border-dashed border-apple-gray-200 dark:border-apple-gray-700">
+                        <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-gradient-to-br from-green-100 to-green-50 dark:from-green-900/30 dark:to-green-900/20 flex items-center justify-center">
+                          <svg className="w-7 h-7 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <p className="text-sm font-medium text-green-600 dark:text-green-400">
+                          Sin historial de lesiones
+                        </p>
+                        <p className="text-xs text-apple-gray-400 mt-1.5 max-w-xs mx-auto">
+                          {apiPlayerId ? 'No se encontraron lesiones registradas para este jugador' : 'Vinculá el jugador con API-Football para ver su historial médico'}
+                        </p>
                       </div>
-                      <p className="text-sm font-medium text-apple-gray-600 dark:text-apple-gray-300">
-                        Sin historial de lesiones
-                      </p>
-                      <p className="text-xs text-apple-gray-400 mt-1.5 max-w-xs mx-auto">
-                        Las lesiones registradas aparecerán aquí con detalle de zona afectada, duración y tratamiento
-                      </p>
-                    </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {playerInjuries
+                          .sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime())
+                          .map((injury, idx) => {
+                            const startDate = new Date(injury.start)
+                            const endDate = injury.end ? new Date(injury.end) : null
+                            const isActive = !endDate || endDate > new Date()
+                            const daysOut = endDate
+                              ? Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
+                              : Math.ceil((Date.now() - startDate.getTime()) / (1000 * 60 * 60 * 24))
 
-                    {/* Quick Stats placeholder */}
+                            return (
+                              <div
+                                key={idx}
+                                className={`p-4 rounded-xl border transition-all ${
+                                  isActive
+                                    ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800/30'
+                                    : 'bg-apple-gray-50/50 dark:bg-apple-gray-800/30 border-apple-gray-100 dark:border-apple-gray-700/50'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      {isActive && (
+                                        <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                                      )}
+                                      <span className={`text-sm font-semibold ${isActive ? 'text-red-600 dark:text-red-400' : 'text-apple-gray-800 dark:text-white'}`}>
+                                        {injury.type}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-3 text-xs text-apple-gray-500">
+                                      <span>
+                                        {startDate.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                        {endDate && (
+                                          <> — {endDate.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}</>
+                                        )}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <p className={`text-lg font-bold tabular-nums ${isActive ? 'text-red-500' : 'text-apple-gray-700 dark:text-apple-gray-300'}`}>
+                                      {daysOut}
+                                    </p>
+                                    <p className="text-2xs text-apple-gray-400">días</p>
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })}
+                      </div>
+                    )}
+
+                    {/* Quick Stats */}
                     <div className="grid grid-cols-2 gap-3 mt-4">
                       <div className="bg-white dark:bg-apple-gray-800/50 rounded-xl p-4 text-center border border-apple-gray-100 dark:border-apple-gray-700/50">
-                        <p className="text-2xl font-bold text-green-600 dark:text-green-400">0</p>
+                        <p className={`text-2xl font-bold ${playerInjuries.length === 0 ? 'text-green-600 dark:text-green-400' : 'text-orange-500'}`}>
+                          {playerInjuries.filter(i => {
+                            const y = new Date(i.start).getFullYear()
+                            return y === new Date().getFullYear()
+                          }).length}
+                        </p>
                         <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mt-1">Lesiones este año</p>
                       </div>
                       <div className="bg-white dark:bg-apple-gray-800/50 rounded-xl p-4 text-center border border-apple-gray-100 dark:border-apple-gray-700/50">
-                        <p className="text-2xl font-bold text-apple-gray-800 dark:text-white">0</p>
-                        <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mt-1">Días perdidos</p>
+                        <p className="text-2xl font-bold text-apple-gray-800 dark:text-white">
+                          {playerInjuries.reduce((total, i) => {
+                            const start = new Date(i.start)
+                            const end = i.end ? new Date(i.end) : new Date()
+                            return total + Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+                          }, 0)}
+                        </p>
+                        <p className="text-2xs text-apple-gray-500 uppercase tracking-wider mt-1">Días perdidos total</p>
                       </div>
                     </div>
                   </div>
                 </div>
+                )}
               </div>
             )}
 

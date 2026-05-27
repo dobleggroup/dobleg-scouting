@@ -1058,15 +1058,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           return { ...enriched, jugadorSK: jsk ?? '' }
         })
 
-        // Link monitoring players to seguimiento metrics for ggScore
-        // Use combined external + internal for CONSISTENT scoring across all sources
-        const monitoring = linkMonitoringToMetrics(
-          raw.monitoring,
-          raw.seguimientoMetrics,
-          [...external, ...internal],  // All players for scoring normalization
-          internal,  // Internal only for comparison averages
-          tmMap
-        )
+        const monitoring: never[] = []
 
         // Compute position averages for relative score coloring
         const positionGroups: Record<string, number[]> = {}

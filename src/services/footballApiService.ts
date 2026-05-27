@@ -178,3 +178,132 @@ export function groupFixturesByDate(fixtures: AgencyFixture[]): Map<string, Agen
   return groups
 }
 
+// ─── PLAYER ID LOOKUP ────────────────────────────────────────────────────────
+
+const PLAYER_ID_CACHE_KEY = 'dg-playerid-cache'
+const PLAYER_ID_CACHE_TTL = 7 * 24 * 60 * 60 * 1000
+
+export async function searchApiPlayerId(playerName: string, teamId: number): Promise<number | null> {
+  if (!API_KEY) return null
+
+  const cacheKey = `${PLAYER_ID_CACHE_KEY}:${playerName}:${teamId}`
+  try {
+    const raw = localStorage.getItem(cacheKey)
+    if (raw) {
+      const cached = JSON.parse(raw)
+      if (Date.now() - cached.timestamp < PLAYER_ID_CACHE_TTL) return cached.data
+    }
+  } catch { /* ignore */ }
+
+  try {
+    const res = await apiFetch<Array<{ player: { id: number; name: string } }>>('/players/squads', { team: String(teamId) })
+    const squad = res.response?.[0] as any
+    if (!squad?.players) return null
+
+    const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    const target = normalize(playerName)
+
+    let match: number | null = null
+    for (const p of squad.players) {
+      const name = normalize(p.name ?? '')
+      if (name === target) { match = p.id; break }
+      const targetParts = target.split(' ')
+      const nameParts = name.split(' ')
+      const targetLast = targetParts[targetParts.length - 1]
+      const nameLast = nameParts[nameParts.length - 1]
+      if (targetLast === nameLast && targetParts[0]?.[0] === nameParts[0]?.[0]) {
+        match = p.id
+      }
+    }
+
+    try {
+      localStorage.setItem(cacheKey, JSON.stringify({ data: match, timestamp: Date.now() }))
+    } catch { /* quota */ }
+    return match
+  } catch {
+    return null
+  }
+}
+
+// ─── INJURIES ───────────────────────────────────────────────────────────────
+
+export interface PlayerInjury {
+  player: { id: number; name: string; photo: string }
+  team: { id: number; name: string; logo: string }
+  fixture: { id: number; date: string } | null
+  league: { name: string; country: string; flag: string | null } | null
+  type: string
+  reason: string
+}
+
+export interface PlayerSidelined {
+  type: string
+  start: string
+  end: string | null
+}
+
+const INJURY_CACHE_KEY = 'dg-injuries-cache'
+const INJURY_CACHE_TTL = 12 * 60 * 60 * 1000
+
+export async function fetchPlayerInjuries(playerId: number): Promise<PlayerSidelined[]> {
+  if (!API_KEY) return []
+
+  const cacheKey = `${INJURY_CACHE_KEY}:${playerId}`
+  try {
+    const raw = localStorage.getItem(cacheKey)
+    if (raw) {
+      const cached = JSON.parse(raw)
+      if (Date.now() - cached.timestamp < INJURY_CACHE_TTL) return cached.data
+    }
+  } catch { /* ignore */ }
+
+  try {
+    const res = await apiFetch<PlayerSidelined[]>('/sidelined', { player: String(playerId) })
+    const injuries = res.response ?? []
+    try {
+      localStorage.setItem(cacheKey, JSON.stringify({ data: injuries, timestamp: Date.now() }))
+    } catch { /* quota */ }
+    return injuries
+  } catch {
+    return []
+  }
+}
+
+// ─── TRANSFERS ──────────────────────────────────────────────────────────────
+
+export interface PlayerTransfer {
+  date: string
+  type: string
+  teams: {
+    in: { id: number; name: string; logo: string }
+    out: { id: number; name: string; logo: string }
+  }
+}
+
+const TRANSFER_CACHE_KEY = 'dg-transfers-cache'
+const TRANSFER_CACHE_TTL = 24 * 60 * 60 * 1000
+
+export async function fetchPlayerTransfers(playerId: number): Promise<PlayerTransfer[]> {
+  if (!API_KEY) return []
+
+  const cacheKey = `${TRANSFER_CACHE_KEY}:${playerId}`
+  try {
+    const raw = localStorage.getItem(cacheKey)
+    if (raw) {
+      const cached = JSON.parse(raw)
+      if (Date.now() - cached.timestamp < TRANSFER_CACHE_TTL) return cached.data
+    }
+  } catch { /* ignore */ }
+
+  try {
+    const res = await apiFetch<Array<{ player: any; update: string; transfers: PlayerTransfer[] }>>('/transfers', { player: String(playerId) })
+    const transfers = res.response?.[0]?.transfers ?? []
+    try {
+      localStorage.setItem(cacheKey, JSON.stringify({ data: transfers, timestamp: Date.now() }))
+    } catch { /* quota */ }
+    return transfers
+  } catch {
+    return []
+  }
+}
+

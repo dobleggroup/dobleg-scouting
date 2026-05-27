@@ -7,10 +7,14 @@ serve(async (req) => {
   const results = { processed: 0, inserted: 0, errors: [] as string[] };
 
   let leagueIds: number[] | undefined;
+  let fromDateOverride: string | undefined;
   try {
     const body = await req.json().catch(() => ({}));
     if (body.league_ids && Array.isArray(body.league_ids)) {
       leagueIds = body.league_ids;
+    }
+    if (body.from_date && typeof body.from_date === 'string') {
+      fromDateOverride = body.from_date;
     }
   } catch { /* empty body is fine */ }
 
@@ -35,9 +39,10 @@ serve(async (req) => {
 
     for (const league of leagues) {
       try {
-        const fromDate = league.last_synced_at
-          ? new Date(league.last_synced_at).toISOString().split('T')[0]
-          : new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0];
+        const fromDate = fromDateOverride
+          ?? (league.last_synced_at
+            ? new Date(league.last_synced_at).toISOString().split('T')[0]
+            : new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0]);
 
         const fixtures = await fetchFinishedFixtures(league.id, league.season, fromDate, today);
 

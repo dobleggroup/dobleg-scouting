@@ -8,9 +8,10 @@ interface TrackingWidgetProps {
   playerDbId?: string | null
   playerClub?: string
   playerPosition?: string
+  supabasePlayerId?: number | null
 }
 
-export default function TrackingWidget({ playerName, playerDbId, playerClub, playerPosition }: TrackingWidgetProps) {
+export default function TrackingWidget({ playerName, playerDbId, playerClub, playerPosition, supabasePlayerId }: TrackingWidgetProps) {
   const { user, userDisplayName } = useAuth()
   const [record, setRecord] = useState<ScoutPlayer | null | undefined>(undefined) // undefined = loading
   const [showPopover, setShowPopover] = useState(false)
@@ -21,8 +22,8 @@ export default function TrackingWidget({ playerName, playerDbId, playerClub, pla
   const [justSaved, setJustSaved] = useState(false)
 
   useEffect(() => {
-    fetchScoutPlayerRecord(playerName, playerDbId).then(setRecord)
-  }, [playerName, playerDbId])
+    fetchScoutPlayerRecord(playerName, playerDbId, supabasePlayerId).then(setRecord)
+  }, [playerName, playerDbId, supabasePlayerId])
 
   const inDatos = record?.in_datos_list ?? false
   const inGG = record?.in_scouts_gg_list ?? false
@@ -52,6 +53,7 @@ export default function TrackingWidget({ playerName, playerDbId, playerClub, pla
     const result = await addScoutPlayer(
       {
         full_name: playerName,
+        ...(supabasePlayerId && { supabase_player_id: supabasePlayerId }),
         ...(playerDbId && { player_db_id: playerDbId, player_db_source: 'externo' as const }),
         ...(playerClub && { club: playerClub }),
         ...(playerPosition && { posicion: playerPosition }),

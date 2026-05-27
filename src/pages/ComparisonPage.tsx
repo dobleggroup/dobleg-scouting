@@ -39,7 +39,7 @@ function PlayerSearch({ players, selected, onSelect, color, label, leagues }: Pl
       const entry = scoreLookup.get(key)
       if (entry) return { score: entry.score, scale: '10' }
     }
-    return { score: player.ggScore ?? null, scale: '100' }
+    return { score: null, scale: '10' }
   }
 
   function getDisplayScore(player: EnrichedPlayer): string {

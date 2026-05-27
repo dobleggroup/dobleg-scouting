@@ -40,8 +40,8 @@ export function assignLineRoles(lines: number[]): LineRole[] {
 function mapDefLine(col: number, cols: number[]): Position {
   const sorted = [...cols].sort((a, b) => a - b);
   if (sorted.length === 3) return 'CB';
-  if (col === sorted[0]) return 'LI';
-  if (col === sorted[sorted.length - 1]) return 'LD';
+  if (col === sorted[0]) return 'LD';
+  if (col === sorted[sorted.length - 1]) return 'LI';
   return 'CB';
 }
 
@@ -51,8 +51,8 @@ function mapMidLine(col: number, cols: number[], defLineSize: number): Position 
 
   // 5-man midfield with 3-back: wide players are wing-backs (LD/LI)
   if (n === 5 && defLineSize === 3) {
-    if (col === sorted[0]) return 'LI';
-    if (col === sorted[n - 1]) return 'LD';
+    if (col === sorted[0]) return 'LD';
+    if (col === sorted[n - 1]) return 'LI';
     const mid = Math.floor(n / 2);
     if (col === sorted[mid]) return 'VC';
     return 'VI';

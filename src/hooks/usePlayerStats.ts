@@ -3,12 +3,14 @@ import {
   fetchPlayersList,
   fetchPlayerDetail,
   fetchPositionAverages,
+  fetchPositionMetricAverages,
   fetchLeagues,
+  fetchDistinctAgents,
   fetchPlayerMatchHistory,
   fetchScoreLookup,
   type ScoreLookupEntry,
 } from '@/services/playerStatsService';
-import type { PlayerWithScore, PlayerMatchStat, PositionAverage, LeagueInfo, Position } from '@/types/scoring';
+import type { PlayerWithScore, PlayerMatchStat, PositionAverage, PositionMetricAverages, LeagueInfo, Position } from '@/types/scoring';
 
 const cache = new Map<string, { data: any; timestamp: number }>();
 
@@ -114,6 +116,19 @@ export function usePositionAverages() {
   return { averages, loading };
 }
 
+export function useAgents() {
+  const [agents, setAgents] = useState<string[]>([]);
+
+  useEffect(() => {
+    const cached = getCached<string[]>('agents', 240);
+    if (cached) { setAgents(cached); return; }
+
+    fetchDistinctAgents().then(data => { setAgents(data); setCache('agents', data); });
+  }, []);
+
+  return agents;
+}
+
 export function useLeagues() {
   const [leagues, setLeagues] = useState<LeagueInfo[]>([]);
 
@@ -145,6 +160,22 @@ export function useScoreLookup(): { lookup: Map<string, ScoreLookupEntry>; ready
   }, []);
 
   return { lookup, ready };
+}
+
+export function usePositionMetricAverages() {
+  const [averages, setAverages] = useState<PositionMetricAverages[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const cached = getCached<PositionMetricAverages[]>('posMetricAvg', 240);
+    if (cached) { setAverages(cached); setLoading(false); return; }
+
+    fetchPositionMetricAverages()
+      .then(data => { setAverages(data); setCache('posMetricAvg', data); })
+      .finally(() => setLoading(false));
+  }, []);
+
+  return { metricAverages: averages, loading };
 }
 
 export function usePlayerMatchHistory(playerId: number | null, position?: Position) {

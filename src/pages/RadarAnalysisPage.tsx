@@ -91,7 +91,7 @@ export default function RadarAnalysisPage() {
       const entry = scoreLookup.get(key)
       if (entry) return { score: entry.score, scale: '10' }
     }
-    return { score: player.ggScore ?? null, scale: '100' }
+    return { score: null, scale: '10' }
   }
 
   // TODO: When displaying radar for a player with Supabase data, use API_RADAR_METRICS[positionCode]

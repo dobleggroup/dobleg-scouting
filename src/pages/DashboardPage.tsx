@@ -195,7 +195,7 @@ export default function DashboardPage() {
   function getPlayerScore(player: EnrichedPlayer): { score: number | null; scale: ScoreScale } {
     const entry = scoreLookup.get(normalizeName(player.Jugador))
     if (entry) return { score: entry.score, scale: '10' }
-    return { score: player.ggScore, scale: '100' }
+    return { score: null, scale: '10' }
   }
 
   // Determine whether most players are scored via Supabase (for threshold adaptation)

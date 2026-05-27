@@ -22,6 +22,7 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 DISCOVER_PAGES = int(os.environ.get("DISCOVER_PAGES", "3"))
 STATS_BATCH = int(os.environ.get("STATS_BATCH", "5"))
+SKIP_DISCOVER = os.environ.get("SKIP_DISCOVER", "0") == "1"
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     print("Missing SUPABASE_URL or SUPABASE_SERVICE_KEY")
@@ -74,11 +75,68 @@ def sb_insert(table, data):
     except urllib.error.HTTPError:
         return 0
 
-TOURNAMENTS = {131: 703, 268: 278}
+TOURNAMENTS = {
+    131: 703,     # Primera Nacional Argentina
+    268: 278,     # Uruguay Primera División
+    128: 155,     # Argentina Liga Profesional
+    262: [11620, 11621],  # Liga MX (Clausura, Apertura)
+    234: [11614, 11613],  # Honduras Liga Nacional (Clausura, Apertura)
+}
 ID_OFFSET = 20_000_000
-FETCH_DELAY = 2.0
+FETCH_DELAY = float(os.environ.get("FETCH_DELAY", "2.0"))
+
+SOFA_POSITION_MAP = {
+    "GK": "ARQ",
+    "DC": "CB",
+    "DR": "LD",
+    "DL": "LI",
+    "DM": "VC",
+    "MC": "VI",
+    "AM": "VI",
+    "ML": "EXT",
+    "MR": "EXT",
+    "FC": "DEL",
+    "FL": "EXT",
+    "FR": "EXT",
+}
 
 last_fetch = 0.0
+POSITION_CACHE_FILE = os.path.join(os.path.dirname(__file__), "position_cache.json")
+
+
+def load_position_cache():
+    try:
+        with open(POSITION_CACHE_FILE, "r") as f:
+            raw = json.load(f)
+        cache = {}
+        for k, v in raw.items():
+            if isinstance(v, list) or v is None:
+                cache[int(k)] = v
+            else:
+                cache[int(k)] = None
+
+        return cache
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def save_position_cache(cache):
+    with open(POSITION_CACHE_FILE, "w") as f:
+        json.dump({str(k): v for k, v in cache.items()}, f)
+
+
+def map_raw_positions(raw_positions):
+    """Map raw Sofascore positions array to our position code."""
+    if not raw_positions:
+        return None
+    for pos in raw_positions:
+        mapped = SOFA_POSITION_MAP.get(pos)
+        if mapped:
+            return mapped
+    return None
+
+
+position_cache = load_position_cache()
 
 
 def sofa_id(raw_id):
@@ -110,7 +168,24 @@ def sofa_fetch(path):
     return r.json()
 
 
-# ─── Position mapping ────────────────────────────────────────
+def fetch_player_position(raw_player_id):
+    """Fetch player's natural position from Sofascore profile (cached as raw array)."""
+    if raw_player_id in position_cache:
+        return map_raw_positions(position_cache[raw_player_id])
+
+    try:
+        data = sofa_fetch(f"/player/{raw_player_id}")
+        positions = data.get("player", {}).get("positionsDetailed", [])
+        position_cache[raw_player_id] = positions if positions else None
+        return map_raw_positions(positions)
+    except Exception:
+        pass
+
+    position_cache[raw_player_id] = None
+    return None
+
+
+# ─── Position mapping (fallback) ────────────────────────────
 def parse_formation_lines(formation):
     return [int(x) for x in formation.split("-")]
 
@@ -159,16 +234,16 @@ def map_grid_to_position(formation, grid):
         if n == 3:
             return "CB"
         if col == s[0]:
-            return "LI"
-        if col == s[-1]:
             return "LD"
+        if col == s[-1]:
+            return "LI"
         return "CB"
     elif role == "MID":
         if n == 5 and def_line_size == 3:
             if col == s[0]:
-                return "LI"
-            if col == s[-1]:
                 return "LD"
+            if col == s[-1]:
+                return "LI"
             if col == s[n // 2]:
                 return "VC"
             return "VI"
@@ -209,7 +284,7 @@ def build_synthetic_grid(outfield_index, formation):
 
 
 def fallback_position(pos):
-    m = {"G": "ARQ", "D": "CB", "M": "VC", "F": "DEL"}
+    m = {"G": "ARQ", "D": "CB", "M": "VI", "F": "DEL"}
     return m.get((pos or "").upper())
 
 
@@ -393,14 +468,17 @@ def map_player_stats(p, fixture_id, team_id, position, formation, grid, cards):
     }
 
 
-def upsert_player(p, team_id):
-    sb_upsert("players", {
+def upsert_player(p, team_id, position=None):
+    data = {
         "id": sofa_id(p["player"]["id"]),
         "name": p["player"]["name"],
         "photo": f"https://api.sofascore.com/api/v1/player/{p['player']['id']}/image",
         "current_team_id": team_id,
         "updated_at": datetime.now(timezone.utc).isoformat(),
-    })
+    }
+    if position:
+        data["primary_position"] = position
+    sb_upsert("players", data)
 
 
 # ─── Main ────────────────────────────────────────────────────
@@ -409,65 +487,88 @@ def main():
 
     results = {"fixtures_discovered": 0, "fixtures_synced": 0, "players_inserted": 0, "errors": []}
 
-    leagues = sb_select("leagues", "select=id,season&source=eq.sofascore&has_player_stats=eq.true")
+    tournament_league_ids = ",".join(str(lid) for lid in TOURNAMENTS)
+    lid_param = urllib.parse.quote(f"({tournament_league_ids})")
+    leagues = sb_select("leagues", f"select=id,season&has_player_stats=eq.true&id=in.{lid_param}")
     print(f"Leagues found: {len(leagues)}")
 
     if not leagues:
-        print("No Sofascore leagues configured")
+        print("No leagues matching TOURNAMENTS config")
         return
 
     # ── Phase 1: discover finished events ──
-    for league in leagues:
-        tid = TOURNAMENTS.get(league["id"])
-        if not tid:
+    if SKIP_DISCOVER:
+        print("Skipping discovery (SKIP_DISCOVER=1)")
+
+    def season_matches(sofa_year, db_season):
+        """Match Sofascore year ('2026' or '25/26') against DB season int (2026)."""
+        s = str(db_season)
+        if sofa_year == s:
+            return True
+        # Handle split-season format like "25/26"
+        if "/" in sofa_year:
+            parts = sofa_year.split("/")
+            short_end = s[-len(parts[-1]):]  # last 2 digits of db_season
+            return parts[-1] == short_end or parts[0] == s[-len(parts[0]):]
+        return False
+
+    def discover_tournament(league, tid):
+        """Discover fixtures from a single Sofascore tournament."""
+        seasons_data = sofa_fetch(f"/unique-tournament/{tid}/seasons")
+        season = next((s for s in seasons_data["seasons"] if season_matches(s["year"], league["season"])), None)
+        if not season:
+            results["errors"].append(f"No {league['season']} season for tournament {tid}")
+            return
+
+        for pg in range(DISCOVER_PAGES):
+            try:
+                data = sofa_fetch(f"/unique-tournament/{tid}/season/{season['id']}/events/last/{pg}")
+                finished = [e for e in data["events"] if e["status"]["type"] == "finished"]
+
+                for event in finished:
+                    fx_id = sofa_id(event["id"])
+                    home_id = sofa_id(event["homeTeam"]["id"])
+                    away_id = sofa_id(event["awayTeam"]["id"])
+
+                    sb_upsert("teams", [
+                        {"id": home_id, "name": event["homeTeam"]["name"],
+                         "logo": f"https://api.sofascore.com/api/v1/team/{event['homeTeam']['id']}/image",
+                         "league_id": league["id"]},
+                        {"id": away_id, "name": event["awayTeam"]["name"],
+                         "logo": f"https://api.sofascore.com/api/v1/team/{event['awayTeam']['id']}/image",
+                         "league_id": league["id"]},
+                    ])
+
+                    sb_upsert("fixtures", {
+                        "id": fx_id,
+                        "league_id": league["id"],
+                        "season": league["season"],
+                        "date": datetime.fromtimestamp(event["startTimestamp"], tz=timezone.utc).isoformat(),
+                        "home_team_id": home_id,
+                        "away_team_id": away_id,
+                        "score_home": event["homeScore"]["current"],
+                        "score_away": event["awayScore"]["current"],
+                        "stats_synced": False,
+                    }, ignore_duplicates=True)
+                    results["fixtures_discovered"] += 1
+
+                if not data.get("hasNextPage"):
+                    break
+            except Exception as e:
+                if str(e) == "SOFASCORE_NOT_FOUND":
+                    break
+                raise
+
+    for league in ([] if SKIP_DISCOVER else leagues):
+        tids = TOURNAMENTS.get(league["id"])
+        if not tids:
             continue
+        if not isinstance(tids, list):
+            tids = [tids]
 
         try:
-            seasons_data = sofa_fetch(f"/unique-tournament/{tid}/seasons")
-            season = next((s for s in seasons_data["seasons"] if s["year"] == str(league["season"])), None)
-            if not season:
-                results["errors"].append(f"No {league['season']} season for tournament {tid}")
-                continue
-
-            for pg in range(DISCOVER_PAGES):
-                try:
-                    data = sofa_fetch(f"/unique-tournament/{tid}/season/{season['id']}/events/last/{pg}")
-                    finished = [e for e in data["events"] if e["status"]["type"] == "finished"]
-
-                    for event in finished:
-                        fx_id = sofa_id(event["id"])
-                        home_id = sofa_id(event["homeTeam"]["id"])
-                        away_id = sofa_id(event["awayTeam"]["id"])
-
-                        sb_upsert("teams", [
-                            {"id": home_id, "name": event["homeTeam"]["name"],
-                             "logo": f"https://api.sofascore.com/api/v1/team/{event['homeTeam']['id']}/image",
-                             "league_id": league["id"]},
-                            {"id": away_id, "name": event["awayTeam"]["name"],
-                             "logo": f"https://api.sofascore.com/api/v1/team/{event['awayTeam']['id']}/image",
-                             "league_id": league["id"]},
-                        ])
-
-                        sb_upsert("fixtures", {
-                            "id": fx_id,
-                            "league_id": league["id"],
-                            "season": league["season"],
-                            "date": datetime.fromtimestamp(event["startTimestamp"], tz=timezone.utc).isoformat(),
-                            "home_team_id": home_id,
-                            "away_team_id": away_id,
-                            "score_home": event["homeScore"]["current"],
-                            "score_away": event["awayScore"]["current"],
-                            "stats_synced": False,
-                        }, ignore_duplicates=True)
-                        results["fixtures_discovered"] += 1
-
-                    if not data.get("hasNextPage"):
-                        break
-                except Exception as e:
-                    if str(e) == "SOFASCORE_NOT_FOUND":
-                        break
-                    raise
-
+            for tid in tids:
+                discover_tournament(league, tid)
             print(f"  League {league['id']}: discovered events")
         except Exception as e:
             results["errors"].append(f"League {league['id']} discovery: {e}")
@@ -475,7 +576,7 @@ def main():
                 break
 
     # ── Phase 2: sync stats for unsynced fixtures ──
-    league_ids = [str(l["id"]) for l in leagues]
+    league_ids = [str(lid) for lid in TOURNAMENTS]
     lid_filter = urllib.parse.quote(f"({','.join(league_ids)})")
     unsynced = sb_select("fixtures",
         f"select=id,league_id,season,home_team_id,away_team_id,score_home,score_away"
@@ -493,7 +594,10 @@ def main():
 
                 try:
                     lineups = sofa_fetch(f"/event/{event_id}/lineups")
-                except Exception:
+                except Exception as e:
+                    if str(e) == "SOFASCORE_BLOCKED":
+                        results["errors"].append(f"Fixture {fixture['id']}: BLOCKED")
+                        break
                     continue
 
                 if not lineups.get("confirmed"):
@@ -541,7 +645,7 @@ def main():
                     for p in gk:
                         if not p.get("statistics") or (p["statistics"].get("minutesPlayed", 0) or 0) == 0:
                             continue
-                        upsert_player(p, team_id)
+                        upsert_player(p, team_id, "ARQ")
                         row = map_player_stats(p, fixture["id"], team_id, "ARQ", formation, "1:1", card_map.get(p["player"]["id"]))
                         row["goals_conceded"] = fixture["score_away"] or 0 if side == "home" else fixture["score_home"] or 0
                         all_rows.append(row)
@@ -549,21 +653,25 @@ def main():
                     for i, p in enumerate(outfield):
                         if not p.get("statistics") or (p["statistics"].get("minutesPlayed", 0) or 0) == 0:
                             continue
-                        position = None
+                        raw_pid = p["player"]["id"]
+                        position = fetch_player_position(raw_pid)
                         grid = None
-                        if formation:
+                        if not position and formation:
                             grid = build_synthetic_grid(i, formation)
                             position = map_grid_to_position(formation, grid) if grid else None
                         if not position:
                             position = fallback_position(p.get("position"))
-                        upsert_player(p, team_id)
+                        upsert_player(p, team_id, position)
                         all_rows.append(map_player_stats(p, fixture["id"], team_id, position, formation, grid, card_map.get(p["player"]["id"])))
 
                     for p in subs:
                         if not p.get("statistics") or (p["statistics"].get("minutesPlayed", 0) or 0) == 0:
                             continue
-                        position = fallback_position(p.get("position"))
-                        upsert_player(p, team_id)
+                        raw_pid = p["player"]["id"]
+                        position = fetch_player_position(raw_pid)
+                        if not position:
+                            position = fallback_position(p.get("position"))
+                        upsert_player(p, team_id, position)
                         all_rows.append(map_player_stats(p, fixture["id"], team_id, position, formation, None, card_map.get(p["player"]["id"])))
 
                 for row in all_rows:
@@ -586,6 +694,49 @@ def main():
                 results["errors"].append(f"Fixture {fixture['id']}: {e}")
                 if str(e) == "SOFASCORE_BLOCKED":
                     break
+
+    save_position_cache(position_cache)
+
+    # ── Phase 3: fix current_team_id from most recent match ──
+    if results["fixtures_synced"] > 0:
+        fixture_dates = {}
+        offset = 0
+        while True:
+            fx = sb_select("fixtures", f"select=id,date&id=gte.20000000&limit=1000&offset={offset}")
+            if not fx:
+                break
+            for f in fx:
+                fixture_dates[f["id"]] = f["date"]
+            offset += 1000
+
+        all_stats = []
+        offset = 0
+        while True:
+            stats = sb_select(
+                "player_match_stats",
+                f"select=player_id,team_id,fixture_id&player_id=gte.20000000&limit=1000&offset={offset}"
+            )
+            if not stats:
+                break
+            all_stats.extend(stats)
+            offset += 1000
+
+        latest_team = {}
+        latest_date = {}
+        for row in all_stats:
+            pid = row["player_id"]
+            fdate = fixture_dates.get(row["fixture_id"], "")
+            if pid not in latest_date or fdate > latest_date[pid]:
+                latest_date[pid] = fdate
+                latest_team[pid] = row["team_id"]
+
+        batch = []
+        for pid, tid in latest_team.items():
+            batch.append({"id": pid, "current_team_id": tid})
+        if batch:
+            for i in range(0, len(batch), 50):
+                sb_upsert("players", batch[i:i+50])
+            print(f"Updated current_team_id for {len(batch)} players")
 
     sb_insert("sync_log", {
         "function_name": "sync-sofascore-py",

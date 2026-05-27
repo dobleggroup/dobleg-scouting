@@ -524,20 +524,16 @@ export default function FormationPage() {
     if (entry != null) {
       return { score: entry.score, scale: '10' }
     }
-    return { score: player.ggScore, scale: '100' }
+    return { score: null, scale: '10' }
   }, [scoreLookup])
 
-  /**
-   * Returns the best available score for a PositionPlayer stored in formation state.
-   * Falls back to the ggScore saved at add-time (CSV, 0-100).
-   */
   const getPositionPlayerScore = useCallback((p: PositionPlayer): { score: number | null; scale: ScoreScale } => {
     const key = normalizeName(p.playerName)
     const entry = scoreLookup.get(key)
     if (entry != null) {
       return { score: entry.score, scale: '10' }
     }
-    return { score: p.ggScore ?? null, scale: '100' }
+    return { score: null, scale: '10' }
   }, [scoreLookup])
 
   const [formation, setFormation] = useState('4-3-3')

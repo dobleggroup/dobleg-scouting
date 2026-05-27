@@ -59,6 +59,7 @@
   ::selection {
     background-color: rgba(34, 197, 94, 0.25);
   }
+
 }
 
 @layer components {

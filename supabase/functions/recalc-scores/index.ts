@@ -31,7 +31,9 @@ serve(async (req) => {
     let totalUpserted = 0;
 
     for (const season of seasons) {
-      const leaguesForSeason = domesticLeagues.filter(l => l.season === season);
+      // Process all leagues for each season — Clausura/Apertura leagues may have
+      // fixtures tagged with a different season than the league's own season field
+      const leaguesForSeason = domesticLeagues;
 
       // Get ALL fixture IDs for this season (domestic + cups)
       const { data: allFixtures } = await supabase
@@ -58,7 +60,7 @@ serve(async (req) => {
         while (true) {
           const { data: batch } = await supabase
             .from('player_match_stats')
-            .select('player_id, detected_position, team_id, match_score, rating, goals, assists, fixture_id')
+            .select('player_id, detected_position, team_id, match_score, rating, goals, assists, fixture_id, minutes, tackles, interceptions, blocks, duels_total, duels_won, passes_accuracy, passes_key, passes_total, dribbles_success, dribbles_attempted, shots_on, shots_total, fouls_drawn, saves, goals_conceded, penalty_saved')
             .not('match_score', 'is', null)
             .not('detected_position', 'is', null)
             .in('team_id', teamIds)
@@ -113,6 +115,96 @@ serve(async (req) => {
             );
           }
           totalUpserted += upsertRows.length;
+        }
+
+        // Compute position metric averages for this league
+        const leagueStats = allStats.filter((s: any) => s.minutes >= 10);
+        const posMetrics = new Map<string, any[]>();
+        for (const s of leagueStats) {
+          const pos = s.detected_position;
+          if (!posMetrics.has(pos)) posMetrics.set(pos, []);
+          posMetrics.get(pos)!.push(s);
+        }
+
+        const metricRows: any[] = [];
+        for (const [pos, mRows] of posMetrics) {
+          const n = mRows.length;
+          const p90 = (field: string) => {
+            const vals = mRows.filter((r: any) => r.minutes > 0).map((r: any) => ((r[field] ?? 0) / r.minutes) * 90);
+            return vals.length > 0 ? vals.reduce((a: number, b: number) => a + b, 0) / vals.length : 0;
+          };
+          const avg = (field: string) => {
+            const vals = mRows.map((r: any) => r[field] ?? 0).filter((v: number) => v > 0);
+            return vals.length > 0 ? vals.reduce((a: number, b: number) => a + b, 0) / vals.length : 0;
+          };
+          const pct = (num: string, den: string) => {
+            const totN = mRows.reduce((acc: number, r: any) => acc + (r[num] ?? 0), 0);
+            const totD = mRows.reduce((acc: number, r: any) => acc + (r[den] ?? 0), 0);
+            return totD > 0 ? (totN / totD) * 100 : 0;
+          };
+          const rd = (v: number) => Math.round(v * 100) / 100;
+
+          metricRows.push({
+            position: pos, league_id: league.id, season,
+            tackles_p90: rd(p90('tackles')), interceptions_p90: rd(p90('interceptions')),
+            blocks_p90: rd(p90('blocks')), duels_won_pct: rd(pct('duels_won', 'duels_total')),
+            passes_accuracy: rd(avg('passes_accuracy')), passes_key_p90: rd(p90('passes_key')),
+            passes_total_p90: rd(p90('passes_total')), dribbles_success_p90: rd(p90('dribbles_success')),
+            dribbles_pct: rd(pct('dribbles_success', 'dribbles_attempted')),
+            shots_on_p90: rd(p90('shots_on')), shots_pct: rd(pct('shots_on', 'shots_total')),
+            goals_p90: rd(p90('goals')), assists_p90: rd(p90('assists')),
+            rating_avg: rd(avg('rating')), fouls_drawn_p90: rd(p90('fouls_drawn')),
+            saves_p90: rd(p90('saves')), goals_conceded_p90: rd(p90('goals_conceded')),
+            penalty_saved_avg: rd(avg('penalty_saved')),
+            clean_sheet_pct: rd((mRows.filter((r: any) => r.goals_conceded === 0).length / n) * 100),
+            player_count: n, updated_at: new Date().toISOString(),
+          });
+        }
+
+        if (metricRows.length > 0) {
+          await supabase.from('position_metric_averages').upsert(
+            metricRows, { onConflict: 'position,league_id,season' }
+          );
+        }
+      }
+
+      // Fix current_team_id: set to team from most recent fixture
+      const { data: allFixtureDates } = await supabase
+        .from('fixtures')
+        .select('id, date')
+        .eq('season', season);
+      if (allFixtureDates && allFixtureDates.length > 0) {
+        const fixtureDateMap = new Map(allFixtureDates.map(f => [f.id, f.date]));
+
+        let allTeamStats: any[] = [];
+        let tPage = 0;
+        while (true) {
+          const { data: tBatch } = await supabase
+            .from('player_match_stats')
+            .select('player_id, team_id, fixture_id')
+            .in('fixture_id', allFixtureDates.map(f => f.id))
+            .range(tPage * 1000, (tPage + 1) * 1000 - 1);
+          if (!tBatch || tBatch.length === 0) break;
+          allTeamStats = allTeamStats.concat(tBatch);
+          if (tBatch.length < 1000) break;
+          tPage++;
+        }
+
+        const latestTeam = new Map<number, { team_id: number; date: string }>();
+        for (const row of allTeamStats) {
+          const fdate = fixtureDateMap.get(row.fixture_id) ?? '';
+          const existing = latestTeam.get(row.player_id);
+          if (!existing || fdate > existing.date) {
+            latestTeam.set(row.player_id, { team_id: row.team_id, date: fdate });
+          }
+        }
+
+        const teamUpdates = Array.from(latestTeam.entries()).map(([pid, v]) => ({
+          id: pid,
+          current_team_id: v.team_id,
+        }));
+        for (let i = 0; i < teamUpdates.length; i += 500) {
+          await supabase.from('players').upsert(teamUpdates.slice(i, i + 500), { onConflict: 'id' });
         }
       }
 

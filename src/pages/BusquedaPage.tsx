@@ -268,7 +268,6 @@ export default function BusquedaPage() {
     const key = normalizeName(player.Jugador)
     const entry = scoreLookup.get(key)
     if (entry != null) return { score: entry.score, scale: '10' }
-    if (player.ggScore != null) return { score: player.ggScore, scale: '100' }
     return null
   }
 
