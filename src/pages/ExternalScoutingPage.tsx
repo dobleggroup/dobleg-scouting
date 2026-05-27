@@ -5,7 +5,10 @@ import { fetchTeamsByLeague, type TeamInfo } from '@/services/playerStatsService
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import EmptyState from '@/components/ui/EmptyState'
 import { getScoreColorClass, getScoreBgClass } from '@/components/ui/ScoreBar'
+import { PlayerPhoto, TeamLogo } from '@/components/ui/PlayerPhoto'
 import type { Position, PlayerWithScore } from '@/types/scoring'
+import { useAuth } from '@/context/AuthContext'
+import { addScoutPlayer } from '@/services/scoutPlayersService'
 
 const POSITIONS: { key: Position; label: string }[] = [
   { key: 'ARQ', label: 'ARQ' },
@@ -22,7 +25,7 @@ const PAGE_SIZE = 50
 
 interface Filters {
   search: string
-  position: Position | ''
+  positions: Position[]
   league_id: number | undefined
   team_id: number | undefined
   min_matches: number
@@ -32,7 +35,7 @@ interface Filters {
 
 const DEFAULT_FILTERS: Filters = {
   search: '',
-  position: '',
+  positions: [],
   league_id: undefined,
   team_id: undefined,
   min_matches: 0,
@@ -54,6 +57,114 @@ function getAge(birthDate: string | null): number | null {
   if (!birthDate) return null
   const diff = Date.now() - new Date(birthDate).getTime()
   return Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000))
+}
+
+function BulkTrackingModal({
+  players,
+  onClose,
+  onSuccess,
+}: {
+  players: PlayerWithScore[]
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const { user, userDisplayName } = useAuth()
+  const [list, setList] = useState<'datos' | 'scouts_gg' | 'both'>('datos')
+  const [saving, setSaving] = useState(false)
+  const [progress, setProgress] = useState(0)
+
+  const handleSave = async () => {
+    if (!user) return
+    setSaving(true)
+    const name = userDisplayName || user.email?.split('@')[0] || 'Scout'
+
+    for (let i = 0; i < players.length; i++) {
+      const p = players[i]
+      await addScoutPlayer(
+        {
+          full_name: p.name,
+          supabase_player_id: p.id,
+          club: p.team?.name,
+          posicion: p.season_scores[0]?.position || p.primary_position || undefined,
+          nacionalidad: p.nationality || undefined,
+        },
+        list,
+        user.id,
+        name
+      )
+      setProgress(i + 1)
+    }
+
+    onSuccess()
+  }
+
+  return (
+    <div className="fixed inset-0 z-[300] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white dark:bg-apple-gray-800 rounded-2xl shadow-2xl border border-apple-gray-200 dark:border-apple-gray-700 w-full max-w-sm mx-4 p-5">
+        <h3 className="text-lg font-bold text-apple-gray-800 dark:text-white mb-1">
+          Agregar a seguimiento
+        </h3>
+        <p className="text-sm text-apple-gray-500 mb-4">
+          {players.length} jugador{players.length > 1 ? 'es' : ''} seleccionado{players.length > 1 ? 's' : ''}
+        </p>
+
+        <div className="space-y-2 mb-5">
+          {(['datos', 'scouts_gg', 'both'] as const).map(option => (
+            <button
+              key={option}
+              onClick={() => setList(option)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all ${
+                list === option
+                  ? 'border-brand-green bg-brand-green/5'
+                  : 'border-apple-gray-200 dark:border-apple-gray-700 hover:border-apple-gray-300 dark:hover:border-apple-gray-600'
+              }`}
+            >
+              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                list === option ? 'border-brand-green' : 'border-apple-gray-300 dark:border-apple-gray-600'
+              }`}>
+                {list === option && <div className="w-2 h-2 rounded-full bg-brand-green" />}
+              </div>
+              <span className="text-sm font-medium text-apple-gray-800 dark:text-white">
+                {option === 'datos' ? 'Lista de Datos' : option === 'scouts_gg' ? 'Scouts GG' : 'Ambas listas'}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {saving && (
+          <div className="mb-4">
+            <div className="h-1.5 bg-apple-gray-100 dark:bg-apple-gray-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-brand-green rounded-full transition-all duration-300"
+                style={{ width: `${(progress / players.length) * 100}%` }}
+              />
+            </div>
+            <p className="text-xs text-apple-gray-400 mt-1">{progress} de {players.length}</p>
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="flex-1 py-2.5 rounded-xl text-sm text-apple-gray-600 dark:text-apple-gray-400 bg-apple-gray-100 dark:bg-apple-gray-700 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600 disabled:opacity-50 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-brand-green hover:bg-emerald-600 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+          >
+            {saving ? (
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : 'Confirmar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function ExternalScoutingPage() {
@@ -78,7 +189,7 @@ export default function ExternalScoutingPage() {
   }, [filters.league_id])
 
   const queryFilters = useMemo(() => ({
-    position: filters.position || undefined,
+    positions: filters.positions.length ? filters.positions : undefined,
     league_id: filters.league_id,
     team_id: filters.team_id,
     min_score: filters.min_score || undefined,
@@ -93,6 +204,32 @@ export default function ExternalScoutingPage() {
 
   const totalPages = Math.ceil(count / PAGE_SIZE)
 
+  const { user, userDisplayName } = useAuth()
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [showTrackingModal, setShowTrackingModal] = useState(false)
+
+  const toggleSelect = (id: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === players.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(players.map(p => p.id)))
+    }
+  }
+
+  const selectedPlayers = players.filter(p => selectedIds.has(p.id))
+
+  useEffect(() => { setSelectedIds(new Set()) }, [page, filters])
+
   const handleReset = useCallback(() => {
     setFilters(DEFAULT_FILTERS)
     sessionStorage.removeItem(STORAGE_KEY)
@@ -103,7 +240,7 @@ export default function ExternalScoutingPage() {
   }
 
   const activeCount = [
-    filters.position,
+    filters.positions.length > 0,
     filters.league_id,
     filters.team_id,
     filters.min_matches > 0,
@@ -127,7 +264,7 @@ export default function ExternalScoutingPage() {
           </h1>
           <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
             {count.toLocaleString('es')} jugadores
-            {filters.position && <span className="ml-1">· {filters.position}</span>}
+            {filters.positions.length > 0 && <span className="ml-1">· {filters.positions.join(', ')}</span>}
           </p>
         </div>
         <div className="relative flex-1 sm:flex-initial sm:max-w-xs">
@@ -151,9 +288,14 @@ export default function ExternalScoutingPage() {
           {POSITIONS.map(pos => (
             <button
               key={pos.key}
-              onClick={() => setFilters(f => ({ ...f, position: f.position === pos.key ? '' : pos.key }))}
+              onClick={() => setFilters(f => ({
+                ...f,
+                positions: f.positions.includes(pos.key)
+                  ? f.positions.filter(p => p !== pos.key)
+                  : [...f.positions, pos.key],
+              }))}
               className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                filters.position === pos.key
+                filters.positions.includes(pos.key)
                   ? 'bg-brand-green text-white shadow-sm'
                   : 'bg-apple-gray-100 dark:bg-apple-gray-800 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-700'
               }`}
@@ -259,13 +401,7 @@ export default function ExternalScoutingPage() {
                   onClick={() => handlePlayerClick(player)}
                   className="w-full text-left card-apple p-3 flex items-center gap-3 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-800/50 transition-colors"
                 >
-                  {player.photo ? (
-                    <img src={player.photo} alt="" className="w-10 h-10 rounded-full object-cover bg-apple-gray-100 dark:bg-apple-gray-800 flex-shrink-0" />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-apple-gray-200 dark:bg-apple-gray-700 flex items-center justify-center flex-shrink-0">
-                      <span className="text-xs font-medium text-apple-gray-500">{player.name?.charAt(0)}</span>
-                    </div>
-                  )}
+                  <PlayerPhoto src={player.photo} name={player.name} size="md" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-apple-gray-800 dark:text-white truncate">{player.name}</p>
                     <p className="text-xs text-apple-gray-500 truncate">
@@ -289,6 +425,14 @@ export default function ExternalScoutingPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-apple-gray-200 dark:border-apple-gray-700">
+                    <th className="w-10 py-3 px-2">
+                      <input
+                        type="checkbox"
+                        checked={players.length > 0 && selectedIds.size === players.length}
+                        onChange={toggleSelectAll}
+                        className="w-4 h-4 rounded border-apple-gray-300 dark:border-apple-gray-600 text-brand-green focus:ring-brand-green/50"
+                      />
+                    </th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">Jugador</th>
                     <th className="text-left py-3 px-3 text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">Equipo</th>
                     <th className="text-center py-3 px-3 text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">Pos</th>
@@ -311,15 +455,17 @@ export default function ExternalScoutingPage() {
                         onClick={() => handlePlayerClick(player)}
                         className="cursor-pointer hover:bg-apple-gray-50 dark:hover:bg-apple-gray-800/50 transition-colors"
                       >
+                        <td className="py-2.5 px-2" onClick={e => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(player.id)}
+                            onChange={() => toggleSelect(player.id, {} as React.MouseEvent)}
+                            className="w-4 h-4 rounded border-apple-gray-300 dark:border-apple-gray-600 text-brand-green focus:ring-brand-green/50"
+                          />
+                        </td>
                         <td className="py-2.5 px-4">
                           <div className="flex items-center gap-3">
-                            {player.photo ? (
-                              <img src={player.photo} alt="" className="w-8 h-8 rounded-full object-cover bg-apple-gray-100 dark:bg-apple-gray-800" />
-                            ) : (
-                              <div className="w-8 h-8 rounded-full bg-apple-gray-200 dark:bg-apple-gray-700 flex items-center justify-center">
-                                <span className="text-xs font-medium text-apple-gray-500">{player.name?.charAt(0)}</span>
-                              </div>
-                            )}
+                            <PlayerPhoto src={player.photo} name={player.name} size="sm" />
                             <span className="text-sm font-medium text-apple-gray-800 dark:text-white truncate max-w-[200px]">
                               {player.name}
                             </span>
@@ -327,9 +473,7 @@ export default function ExternalScoutingPage() {
                         </td>
                         <td className="py-2.5 px-3">
                           <div className="flex items-center gap-2">
-                            {player.team?.logo && (
-                              <img src={player.team.logo} alt="" className="w-5 h-5 object-contain" />
-                            )}
+                            <TeamLogo src={player.team?.logo} />
                             <span className="text-sm text-apple-gray-600 dark:text-apple-gray-300 truncate max-w-[150px]">
                               {player.team?.name ?? '—'}
                             </span>
@@ -409,6 +553,42 @@ export default function ExternalScoutingPage() {
             Cargando...
           </div>
         </div>
+      )}
+
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-apple-gray-800 rounded-2xl shadow-2xl border border-apple-gray-200 dark:border-apple-gray-700 px-5 py-3 flex items-center gap-4">
+          <span className="text-sm font-medium text-apple-gray-600 dark:text-apple-gray-300">
+            {selectedIds.size} seleccionado{selectedIds.size > 1 ? 's' : ''}
+          </span>
+          <button
+            onClick={() => setShowTrackingModal(true)}
+            className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-brand-green hover:bg-emerald-600 transition-colors flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Agregar a seguimiento
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="p-2 rounded-lg text-apple-gray-400 hover:text-apple-gray-600 dark:hover:text-apple-gray-300 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {showTrackingModal && (
+        <BulkTrackingModal
+          players={selectedPlayers}
+          onClose={() => setShowTrackingModal(false)}
+          onSuccess={() => {
+            setSelectedIds(new Set())
+            setShowTrackingModal(false)
+          }}
+        />
       )}
     </div>
   )
