@@ -354,3 +354,23 @@ export async function fetchPositionMetricAverages(
   if (error) throw error;
   return data ?? [];
 }
+
+export interface MarketValueHistoryRow {
+  player_id: number;
+  recorded_at: string;
+  value_eur: number;
+  club_name: string | null;
+}
+
+export async function fetchMarketValueHistory(
+  playerId: number
+): Promise<MarketValueHistoryRow[]> {
+  const { data, error } = await supabase
+    .from('market_value_history')
+    .select('player_id, recorded_at, value_eur, club_name')
+    .eq('player_id', playerId)
+    .order('recorded_at', { ascending: true });
+
+  if (error) throw error;
+  return data ?? [];
+}

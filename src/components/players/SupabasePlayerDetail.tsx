@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
-import { usePlayerDetail, usePlayerMatchHistory, usePositionAverages, usePositionMetricAverages, useLeagues } from '@/hooks/usePlayerStats'
+import { usePlayerDetail, usePlayerMatchHistory, usePositionAverages, usePositionMetricAverages, useLeagues, useMarketValueHistory } from '@/hooks/usePlayerStats'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import EmptyState from '@/components/ui/EmptyState'
 import GaugeScore from '@/components/charts/GaugeScore'
@@ -13,13 +13,24 @@ import MetricsBarComparison from '@/components/charts/MetricsBarComparison'
 import PositionFieldMap from '@/components/ui/PositionFieldMap'
 import TrackingWidget from '@/components/tracking/TrackingWidget'
 import AddToReportButton from '@/components/pdf/AddToReportButton'
+import MarketValueChart from '@/components/charts/MarketValueChart'
 import type { Position, PlayerMatchStat } from '@/types/scoring'
 import { displayPosition } from '@/types/scoring'
+import type { MarketValueHistoryEntry } from '@/types'
 
 function getAge(birthDate: string | null): number | null {
   if (!birthDate) return null
   const diff = Date.now() - new Date(birthDate).getTime()
   return Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000))
+}
+
+function formatMarketValue(value: number): string {
+  if (value >= 1_000_000) {
+    const m = value / 1_000_000
+    return `${m >= 10 ? m.toFixed(0) : m.toFixed(1)}M`
+  }
+  if (value >= 1_000) return `${Math.round(value / 1_000)}K`
+  return String(value)
 }
 
 export default function SupabasePlayerDetail() {
@@ -35,6 +46,20 @@ export default function SupabasePlayerDetail() {
 
   const activePosition = selectedPosition ?? data?.player?.primary_position ?? null
   const { matches } = usePlayerMatchHistory(playerId, activePosition ?? undefined)
+
+  const { data: mvHistory } = useMarketValueHistory(playerId)
+
+  const marketValueData = useMemo<MarketValueHistoryEntry[]>(() => {
+    if (!data || mvHistory.length === 0) return []
+    return mvHistory.map(row => ({
+      Jugador: data.player.name,
+      idTM: String(data.player.transfermarkt_id ?? ''),
+      fecha: new Date(row.recorded_at),
+      valor: row.value_eur,
+      equipo: row.club_name ?? '',
+      edad: 0,
+    }))
+  }, [data, mvHistory])
 
   const activeScore = useMemo(() => {
     if (!data || !activePosition) return null
@@ -118,6 +143,60 @@ export default function SupabasePlayerDetail() {
                   </span>
                 )}
               </div>
+
+              {/* Market profile */}
+              {(player.market_value_eur || player.contract_end_date || player.agent) && (
+                <div className="border-t border-apple-gray-100 dark:border-apple-gray-800 pt-3 mt-1 space-y-2">
+                  {player.market_value_eur && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-apple-gray-500">Valor de mercado</span>
+                      {player.transfermarkt_url ? (
+                        <a
+                          href={player.transfermarkt_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm font-bold text-brand-green hover:underline"
+                        >
+                          €{formatMarketValue(player.market_value_eur)}
+                        </a>
+                      ) : (
+                        <span className="text-sm font-bold text-brand-green">
+                          €{formatMarketValue(player.market_value_eur)}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {player.contract_end_date && (() => {
+                    const months = Math.round(
+                      (new Date(player.contract_end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24 * 30.44)
+                    )
+                    const color = months > 18
+                      ? 'text-emerald-500 bg-emerald-500/10'
+                      : months > 6
+                        ? 'text-amber-500 bg-amber-500/10'
+                        : 'text-red-500 bg-red-500/10'
+                    const label = months <= 0
+                      ? 'Vencido'
+                      : `${months} mes${months !== 1 ? 'es' : ''}`
+                    return (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-apple-gray-500">Contrato</span>
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${color}`}>
+                          {label}
+                        </span>
+                      </div>
+                    )
+                  })()}
+                  {player.agent && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-apple-gray-500">Agente</span>
+                      <span className="text-xs font-medium text-apple-gray-700 dark:text-apple-gray-300 text-right max-w-[60%] truncate" title={player.agent}>
+                        {player.agent}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Score gauge */}
               <GaugeScore
@@ -263,6 +342,26 @@ export default function SupabasePlayerDetail() {
                 Posición en el campo
               </h3>
               <PositionFieldMap position={activePosition} />
+            </div>
+          )}
+
+          {/* Market value evolution (only if history exists = DG player) */}
+          {marketValueData.length > 0 && (
+            <div className="card-apple p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <svg className="w-5 h-5 text-brand-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                </svg>
+                <div>
+                  <h3 className="text-sm font-semibold text-apple-gray-800 dark:text-white">
+                    Evolución valor de mercado
+                  </h3>
+                  <p className="text-xs text-apple-gray-400">
+                    Historial según Transfermarkt
+                  </p>
+                </div>
+              </div>
+              <MarketValueChart data={marketValueData} playerName={player.name} />
             </div>
           )}
 

@@ -8,7 +8,9 @@ import {
   fetchDistinctAgents,
   fetchPlayerMatchHistory,
   fetchScoreLookup,
+  fetchMarketValueHistory,
   type ScoreLookupEntry,
+  type MarketValueHistoryRow,
 } from '@/services/playerStatsService';
 import type { PlayerWithScore, PlayerMatchStat, PositionAverage, PositionMetricAverages, LeagueInfo, Position } from '@/types/scoring';
 
@@ -195,4 +197,29 @@ export function usePlayerMatchHistory(playerId: number | null, position?: Positi
   }, [playerId, position]);
 
   return { matches, loading };
+}
+
+export function useMarketValueHistory(playerId: number | null) {
+  const [data, setData] = useState<MarketValueHistoryRow[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!playerId) return;
+    const key = `mvh-${playerId}`;
+    const cached = getCached<MarketValueHistoryRow[]>(key, 60);
+    if (cached) { setData(cached); return; }
+
+    let cancelled = false;
+    setLoading(true);
+    fetchMarketValueHistory(playerId).then(rows => {
+      if (cancelled) return;
+      setData(rows);
+      setCache(key, rows);
+    }).catch(() => {}).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [playerId]);
+
+  return { data, loading };
 }
