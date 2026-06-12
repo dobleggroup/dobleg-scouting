@@ -278,6 +278,7 @@ export interface PlayerTransfer {
     in: { id: number; name: string; logo: string }
     out: { id: number; name: string; logo: string }
   }
+  fee: string | null
 }
 
 const TRANSFER_CACHE_KEY = 'dg-transfers-cache'
@@ -296,8 +297,14 @@ export async function fetchPlayerTransfers(playerId: number): Promise<PlayerTran
   } catch { /* ignore */ }
 
   try {
-    const res = await apiFetch<Array<{ player: any; update: string; transfers: PlayerTransfer[] }>>('/transfers', { player: String(playerId) })
-    const transfers = res.response?.[0]?.transfers ?? []
+    const res = await apiFetch<Array<{ player: any; update: string; transfers: Array<{ date: string; type: string; teams: PlayerTransfer['teams'] }> }>>('/transfers', { player: String(playerId) })
+    const raw = res.response?.[0]?.transfers ?? []
+    const transfers: PlayerTransfer[] = raw.map(t => ({
+      date: t.date,
+      type: t.type,
+      teams: t.teams,
+      fee: (t as any).fee ?? null,
+    }))
     try {
       localStorage.setItem(cacheKey, JSON.stringify({ data: transfers, timestamp: Date.now() }))
     } catch { /* quota */ }
@@ -307,3 +314,133 @@ export async function fetchPlayerTransfers(playerId: number): Promise<PlayerTran
   }
 }
 
+export interface AgencyTransfer extends PlayerTransfer {
+  playerName: string
+  playerImage: string | null
+}
+
+const AGENCY_TRANSFERS_CACHE_KEY = 'dg-agency-transfers'
+const AGENCY_TRANSFERS_CACHE_TTL = 24 * 60 * 60 * 1000
+
+const SQUAD_CACHE_KEY = 'dg-squad-cache'
+const SQUAD_CACHE_TTL = 7 * 24 * 60 * 60 * 1000
+
+async function fetchSquadCached(teamId: number): Promise<Array<{ id: number; name: string }>> {
+  const cacheKey = `${SQUAD_CACHE_KEY}:${teamId}`
+  try {
+    const raw = localStorage.getItem(cacheKey)
+    if (raw) {
+      const cached = JSON.parse(raw)
+      if (Date.now() - cached.timestamp < SQUAD_CACHE_TTL) return cached.data
+    }
+  } catch { /* ignore */ }
+
+  if (!API_KEY) return []
+  try {
+    const res = await apiFetch<any>('/players/squads', { team: String(teamId) })
+    const squad = res.response?.[0]
+    const players: Array<{ id: number; name: string }> = (squad?.players ?? []).map((p: any) => ({ id: p.id as number, name: (p.name ?? '') as string }))
+    try { localStorage.setItem(cacheKey, JSON.stringify({ data: players, timestamp: Date.now() })) } catch { /* quota */ }
+    return players
+  } catch {
+    return []
+  }
+}
+
+function resolvePlayerInSquad(playerName: string, squad: Array<{ id: number; name: string }>): number | null {
+  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  const target = norm(playerName)
+  for (const p of squad) {
+    const name = norm(p.name)
+    if (name === target) return p.id
+    const tParts = target.split(' ')
+    const nParts = name.split(' ')
+    if (tParts[tParts.length - 1] === nParts[nParts.length - 1] && tParts[0]?.[0] === nParts[0]?.[0]) return p.id
+  }
+  return null
+}
+
+export async function fetchAgencyTransfers(onProgress?: (done: number, total: number) => void): Promise<AgencyTransfer[]> {
+  try {
+    const raw = localStorage.getItem(AGENCY_TRANSFERS_CACHE_KEY)
+    if (raw) {
+      const cached = JSON.parse(raw)
+      if (Date.now() - cached.timestamp < AGENCY_TRANSFERS_CACHE_TTL) return cached.data
+    }
+  } catch { /* ignore */ }
+
+  const { AGENCY_PLAYERS } = await import('@/constants/agencyPlayers')
+  const active = AGENCY_PLAYERS.filter(p => !p.isReserve && p.apiTeamId)
+
+  // Group by team to share squad API calls
+  const byTeam = new Map<number, typeof active>()
+  for (const p of active) {
+    const list = byTeam.get(p.apiTeamId!) ?? []
+    list.push(p)
+    byTeam.set(p.apiTeamId!, list)
+  }
+
+  // Phase 1: Resolve API-Football IDs (1 squad call per team)
+  const playerApiIds = new Map<string, number>()
+  const teams = Array.from(byTeam.entries())
+  for (let i = 0; i < teams.length; i += 3) {
+    const batch = teams.slice(i, i + 3)
+    await Promise.all(batch.map(async ([teamId, players]) => {
+      const squad = await fetchSquadCached(teamId)
+      for (const player of players) {
+        const apiId = resolvePlayerInSquad(player.fullName, squad)
+        if (apiId) playerApiIds.set(player.fullName, apiId)
+      }
+    }))
+    if (i + 3 < teams.length) await new Promise(r => setTimeout(r, 800))
+  }
+
+  // Phase 2: Fetch transfers (cached individually for 24h)
+  const resolved = active.filter(p => playerApiIds.has(p.fullName))
+  const allTransfers: AgencyTransfer[] = []
+  let done = 0
+
+  for (let i = 0; i < resolved.length; i += 5) {
+    const batch = resolved.slice(i, i + 5)
+    const results = await Promise.all(
+      batch.map(async (player) => {
+        const apiId = playerApiIds.get(player.fullName)!
+        const transfers = await fetchPlayerTransfers(apiId)
+        done++
+        onProgress?.(done, resolved.length)
+        return transfers.map(t => ({ ...t, playerName: player.shortName, playerImage: player.image }))
+      })
+    )
+    allTransfers.push(...results.flat())
+    if (i + 5 < resolved.length) await new Promise(r => setTimeout(r, 800))
+  }
+
+  allTransfers.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+  try {
+    localStorage.setItem(AGENCY_TRANSFERS_CACHE_KEY, JSON.stringify({ data: allTransfers, timestamp: Date.now() }))
+  } catch { /* quota */ }
+
+  return allTransfers
+}
+
+
+export interface ResolvedTeam { teamId: number; teamName: string }
+
+/** Resuelve el equipo actual de un jugador por su id API-Football (best-effort). */
+export async function resolvePlayerTeam(apiPlayerId: number): Promise<ResolvedTeam | null> {
+  if (!API_KEY) return null
+  const season = String(new Date().getFullYear())
+  try {
+    const res = await apiFetch<any[]>('/players', { id: String(apiPlayerId), season })
+    const stats = (res.response?.[0] as any)?.statistics
+    if (!stats || stats.length === 0) return null
+    // Tomar el primer equipo con id (suele ser el de la temporada en curso)
+    const withTeam = stats.find((s: any) => s?.team?.id)
+    if (!withTeam) return null
+    return { teamId: withTeam.team.id, teamName: withTeam.team.name }
+  } catch (e) {
+    console.error('resolvePlayerTeam error:', e)
+    return null
+  }
+}
