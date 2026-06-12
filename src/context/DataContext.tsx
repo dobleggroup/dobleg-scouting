@@ -1,10 +1,63 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useCallback, useState, type ReactNode } from 'react'
 import { loadAllData, type MasDatosEntry, type SeguimientoMetricsPlayer } from '@/services/csvService'
 import { computeGGScores, normalizeName, parseMarketValue, formatMarketValue, parseContractDate, monthsBetween, getNumericValue } from '@/utils/scoring'
 import { POSITION_MAP, SCORING_CONFIG, FILTER_POSITION_MAP } from '@/constants/scoring'
+import { loadAgencyPlayers } from '@/services/agencyPlayersService'
+import { getAgencyPlayersList, type AgencyPlayer } from '@/constants/agencyPlayers'
 import type { AppData, EnrichedPlayer, EvolutionEntry, TransfermarktData, MonitoringPlayer, MarketValueHistoryEntry, GPSEntry } from '@/types'
 
 const DataContext = createContext<AppData | null>(null)
+
+// Construye un EnrichedPlayer mínimo a partir de un AgencyPlayer (cuando no está en external)
+function agencyToEnriched(a: AgencyPlayer): EnrichedPlayer {
+  const marketValueRaw = parseMarketValue(a.marketValue ?? '')
+  return {
+    Jugador: a.fullName,
+    Liga: '',
+    Equipo: a.team,
+    'Posición': '',
+    Edad: '',
+    'País de nacimiento': '',
+    Pie: '', Altura: '',
+    'Valor de mercado (Transfermarkt)': a.marketValue ?? '',
+    'Vencimiento contrato': a.contractEnd ?? '',
+    'Partidos jugados': '', 'Minutos jugados': '',
+    Goles: '', xG: '', Asistencias: '', xA: '',
+    'Posición específica': '',
+    id: '',
+    Transfermkt: '',
+    Representante: '',
+    Imagen: a.image ?? '',
+    ggScore: null,
+    ggScorePercentile: null,
+    source: 'interno',
+    contractStatus: 'ok',
+    monthsRemaining: null,
+    marketValueFormatted: formatMarketValue(marketValueRaw),
+    marketValueRaw,
+    minutesPlayed: 0,
+    ageNum: 0,
+  }
+}
+
+/** internal base + jugadores Doble G agregados que no estén ya en internal. */
+export function mergeAgencyIntoInternal(
+  baseInternal: EnrichedPlayer[],
+  external: EnrichedPlayer[],
+  agencyPlayers: AgencyPlayer[],
+): EnrichedPlayer[] {
+  const present = new Set(baseInternal.map(p => normalizeName(p.Jugador)))
+  const extByName = new Map(external.map(p => [normalizeName(p.Jugador), p]))
+  const additions: EnrichedPlayer[] = []
+  for (const a of agencyPlayers) {
+    const key = normalizeName(a.fullName)
+    if (present.has(key)) continue
+    const fromExternal = extByName.get(key)
+    additions.push(fromExternal ? { ...fromExternal, source: 'interno' } : agencyToEnriched(a))
+    present.add(key)
+  }
+  return [...baseInternal, ...additions]
+}
 
 function buildTransfermarktMap(tmData: TransfermarktData[]): Map<string, TransfermarktData> {
   const map = new Map<string, TransfermarktData>()
@@ -998,16 +1051,36 @@ export function DataProvider({ children }: { children: ReactNode }) {
     marketValueHistory: [],
     gpsData: [],
     positionAverages: {},
+    agencyPlayers: [],
+    refreshAgencyPlayers: async () => {},
     loading: true,
     error: null,
     lastUpdated: null,
   })
 
+  // Base internal (derivada del CSV) y external, para re-derivar internal al cambiar Doble G
+  const baseInternalRef = useRef<EnrichedPlayer[]>([])
+  const externalRef = useRef<EnrichedPlayer[]>([])
+
+  const refreshAgencyPlayers = useCallback(async () => {
+    await loadAgencyPlayers()
+    const agencyPlayers = getAgencyPlayersList()
+    setData(prev => ({
+      ...prev,
+      agencyPlayers,
+      internal: mergeAgencyIntoInternal(baseInternalRef.current, externalRef.current, agencyPlayers),
+    }))
+  }, [])
+
   useEffect(() => {
     let cancelled = false
 
     loadAllData()
-      .then(raw => {
+      .then(async raw => {
+        if (cancelled) return
+
+        // Cargar overlay Doble G (altas/bajas) antes de derivar internal
+        await loadAgencyPlayers()
         if (cancelled) return
 
         // Build lookup maps
@@ -1075,9 +1148,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
           positionAverages[pos] = scores.reduce((a, b) => a + b, 0) / scores.length
         }
 
+        // Guardar base para re-derivar internal al cambiar Doble G, y fusionar agregados
+        baseInternalRef.current = internal
+        externalRef.current = external
+        const agencyPlayers = getAgencyPlayersList()
+        const internalMerged = mergeAgencyIntoInternal(internal, external, agencyPlayers)
+
         setData({
           external,
-          internal,
+          internal: internalMerged,
           monitoring,
           normalized: raw.normalized,
           evolution: raw.evolution,
@@ -1085,6 +1164,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
           marketValueHistory: raw.marketValueHistory,
           gpsData: raw.gpsData,
           positionAverages,
+          agencyPlayers,
+          refreshAgencyPlayers,
           loading: false,
           error: null,
           lastUpdated: new Date(),

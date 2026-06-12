@@ -245,6 +245,8 @@ export interface AppData {
   marketValueHistory: MarketValueHistoryEntry[]
   gpsData: GPSEntry[]
   positionAverages: Record<string, number>
+  agencyPlayers: import('@/constants/agencyPlayers').AgencyPlayer[]
+  refreshAgencyPlayers: () => Promise<void>
   loading: boolean
   error: string | null
   lastUpdated: Date | null
