@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchAllAgencyFixtures, groupFixturesByDate, toArDateKey } from '@/services/footballApiService'
+import { fetchManualFixtures, manualToAgencyFixtures } from '@/services/agencyManualFixturesService'
 import { AGENCY_PLAYERS } from '@/constants/agencyPlayers'
 import type { AgencyFixture } from '@/types/footballApi'
 
@@ -102,7 +103,7 @@ function MatchDetailRow({ fixture }: { fixture: AgencyFixture }) {
   const abroad = isAway(fixture)
 
   return (
-    <div className={`flex items-center gap-3 p-3 rounded-apple transition-colors hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/30 ${
+    <div className={`flex items-center gap-3 p-3 rounded-apple transition-colors hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/30 overflow-hidden ${
       live ? 'bg-brand-green/5 ring-1 ring-brand-green/20' : ''
     }`}>
       <div className="w-12 text-center flex-shrink-0">
@@ -115,7 +116,7 @@ function MatchDetailRow({ fixture }: { fixture: AgencyFixture }) {
 
       <img src={fixture.leagueLogo} alt="" className="w-4 h-4 object-contain flex-shrink-0" />
 
-      <div className="flex items-center gap-2 flex-1 min-w-0">
+      <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
         <img src={fixture.homeTeam.logo} alt="" className="w-7 h-7 object-contain flex-shrink-0" />
         <span className={`text-sm truncate ${done ? 'text-apple-gray-500' : 'text-apple-gray-800 dark:text-white'}`}>
           {fixture.homeTeam.name}
@@ -440,16 +441,22 @@ export default function CalendarPage() {
   const today = useMemo(() => new Date(), [])
 
   useEffect(() => {
-    fetchAllAgencyFixtures()
-      .then(f => { setFixtures(f); setError(null) })
-      .catch(e => setError(e.message))
+    Promise.all([
+      fetchAllAgencyFixtures().catch(e => { setError(e.message); return [] as AgencyFixture[] }),
+      fetchManualFixtures().then(rows => manualToAgencyFixtures(rows)).catch(() => [] as AgencyFixture[]),
+    ])
+      .then(([api, manual]) => {
+        setFixtures([...api, ...manual])
+        if (api.length > 0) setError(null)
+      })
       .finally(() => setLoading(false))
   }, [])
 
   const filteredFixtures = useMemo(() => {
     if (!selectedPlayer) return fixtures
     return fixtures.filter(f =>
-      f.homeTeam.id === selectedPlayer.apiTeamId || f.awayTeam.id === selectedPlayer.apiTeamId
+      f.homeTeam.id === selectedPlayer.apiTeamId || f.awayTeam.id === selectedPlayer.apiTeamId ||
+      (f.source === 'manual' && f.players.some(p => p.fullName === selectedPlayer.fullName))
     )
   }, [fixtures, selectedPlayer])
 
@@ -531,7 +538,7 @@ export default function CalendarPage() {
 
       {/* ── Controls ────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => navigate(-1)}
             className="p-2 rounded-lg hover:bg-apple-gray-100 dark:hover:bg-apple-gray-800 transition-colors"
@@ -540,7 +547,7 @@ export default function CalendarPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h1 className="text-xl sm:text-2xl font-bold text-apple-gray-800 dark:text-white tracking-tight min-w-[200px] text-center">
+          <h1 className="text-xl sm:text-2xl font-bold text-apple-gray-800 dark:text-white tracking-tight min-w-0 text-center">
             {title}
           </h1>
           <button

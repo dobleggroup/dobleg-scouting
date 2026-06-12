@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { AGENCY_PLAYERS, getExpiringContracts } from '@/constants/agencyPlayers'
 import { fetchAllAgencyFixtures, getFixturesForDate, groupFixturesByDate, toArDateKey } from '@/services/footballApiService'
+import { fetchManualFixtures, manualToAgencyFixtures } from '@/services/agencyManualFixturesService'
 import { useAuth } from '@/context/AuthContext'
 import type { AgencyFixture } from '@/types/footballApi'
 
@@ -222,17 +223,25 @@ export default function HomePage() {
   const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
-    fetchAllAgencyFixtures()
-      .then(f => { setFixtures(f); setError(null) })
-      .catch(e => setError(e.message || 'Error cargando fixtures'))
+    Promise.all([
+      fetchAllAgencyFixtures().catch(e => { setError(e.message || 'Error cargando fixtures'); return [] as AgencyFixture[] }),
+      fetchManualFixtures().then(rows => manualToAgencyFixtures(rows)).catch(() => [] as AgencyFixture[]),
+    ])
+      .then(([api, manual]) => {
+        setFixtures([...api, ...manual])
+        if (api.length > 0) setError(null)
+      })
       .finally(() => setLoading(false))
   }, [])
 
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
-      const data = await fetchAllAgencyFixtures(true)
-      setFixtures(data)
+      const [data, manual] = await Promise.all([
+        fetchAllAgencyFixtures(true),
+        fetchManualFixtures().then(rows => manualToAgencyFixtures(rows)).catch(() => [] as AgencyFixture[]),
+      ])
+      setFixtures([...data, ...manual])
       setError(null)
     } catch (e: any) {
       setError(e.message || 'Error cargando fixtures')
