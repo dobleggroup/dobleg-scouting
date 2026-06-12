@@ -26,6 +26,8 @@ import { POSITION_MAP, DISPLAY_POSITION_MAP, DISPLAY_METRICS, RADAR_METRICS, MET
 import { fetchPlayerEvaluations, fetchEvaluationsByName, type ScoutEvaluation } from '@/services/scoutEvaluationService'
 import { useApiFootballPlayerId, usePlayerInjuries, usePlayerTransfers } from '@/hooks/usePlayerApiData'
 import TrackingWidget from '@/components/tracking/TrackingWidget'
+import DobleGWidget from '@/components/agency/DobleGWidget'
+import ManualFixturesEditor from '@/components/agency/ManualFixturesEditor'
 import BodyMapSVG from '@/components/health/BodyMapSVG'
 import ScoutsGGBadge from '@/components/ui/ScoutsGGBadge'
 import type { EnrichedPlayer, SubjectiveMetric } from '@/types'
@@ -587,7 +589,7 @@ export default function PlayerDetailPage() {
   const source = (searchParams.get('source') ?? 'externo') as 'externo' | 'interno' | 'seguimiento'
   const apiIdParam = searchParams.get('apiId')
   const overridePosition = searchParams.get('pos')
-  const { external, internal, monitoring, normalized, evolution, subjectiveMetrics, marketValueHistory, gpsData, loading, error } = useData()
+  const { external, internal, monitoring, normalized, evolution, subjectiveMetrics, marketValueHistory, gpsData, agencyPlayers, loading, error } = useData()
   const [activeTab, setActiveTab] = useState('General')
   const [selectedPosition, setSelectedPosition] = useState<Position | null>(null)
   const [comparisonLeague, setComparisonLeague] = useState<string>('all')
@@ -666,6 +668,13 @@ export default function PlayerDetailPage() {
       normalizeName(p['Nombre jugador']) === normalizeName(decodedId)
     ) ?? null
   }, [id, source, monitoring])
+
+  // Jugador Doble G sin equipo resoluble → ofrecer carga manual de próximos partidos
+  const dgEntry = useMemo(
+    () => agencyPlayers.find(a => normalizeName(a.fullName) === normalizeName(player?.Jugador ?? '')),
+    [agencyPlayers, player]
+  )
+  const needsManualFixtures = !!player && !!dgEntry && !dgEntry.apiTeamId
 
   const { lookup: scoreLookup, ready: scoreLookupReady } = useScoreLookup()
   const { metricAverages } = usePositionMetricAverages()
@@ -1309,6 +1318,10 @@ export default function PlayerDetailPage() {
 
           {/* Quick links & actions */}
           <div className="card-apple p-4 space-y-2">
+            <DobleGWidget
+              player={player}
+              apiPlayerId={apiIdParam ? Number(apiIdParam) : null}
+            />
             {source !== 'interno' && (
               <TrackingWidget
                 playerName={player.Jugador}
@@ -1366,6 +1379,8 @@ export default function PlayerDetailPage() {
             </button>
           </div>
 
+          {needsManualFixtures && <ManualFixturesEditor playerName={player.Jugador} />}
+
           {/* Comments - on sidebar */}
           <div className="card-apple p-5">
             <PlayerComments player={player} />
@@ -1374,20 +1389,19 @@ export default function PlayerDetailPage() {
 
         {/* Main content area */}
         <div className="lg:col-span-8">
-          <div className="flex gap-4">
-            {/* Vertical Tab Sidebar */}
-            <div className="shrink-0 w-12 xl:w-auto">
-              <div className="sticky top-4 bg-white dark:bg-apple-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark p-1.5 xl:p-2">
-                <nav className="space-y-0.5">
+          <div className="flex flex-col md:flex-row gap-4">
+            {/* Horizontal tab bar on mobile, vertical sidebar on md+ */}
+            <div className="shrink-0 md:w-12 xl:w-auto">
+              <div className="md:sticky md:top-4 bg-white dark:bg-apple-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark p-1.5 xl:p-2 overflow-x-auto">
+                <nav className="flex md:flex-col gap-0.5 md:space-y-0.5">
                   {tabs.map((tab, index) => {
                     const isActive = activeTab === tab.id
-                    // Add separator before "Salud" section (medical tabs)
                     const showSeparator = tab.id === 'Salud'
 
                     return (
-                      <div key={tab.id}>
+                      <div key={tab.id} className="flex-shrink-0">
                         {showSeparator && (
-                          <div className="my-2 mx-2 border-t border-apple-gray-100 dark:border-apple-gray-700" />
+                          <div className="hidden md:block my-2 mx-2 border-t border-apple-gray-100 dark:border-apple-gray-700" />
                         )}
                         <button
                           data-tab={tab.id}
@@ -1410,8 +1424,9 @@ export default function PlayerDetailPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" d={tab.icon} />
                           </svg>
                           <span className="text-xs font-medium hidden xl:block whitespace-nowrap">{tab.label}</span>
-                          {/* Tooltip for small screens */}
-                          <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden whitespace-nowrap z-50 pointer-events-none">
+                          <span className="text-2xs font-medium md:hidden whitespace-nowrap">{tab.label}</span>
+                          {/* Tooltip for medium screens without labels */}
+                          <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">
                             {tab.id}
                           </span>
                         </button>

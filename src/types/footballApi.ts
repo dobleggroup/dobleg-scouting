@@ -101,5 +101,6 @@ export interface AgencyFixture {
   goalsAway: number | null
   isHome: boolean
   players: { shortName: string; fullName: string; image: string | null }[]
+  source?: 'api' | 'manual'
 }
 
