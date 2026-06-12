@@ -9,7 +9,7 @@ export interface AgencyPlayer {
   isReserve: boolean
 }
 
-export const AGENCY_PLAYERS: AgencyPlayer[] = [
+export const BASE_AGENCY_PLAYERS: AgencyPlayer[] = [
   { shortName: 'G. Prestianni', fullName: 'Gianluca Prestianni', image: 'https://encrypted-tbn2.gstatic.com/images?q=tbn:ANd9GcTxU7jrcPvBo4o89PTXnHZlGY56xc2X-rPYWCUBnkTIh6OQTQ', contractEnd: '30/06/2029', marketValue: '€12.00m', team: 'Benfica', apiTeamId: 211, isReserve: false },
   { shortName: 'J. Paradela', fullName: 'José Paradela', image: 'https://encrypted-tbn1.gstatic.com/images?q=tbn:ANd9GcS9GNEuUHCWeaSQKtbkKrreYrK_ff-_uqJ_XKcXh-63o7-8Yw', contractEnd: '30/06/2029', marketValue: '€9.00m', team: 'Cruz Azul', apiTeamId: 2295, isReserve: false },
   { shortName: 'L. Orellano', fullName: 'Luca Orellano', image: 'https://encrypted-tbn3.gstatic.com/images?q=tbn:ANd9GcTt7O2crtnBWvWOKe425SVmYxdMe_2Z4RowyMQA2bl1AdBqoA', contractEnd: null, marketValue: '€8.00m', team: 'Monterrey', apiTeamId: 2282, isReserve: false },
@@ -49,21 +49,51 @@ export const AGENCY_PLAYERS: AgencyPlayer[] = [
   { shortName: 'T. Valdecantos', fullName: 'Tomás Valdecantos', image: 'https://encrypted-tbn1.gstatic.com/images?q=tbn:ANd9GcR40YiqK6AdAQ-O3cU6kajD5P8SZGbDdGbF7kU1f7KuCUzxOw', contractEnd: null, marketValue: null, team: 'Al Ain', apiTeamId: 2865, isReserve: true },
 ]
 
+// ─── Runtime list (base + overlay de Supabase) ─────────────────────────────────
+// El cache lo setea agencyPlayersService.loadAgencyPlayers() tras fusionar.
+let _runtime: AgencyPlayer[] = BASE_AGENCY_PLAYERS
+
+/** Llamado por agencyPlayersService.loadAgencyPlayers() tras fusionar base + overlay. */
+export function _setRuntimeAgencyPlayers(list: AgencyPlayer[]) {
+  _runtime = list
+}
+
+/** Lista Doble G vigente (base + overlay). Síncrono. */
+export function getAgencyPlayersList(): AgencyPlayer[] {
+  return _runtime
+}
+
+/**
+ * Alias de lectura para los consumidores existentes que iteran/filtran la lista.
+ * El Proxy delega siempre al cache vigente (`_runtime`), por lo que
+ * `AGENCY_PLAYERS.filter(...)`, `.find(...)`, `.map(...)` y `for...of` reflejan
+ * altas/bajas sin tocar a los consumidores.
+ */
+export const AGENCY_PLAYERS = new Proxy([] as AgencyPlayer[], {
+  get(_t, prop) {
+    const value = Reflect.get(_runtime, prop, _runtime)
+    return typeof value === 'function' ? value.bind(_runtime) : value
+  },
+  has(_t, prop) { return Reflect.has(_runtime, prop) },
+  ownKeys() { return Reflect.ownKeys(_runtime) },
+  getOwnPropertyDescriptor(_t, prop) { return Reflect.getOwnPropertyDescriptor(_runtime, prop) },
+}) as AgencyPlayer[]
+
 export function getUniqueTeamIds(): number[] {
   const ids = new Set<number>()
-  for (const p of AGENCY_PLAYERS) {
+  for (const p of _runtime) {
     if (p.apiTeamId && !p.isReserve) ids.add(p.apiTeamId)
   }
   return Array.from(ids)
 }
 
 export function getPlayersByTeamId(teamId: number): AgencyPlayer[] {
-  return AGENCY_PLAYERS.filter(p => p.apiTeamId === teamId)
+  return _runtime.filter(p => p.apiTeamId === teamId)
 }
 
 export function getTotalPortfolioValue(): number {
   let total = 0
-  for (const p of AGENCY_PLAYERS) {
+  for (const p of _runtime) {
     if (!p.marketValue) continue
     const raw = p.marketValue.replace('€', '').trim()
     if (raw.endsWith('m')) total += parseFloat(raw) * 1_000_000
@@ -80,7 +110,7 @@ export function formatPortfolioValue(value: number): string {
 
 export function getExpiringContracts(monthsThreshold = 8): AgencyPlayer[] {
   const now = new Date()
-  return AGENCY_PLAYERS.filter(p => {
+  return _runtime.filter(p => {
     if (!p.contractEnd) return false
     const [d, m, y] = p.contractEnd.split('/')
     const end = new Date(+y, +m - 1, +d)
@@ -90,6 +120,6 @@ export function getExpiringContracts(monthsThreshold = 8): AgencyPlayer[] {
 }
 
 export function getUniqueLeagues(): number {
-  const teams = new Set(AGENCY_PLAYERS.map(p => p.team))
+  const teams = new Set(_runtime.map(p => p.team))
   return teams.size
 }
