@@ -133,7 +133,7 @@ export default function InternalScoutingPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-apple-gray-800 dark:text-white tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-bold text-apple-gray-800 dark:text-white tracking-tight">
             Scouting Interno
           </h1>
           <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
@@ -151,7 +151,7 @@ export default function InternalScoutingPage() {
               placeholder="Buscar jugador..."
               value={filters.search}
               onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
-              className="input-apple pl-9 pr-4 w-56"
+              className="input-apple pl-9 pr-4 w-full sm:w-56"
             />
           </div>
         </div>
@@ -159,11 +159,19 @@ export default function InternalScoutingPage() {
 
       {/* Layout */}
       <div className="flex gap-6">
-        <FilterSidebar players={internal} filters={filters} onChange={setFilters} onReset={handleReset} />
+        <div className="hidden lg:block">
+          <FilterSidebar players={internal} filters={filters} onChange={setFilters} onReset={handleReset} />
+        </div>
         <div className="flex-1 min-w-0">
           <PlayerTable players={filtered} source="interno" selectedMetrics={filters.selectedMetrics} />
         </div>
       </div>
+
+      {/* Mobile filter button + panel */}
+      <MobileFilterButton onClick={() => setShowMobileFilters(true)} activeCount={activeFiltersCount} />
+      <MobileFilterPanel isOpen={showMobileFilters} onClose={() => setShowMobileFilters(false)} activeCount={activeFiltersCount}>
+        <FilterSidebar players={internal} filters={filters} onChange={setFilters} onReset={handleReset} />
+      </MobileFilterPanel>
     </div>
   )
 }

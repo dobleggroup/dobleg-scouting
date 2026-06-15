@@ -737,7 +737,7 @@ export default function ExternalScoutingPage() {
       )}
 
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-apple-gray-800 rounded-2xl shadow-2xl border border-apple-gray-200 dark:border-apple-gray-700 px-5 py-3 flex items-center gap-4">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-apple-gray-800 rounded-2xl shadow-2xl border border-apple-gray-200 dark:border-apple-gray-700 px-5 py-3 flex flex-wrap items-center gap-4">
           <span className="text-sm font-medium text-apple-gray-600 dark:text-apple-gray-300">
             {selectedIds.size} seleccionado{selectedIds.size > 1 ? 's' : ''}
           </span>

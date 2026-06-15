@@ -8,6 +8,13 @@ const sizes = {
   xl: 'w-[104px] h-[104px]',
 } as const
 
+const roundedMap = {
+  full: 'rounded-full',
+  xl: 'rounded-xl',
+  '2xl': 'rounded-2xl',
+  lg: 'rounded-lg',
+} as const
+
 export function PlayerPhoto({ src, name, size = 'md', className = '', rounded = 'full' }: {
   src?: string | null
   name?: string
@@ -17,7 +24,7 @@ export function PlayerPhoto({ src, name, size = 'md', className = '', rounded = 
 }) {
   const [failed, setFailed] = useState(false)
   const s = sizes[size]
-  const r = `rounded-${rounded}`
+  const r = roundedMap[rounded]
 
   if (src && !failed) {
     return (

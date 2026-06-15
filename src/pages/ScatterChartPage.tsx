@@ -530,7 +530,7 @@ export default function ScatterChartPage() {
   return (
     <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-apple-gray-800 dark:text-white tracking-tight">
             Grafico de Dispersion
@@ -890,9 +890,9 @@ export default function ScatterChartPage() {
             )}
           </div>
         ) : (
-          <div className="h-[600px]">
+          <div className="h-[400px] sm:h-[600px]">
             <ResponsiveContainer width="100%" height="100%">
-              <ScatterChart margin={{ top: 30, right: 50, bottom: 70, left: 70 }}>
+              <ScatterChart margin={{ top: 30, right: 30, bottom: 70, left: 50 }}>
                 <XAxis
                   type="number"
                   dataKey="x"

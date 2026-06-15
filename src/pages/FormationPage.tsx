@@ -666,7 +666,7 @@ export default function FormationPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-apple-gray-800 dark:text-white tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-bold text-apple-gray-800 dark:text-white tracking-tight">
             Constructor de Formaciones
           </h1>
           <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
@@ -834,7 +834,7 @@ export default function FormationPage() {
 
         {/* Field */}
         <div className="flex-1 flex items-start justify-center">
-          <div className="bg-gradient-to-b from-emerald-600 to-emerald-700 rounded-2xl p-6 relative aspect-[3/4] w-full max-w-xl shadow-2xl">
+          <div className="bg-gradient-to-b from-emerald-600 to-emerald-700 rounded-2xl p-4 sm:p-6 relative aspect-[3/4] w-full max-w-xl shadow-2xl overflow-hidden">
             {/* Field markings */}
             <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 130" preserveAspectRatio="none">
               <rect x="2" y="2" width="96" height="126" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="0.5" />
@@ -866,7 +866,7 @@ export default function FormationPage() {
                 >
                   <div className={`relative transition-all duration-200 ${hasPlayers ? '' : 'hover:scale-110'}`}>
                     {/* Main circle */}
-                    <div className={`w-14 h-14 rounded-full flex items-center justify-center shadow-xl transition-all ${
+                    <div className={`w-10 h-10 sm:w-14 sm:h-14 rounded-full flex items-center justify-center shadow-xl transition-all ${
                       hasPlayers
                         ? 'bg-white text-apple-gray-900 ring-2 ring-white/50'
                         : 'bg-white/15 border-2 border-dashed border-white/50 text-white/80 hover:bg-white/25 hover:border-white/70'
