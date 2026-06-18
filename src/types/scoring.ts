@@ -46,6 +46,25 @@ export interface PlayerSeasonScore {
   total_assists: number;
   percentile: number | null;
   global_percentile: number | null;
+  // Métricas p90 por jugador (pobladas por recalc-scores)
+  tackles_p90: number | null;
+  interceptions_p90: number | null;
+  blocks_p90: number | null;
+  duels_won_pct: number | null;
+  passes_accuracy: number | null;
+  passes_key_p90: number | null;
+  passes_total_p90: number | null;
+  dribbles_success_p90: number | null;
+  dribbles_pct: number | null;
+  shots_on_p90: number | null;
+  shots_pct: number | null;
+  goals_p90: number | null;
+  assists_p90: number | null;
+  fouls_drawn_p90: number | null;
+  saves_p90: number | null;
+  goals_conceded_p90: number | null;
+  penalty_saved_avg: number | null;
+  clean_sheet_pct: number | null;
 }
 
 export interface PlayerMatchStat {
