@@ -1024,7 +1024,7 @@ export default function BusquedaPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <button onClick={() => navigate(`/jugador-api/${selectedPlayer.id}`)} className="text-xl font-semibold text-apple-gray-900 dark:text-white hover:text-brand-green transition-colors">
+                    <button onClick={() => navigate(`/jugador/${encodeURIComponent(selectedPlayer.name)}?source=externo&apiId=${selectedPlayer.id}`)} className="text-xl font-semibold text-apple-gray-900 dark:text-white hover:text-brand-green transition-colors">
                       {selectedPlayer.name}
                     </button>
                   </div>
