@@ -1,109 +1,79 @@
 import { useState, useMemo } from 'react'
-import { useData } from '@/context/DataContext'
-import LoadingSpinner from '@/components/ui/LoadingSpinner'
-import ComparisonView from '@/components/comparison/ComparisonView'
-import { exportComparisonToPdf } from '@/utils/pdfExport'
-import { smartSearch } from '@/lib/search'
+import {
+  RadarChart, PolarGrid, PolarAngleAxis, Radar,
+  Tooltip, Legend, ResponsiveContainer,
+} from 'recharts'
+import { usePlayersList } from '@/hooks/usePlayerStats'
+import type { PlayerWithScore } from '@/types/scoring'
+import {
+  API_METRICS,
+  METRICS_BY_POSITION,
+  getMetricValue,
+  type ApiMetricKey,
+} from '@/constants/apiMetrics'
+import { getScoreColorClass } from '@/components/ui/ScoreBar'
 import AddToReportButton from '@/components/pdf/AddToReportButton'
-import ScoutsGGBadge from '@/components/ui/ScoutsGGBadge'
-import type { EnrichedPlayer } from '@/types'
-import { useScoreLookup } from '@/hooks/usePlayerStats'
-import { normalizeName } from '@/utils/scoring'
+import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { fuzzyMatch } from '@/lib/search'
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const PLAYER_COLORS = ['#22C55E', '#3B82F6', '#F59E0B']
 
-interface PlayerSearchProps {
-  players: EnrichedPlayer[]
-  selected: EnrichedPlayer | null
-  onSelect: (p: EnrichedPlayer | null) => void
-  color: string
-  label: string
-  leagues: string[]
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const METRIC_BY_KEY = new Map(API_METRICS.map(m => [m.key, m]))
+
+function getPlayerMetricValue(player: PlayerWithScore, key: ApiMetricKey): number | null {
+  if (!player.season_scores?.length) return null
+  return getMetricValue(player.season_scores[0], key)
 }
 
-function PlayerSearch({ players, selected, onSelect, color, label, leagues }: PlayerSearchProps) {
-  const [searchMode, setSearchMode] = useState<'search' | 'filter'>('search')
+function getAge(birthDate: string | null | undefined): number | null {
+  if (!birthDate) return null
+  return Math.floor((Date.now() - new Date(birthDate).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+}
+
+function formatMarketValue(mv: number | null): string {
+  if (mv == null) return '—'
+  if (mv >= 1_000_000) return `€${(mv / 1_000_000).toFixed(mv % 1_000_000 === 0 ? 0 : 1)}M`
+  if (mv >= 1_000) return `€${(mv / 1_000).toFixed(0)}K`
+  return `€${mv}`
+}
+
+function scoreColor(s: number | null | undefined) {
+  return getScoreColorClass(s ?? null, '10')
+}
+
+// ─── PlayerSearch (API-based) ─────────────────────────────────────────────────
+
+interface PlayerSearchProps {
+  players: PlayerWithScore[]
+  selected: PlayerWithScore | null
+  onSelect: (p: PlayerWithScore | null) => void
+  color: string
+  label: string
+}
+
+function PlayerSearch({ players, selected, onSelect, color, label }: PlayerSearchProps) {
   const [searchText, setSearchText] = useState('')
-  const [leagueFilter, setLeagueFilter] = useState('')
-  const [teamFilter, setTeamFilter] = useState('')
-  const [posFilter, setPosFilter] = useState('')
-  const [playerFilter, setPlayerFilter] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
 
-  // Supabase score lookup (1-10 scale). Falls back to CSV ggScore (0-100) when not ready or not found.
-  const { lookup: scoreLookup, ready: scoreReady } = useScoreLookup()
-
-  function getPlayerScore(player: EnrichedPlayer): { score: number | null; scale: '100' | '10' } {
-    if (scoreReady && scoreLookup.size > 0) {
-      const key = normalizeName(player.Jugador)
-      const entry = scoreLookup.get(key)
-      if (entry) return { score: entry.score, scale: '10' }
-    }
-    return { score: null, scale: '10' }
-  }
-
-  function getDisplayScore(player: EnrichedPlayer): string {
-    const { score } = getPlayerScore(player)
-    return score?.toFixed(1) ?? '—'
-  }
-
-  function getScoreForSort(player: EnrichedPlayer): number {
-    const { score } = getPlayerScore(player)
-    return score ?? 0
-  }
-
-  // Search results (direct name search) - using smart search
   const searchResults = useMemo(() => {
-    return smartSearch(players, searchText, p => `${p.Jugador} ${p.Equipo}`, 10)
+    if (!searchText.trim()) return []
+    return players
+      .filter(p => fuzzyMatch(searchText, p.name) || fuzzyMatch(searchText, p.team?.name ?? ''))
+      .slice(0, 10)
   }, [players, searchText])
 
-  // Filtered teams based on league selection
-  const filteredTeams = useMemo(() => {
-    if (!leagueFilter) return []
-    const set = new Set<string>()
-    players.filter(p => p.Liga === leagueFilter).forEach(p => { if (p.Equipo) set.add(p.Equipo) })
-    return [...set].sort()
-  }, [players, leagueFilter])
-
-  // Filtered positions based on league and team
-  const filteredPositions = useMemo(() => {
-    const set = new Set<string>()
-    players
-      .filter(p => (!leagueFilter || p.Liga === leagueFilter) && (!teamFilter || p.Equipo === teamFilter))
-      .forEach(p => { if (p['Posición']) set.add(p['Posición']) })
-    return [...set].sort()
-  }, [players, leagueFilter, teamFilter])
-
-  // Filtered players based on all filters
-  const filteredPlayers = useMemo(() => {
-    return players.filter(p => {
-      if (leagueFilter && p.Liga !== leagueFilter) return false
-      if (teamFilter && p.Equipo !== teamFilter) return false
-      if (posFilter && p['Posición'] !== posFilter) return false
-      return true
-    }).sort((a, b) => getScoreForSort(b) - getScoreForSort(a))
-  }, [players, leagueFilter, teamFilter, posFilter])
-
-  const handleSelectPlayer = (jugador: string) => {
-    if (!jugador) { onSelect(null); setPlayerFilter(''); return }
-    const player = filteredPlayers.find(p => p.Jugador === jugador)
-    if (player) onSelect(player)
-    setPlayerFilter(jugador)
-  }
-
-  const handleSearchSelect = (player: EnrichedPlayer) => {
-    onSelect(player)
+  const handleSelect = (p: PlayerWithScore) => {
+    onSelect(p)
     setSearchText('')
     setShowDropdown(false)
   }
 
-  const resetFilters = () => {
-    setLeagueFilter('')
-    setTeamFilter('')
-    setPosFilter('')
-    setPlayerFilter('')
-    setSearchText('')
-  }
+  const initials = (name: string) =>
+    name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('')
 
   return (
     <div className="space-y-3">
@@ -115,26 +85,25 @@ function PlayerSearch({ players, selected, onSelect, color, label, leagues }: Pl
           style={{ borderColor: color + '60' }}
         >
           <div className="flex items-center gap-3">
-            {selected.Imagen ? (
-              <img src={selected.Imagen} alt="" className="w-10 h-10 rounded-lg object-cover" />
+            {selected.photo ? (
+              <img src={selected.photo} alt="" className="w-10 h-10 rounded-lg object-cover" />
             ) : (
               <div
                 className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-sm"
                 style={{ backgroundColor: color }}
               >
-                {selected.Jugador.split(' ').map(w => w[0]).slice(0, 2).join('')}
+                {initials(selected.name)}
               </div>
             )}
             <div>
-              <div className="flex items-center gap-1.5">
-                <p className="font-semibold text-apple-gray-800 dark:text-white text-sm">{selected.Jugador}</p>
-                <ScoutsGGBadge playerName={selected.Jugador} />
-              </div>
-              <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400">{selected.Equipo} · {selected['Posición']}</p>
+              <p className="font-semibold text-apple-gray-800 dark:text-white text-sm">{selected.name}</p>
+              <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400">
+                {selected.team?.name ?? '—'} · {selected.primary_position ?? '—'}
+              </p>
             </div>
           </div>
           <button
-            onClick={() => { onSelect(null); resetFilters() }}
+            onClick={() => { onSelect(null); setSearchText('') }}
             className="w-8 h-8 flex items-center justify-center rounded-lg text-apple-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -143,131 +112,51 @@ function PlayerSearch({ players, selected, onSelect, color, label, leagues }: Pl
           </button>
         </div>
       ) : (
-        <div className="space-y-2.5">
-          {/* Mode toggle */}
-          <div className="flex gap-1 bg-apple-gray-100 dark:bg-apple-gray-700 rounded-lg p-1">
-            <button
-              onClick={() => setSearchMode('search')}
-              className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                searchMode === 'search'
-                  ? 'bg-white dark:bg-apple-gray-600 text-apple-gray-800 dark:text-white shadow-sm'
-                  : 'text-apple-gray-500 dark:text-apple-gray-400'
-              }`}
-            >
-              Buscar
-            </button>
-            <button
-              onClick={() => setSearchMode('filter')}
-              className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                searchMode === 'filter'
-                  ? 'bg-white dark:bg-apple-gray-600 text-apple-gray-800 dark:text-white shadow-sm'
-                  : 'text-apple-gray-500 dark:text-apple-gray-400'
-              }`}
-            >
-              Filtrar
-            </button>
+        <div className="relative">
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Escribir nombre del jugador..."
+              value={searchText}
+              onChange={e => { setSearchText(e.target.value); setShowDropdown(true) }}
+              onFocus={() => setShowDropdown(true)}
+              onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+              className="input-apple pl-9 pr-4 w-full"
+              style={{ borderColor: searchText ? color : undefined }}
+            />
           </div>
-
-          {searchMode === 'search' ? (
-            /* Direct search mode */
-            <div className="relative">
-              <div className="relative">
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <input
-                  type="text"
-                  placeholder="Escribir nombre del jugador..."
-                  value={searchText}
-                  onChange={e => { setSearchText(e.target.value); setShowDropdown(true) }}
-                  onFocus={() => setShowDropdown(true)}
-                  className="input-apple pl-9 pr-4 w-full"
-                  style={{ borderColor: searchText ? color : undefined }}
-                />
-              </div>
-              {/* Search results dropdown */}
-              {showDropdown && searchResults.length > 0 && (
-                <div className="absolute z-20 mt-1 w-full bg-white dark:bg-apple-gray-800 border border-apple-gray-200 dark:border-apple-gray-700 rounded-xl shadow-lg overflow-hidden">
-                  {searchResults.map(p => (
-                    <button
-                      key={`${p.Jugador}-${p.Equipo}`}
-                      onClick={() => handleSearchSelect(p)}
-                      className="w-full px-4 py-3 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700 transition-colors flex items-center gap-3"
-                    >
-                      {p.Imagen ? (
-                        <img src={p.Imagen} alt="" className="w-8 h-8 rounded-full object-cover" />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-apple-gray-200 dark:bg-apple-gray-600 flex items-center justify-center text-xs font-medium text-apple-gray-600 dark:text-apple-gray-300">
-                          {p.Jugador.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">{p.Jugador}</span>
-                          <ScoutsGGBadge playerName={p.Jugador} />
-                        </div>
-                        <div className="text-xs text-apple-gray-500 dark:text-apple-gray-400 truncate">
-                          {p.Equipo} · {p['Posición']}
-                        </div>
-                      </div>
-                      <div className="text-xs font-semibold" style={{ color }}>
-                        {getDisplayScore(p)}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+          {showDropdown && searchResults.length > 0 && (
+            <div className="absolute z-20 mt-1 w-full bg-white dark:bg-apple-gray-800 border border-apple-gray-200 dark:border-apple-gray-700 rounded-xl shadow-lg overflow-hidden">
+              {searchResults.map(p => (
+                <button
+                  key={p.id}
+                  onMouseDown={() => handleSelect(p)}
+                  className="w-full px-4 py-3 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700 transition-colors flex items-center gap-3"
+                >
+                  {p.photo ? (
+                    <img src={p.photo} alt="" className="w-8 h-8 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-apple-gray-200 dark:bg-apple-gray-600 flex items-center justify-center text-xs font-medium text-apple-gray-600 dark:text-apple-gray-300">
+                      {initials(p.name)}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <span className="font-medium text-apple-gray-800 dark:text-white text-sm truncate block">{p.name}</span>
+                    <span className="text-xs text-apple-gray-500 dark:text-apple-gray-400 truncate block">
+                      {p.team?.name ?? '—'} · {p.league?.name ?? '—'} · {p.primary_position ?? '—'}
+                    </span>
+                  </div>
+                  {p.primary_score != null && (
+                    <span className={`text-xs font-semibold tabular-nums ${scoreColor(p.primary_score)}`}>
+                      {p.primary_score.toFixed(1)}
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
-          ) : (
-            /* Filter mode */
-            <>
-              <select
-                value={leagueFilter}
-                onChange={e => { setLeagueFilter(e.target.value); setTeamFilter(''); setPosFilter(''); setPlayerFilter('') }}
-                className="input-apple text-sm"
-              >
-                <option value="">1. Seleccionar liga...</option>
-                {leagues.map(l => <option key={l} value={l}>{l}</option>)}
-              </select>
-
-              {leagueFilter && (
-                <select
-                  value={teamFilter}
-                  onChange={e => { setTeamFilter(e.target.value); setPosFilter(''); setPlayerFilter('') }}
-                  className="input-apple text-sm"
-                >
-                  <option value="">2. Todos los equipos ({filteredTeams.length})</option>
-                  {filteredTeams.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              )}
-
-              {leagueFilter && (
-                <select
-                  value={posFilter}
-                  onChange={e => { setPosFilter(e.target.value); setPlayerFilter('') }}
-                  className="input-apple text-sm"
-                >
-                  <option value="">3. Todas las posiciones</option>
-                  {filteredPositions.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-              )}
-
-              {leagueFilter && (
-                <select
-                  value={playerFilter}
-                  onChange={e => handleSelectPlayer(e.target.value)}
-                  className="w-full px-3.5 py-3 text-sm bg-white dark:bg-apple-gray-800 border-2 rounded-apple-lg font-medium dark:text-white transition-all focus:outline-none"
-                  style={{ borderColor: color }}
-                >
-                  <option value="">4. Seleccionar jugador ({filteredPlayers.length})</option>
-                  {filteredPlayers.slice(0, 50).map((p, i) => (
-                    <option key={`${p.Jugador}-${i}`} value={p.Jugador}>
-                      {p.Jugador} ({getDisplayScore(p)}) - {p.Equipo}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </>
           )}
         </div>
       )}
@@ -275,33 +164,401 @@ function PlayerSearch({ players, selected, onSelect, color, label, leagues }: Pl
   )
 }
 
-export default function ComparisonPage() {
-  const { external, internal, normalized, loading } = useData()
-  const allPlayers = useMemo(() => [...external, ...internal], [external, internal])
+// ─── QuickSummaryCard ─────────────────────────────────────────────────────────
 
-  const leagues = useMemo(() => {
-    const set = new Set<string>()
-    allPlayers.forEach(p => { if (p.Liga) set.add(p.Liga) })
-    return [...set].sort()
-  }, [allPlayers])
+function QuickSummaryCard({
+  label,
+  players,
+  getValue,
+  formatValue,
+  higherIsBetter = true,
+  winnerLabel = 'Mejor',
+  icon,
+}: {
+  label: string
+  players: PlayerWithScore[]
+  getValue: (p: PlayerWithScore) => number
+  formatValue: (v: number) => string
+  higherIsBetter?: boolean
+  winnerLabel?: string
+  icon: React.ReactNode
+}) {
+  const values = players.map(getValue)
+  const best = higherIsBetter ? Math.max(...values) : Math.min(...values)
+  const allEqual = values.every(v => v === best)
 
-  const [playerA, setPlayerA] = useState<EnrichedPlayer | null>(null)
-  const [playerB, setPlayerB] = useState<EnrichedPlayer | null>(null)
-  const [playerC, setPlayerC] = useState<EnrichedPlayer | null>(null)
-  const [showC, setShowC] = useState(false)
-  const [exporting, setExporting] = useState(false)
+  return (
+    <div className="bg-white dark:bg-apple-gray-800 rounded-2xl p-4 shadow-sm border border-apple-gray-100 dark:border-apple-gray-700">
+      <div className="flex items-center gap-2 text-apple-gray-500 dark:text-apple-gray-400 mb-3">
+        {icon}
+        <span className="text-xs font-medium uppercase tracking-wide">{label}</span>
+      </div>
+      <div className={`grid gap-2 ${players.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+        {players.map((p, i) => {
+          const isWinner = !allEqual && values[i] === best
+          return (
+            <div
+              key={p.id}
+              className={`text-center p-3 rounded-xl transition-all ${
+                isWinner
+                  ? 'bg-gradient-to-br from-brand-green/10 to-emerald-500/10 ring-2 ring-brand-green/30'
+                  : 'bg-apple-gray-50 dark:bg-apple-gray-700/50'
+              }`}
+            >
+              <div className={`text-xl font-bold ${isWinner ? 'text-brand-green' : 'text-apple-gray-700 dark:text-apple-gray-300'}`}>
+                {formatValue(values[i])}
+              </div>
+              <div className="text-2xs text-apple-gray-500 dark:text-apple-gray-400 mt-1 truncate">
+                {p.name.split(' ').pop()}
+              </div>
+              {isWinner && (
+                <div className="mt-1">
+                  <span className="inline-flex items-center gap-1 text-2xs font-semibold text-brand-green">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    {winnerLabel}
+                  </span>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
-  const activePlayers = [playerA, playerB, ...(showC && playerC ? [playerC] : [])].filter(Boolean) as EnrichedPlayer[]
-  const canCompare = activePlayers.length >= 2
+// ─── ComparisonContent (replaces ComparisonView) ──────────────────────────────
 
-  const handleExport = async () => {
-    setExporting(true)
-    try {
-      await exportComparisonToPdf(activePlayers.map(p => p.Jugador))
-    } finally {
-      setExporting(false)
-    }
+function ComparisonContent({ players }: { players: PlayerWithScore[] }) {
+  // Derive position from first player (for defaults)
+  const pos = players[0]?.primary_position ?? null
+
+  // Active metrics: position defaults capped at 8, or all
+  const defaultMetrics = useMemo<ApiMetricKey[]>(() => {
+    if (!pos) return API_METRICS.map(m => m.key).slice(0, 8)
+    return (METRICS_BY_POSITION[pos] ?? API_METRICS.map(m => m.key)).slice(0, 8)
+  }, [pos])
+
+  const [customMetrics, setCustomMetrics] = useState<ApiMetricKey[] | null>(null)
+  const [showMetricSelector, setShowMetricSelector] = useState(false)
+
+  const activeMetrics = customMetrics ?? defaultMetrics
+
+  // Available metrics: any metric where at least one player has data
+  const availableMetrics = useMemo<ApiMetricKey[]>(() => {
+    return API_METRICS
+      .map(m => m.key)
+      .filter(key => players.some(p => getPlayerMetricValue(p, key) !== null))
+  }, [players])
+
+  const toggleMetric = (key: ApiMetricKey) => {
+    const current = customMetrics ?? defaultMetrics
+    setCustomMetrics(
+      current.includes(key) ? current.filter(k => k !== key) : [...current, key]
+    )
   }
+
+  // ─── Radar data (normalized 0-100 per metric) ────────────────────────────
+
+  const radarData = useMemo(() => {
+    return activeMetrics.map(key => {
+      const meta = METRIC_BY_KEY.get(key)
+      const rawVals = players.map(p => getPlayerMetricValue(p, key) ?? 0)
+      const minV = Math.min(...rawVals)
+      const maxV = Math.max(...rawVals)
+      const range = maxV - minV || 1
+      const norm = (v: number) => Math.max(0, Math.min(100, ((v - minV) / range) * 100))
+
+      const point: Record<string, unknown> = {
+        subject: meta?.short ?? key,
+        fullMark: 100,
+      }
+      players.forEach((p, i) => {
+        point[`p${i}`] = Math.round(norm(getPlayerMetricValue(p, key) ?? 0))
+      })
+      return point
+    })
+  }, [players, activeMetrics])
+
+  // ─── Stats table winners ─────────────────────────────────────────────────
+
+  const metricWins = useMemo(() => {
+    return players.map((_, pi) =>
+      activeMetrics.filter(key => {
+        const meta = METRIC_BY_KEY.get(key)
+        const vals = players.map(p => getPlayerMetricValue(p, key) ?? 0)
+        const best = meta?.higherIsBetter !== false ? Math.max(...vals) : Math.min(...vals)
+        return vals[pi] === best && vals.filter(v => v === best).length === 1
+      }).length
+    )
+  }, [players, activeMetrics])
+
+  return (
+    <div className="space-y-6">
+      {/* Quick summary cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <QuickSummaryCard
+          label="Score GG"
+          players={players}
+          getValue={p => p.primary_score ?? 0}
+          formatValue={v => v.toFixed(1)}
+          higherIsBetter={true}
+          icon={
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+          }
+        />
+        <QuickSummaryCard
+          label="Edad"
+          players={players}
+          getValue={p => getAge(p.birth_date) ?? 0}
+          formatValue={v => `${v} años`}
+          higherIsBetter={false}
+          icon={
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          }
+        />
+        <QuickSummaryCard
+          label="Valor de Mercado"
+          players={players}
+          getValue={p => p.market_value_eur ?? 0}
+          formatValue={v => v > 0 ? formatMarketValue(v) : '—'}
+          higherIsBetter={false}
+          winnerLabel="Más económico"
+          icon={
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          }
+        />
+      </div>
+
+      {/* Player info cards */}
+      <div className={`grid gap-4 ${players.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+        {players.map((player, i) => (
+          <div
+            key={player.id}
+            className="p-4 card-apple border-l-4 transition-all"
+            style={{ borderLeftColor: PLAYER_COLORS[i] }}
+          >
+            <div className="flex items-center gap-3">
+              {player.photo ? (
+                <img src={player.photo} alt="" className="w-12 h-12 rounded-xl object-cover" />
+              ) : (
+                <div
+                  className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold"
+                  style={{ backgroundColor: PLAYER_COLORS[i] }}
+                >
+                  {player.name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('')}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-apple-gray-800 dark:text-white text-sm truncate">{player.name}</h3>
+                <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400 truncate">
+                  {player.team?.name ?? '—'} · {player.primary_position ?? '—'}
+                  {player.league?.name ? ` · ${player.league.name}` : ''}
+                </p>
+                {player.primary_score != null && (
+                  <p className={`text-xs font-semibold mt-0.5 ${scoreColor(player.primary_score)}`}>
+                    Score GG: {player.primary_score.toFixed(1)}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Radar chart */}
+      {activeMetrics.length >= 3 && (
+        <div className="card-apple p-5">
+          <h4 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-5">
+            Comparación Radar{pos ? ` — ${pos}` : ''}
+          </h4>
+          <ResponsiveContainer width="100%" height={360}>
+            <RadarChart data={radarData} margin={{ top: 10, right: 40, bottom: 10, left: 40 }}>
+              <PolarGrid stroke="#6E6E73" strokeOpacity={0.3} />
+              <PolarAngleAxis
+                dataKey="subject"
+                tick={{ fontSize: 11, fill: '#86868B' }}
+                tickLine={false}
+              />
+              {players.map((player, i) => (
+                <Radar
+                  key={player.id}
+                  name={player.name.split(' ').pop() ?? player.name}
+                  dataKey={`p${i}`}
+                  stroke={PLAYER_COLORS[i]}
+                  fill={PLAYER_COLORS[i]}
+                  fillOpacity={0.15}
+                  strokeWidth={2}
+                />
+              ))}
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'rgba(29, 29, 31, 0.95)',
+                  border: '1px solid rgba(110, 110, 115, 0.3)',
+                  borderRadius: '12px',
+                  fontSize: '12px',
+                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
+                }}
+                formatter={(v: number, name: string) => [v, name]}
+              />
+              <Legend
+                wrapperStyle={{ fontSize: '12px', paddingTop: '12px' }}
+                formatter={(v) => <span style={{ color: '#86868B' }}>{v}</span>}
+              />
+            </RadarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Stats comparison table */}
+      <div className="card-apple overflow-hidden">
+        <div className="px-5 py-4 border-b border-apple-gray-200/50 dark:border-apple-gray-700/50 bg-apple-gray-50 dark:bg-apple-gray-800/50 flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
+              Métricas clave{pos ? ` — ${pos}` : ''}
+            </h4>
+            <p className="text-xs text-apple-gray-500 mt-0.5">
+              {customMetrics ? 'Personalizado' : 'Métricas importantes para esta posición'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {customMetrics && (
+              <button
+                onClick={() => { setCustomMetrics(null); setShowMetricSelector(false) }}
+                className="px-3 py-1.5 text-xs font-medium text-apple-gray-500 hover:text-apple-gray-700 dark:hover:text-apple-gray-300 transition-colors"
+              >
+                Restablecer
+              </button>
+            )}
+            <button
+              onClick={() => setShowMetricSelector(!showMetricSelector)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                showMetricSelector
+                  ? 'bg-brand-green text-white'
+                  : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600'
+              }`}
+            >
+              {showMetricSelector ? 'Cerrar' : 'Personalizar'}
+            </button>
+          </div>
+        </div>
+
+        {/* Metric selector panel */}
+        {showMetricSelector && (
+          <div className="px-5 py-4 bg-apple-gray-50/50 dark:bg-apple-gray-800/30 border-b border-apple-gray-200/50 dark:border-apple-gray-700/50">
+            <p className="text-xs text-apple-gray-500 mb-3">Selecciona las métricas a comparar:</p>
+            <div className="flex flex-wrap gap-2">
+              {availableMetrics.map(key => {
+                const meta = METRIC_BY_KEY.get(key)
+                const isSelected = activeMetrics.includes(key)
+                return (
+                  <button
+                    key={key}
+                    onClick={() => toggleMetric(key)}
+                    className={`px-3 py-1.5 text-xs rounded-full transition-all ${
+                      isSelected
+                        ? 'bg-brand-green text-white'
+                        : 'bg-white dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 border border-apple-gray-200 dark:border-apple-gray-600 hover:border-brand-green'
+                    }`}
+                  >
+                    {meta?.label ?? key}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Metrics rows */}
+        <div className="divide-y divide-apple-gray-100 dark:divide-apple-gray-700/50">
+          {activeMetrics.map(key => {
+            const meta = METRIC_BY_KEY.get(key)
+            const rawVals = players.map(p => getPlayerMetricValue(p, key) ?? 0)
+            const best = meta?.higherIsBetter !== false ? Math.max(...rawVals) : Math.min(...rawVals)
+            const maxAbs = Math.max(...rawVals.map(Math.abs)) || 1
+
+            return (
+              <div key={key} className="px-5 py-3 flex items-center gap-4 hover:bg-apple-gray-50/50 dark:hover:bg-apple-gray-800/30 transition-colors">
+                <div className="w-44 flex-shrink-0">
+                  <span className="text-xs font-medium text-apple-gray-600 dark:text-apple-gray-400">
+                    {meta?.label ?? key}
+                  </span>
+                </div>
+                <div className={`flex-1 grid gap-4 ${players.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                  {rawVals.map((v, i) => {
+                    const isWinner = v === best && rawVals.filter(x => x === best).length === 1
+                    const barWidth = (v / maxAbs) * 100
+                    return (
+                      <div key={i} className="flex items-center gap-3">
+                        <div className="flex-1 h-1.5 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${barWidth}%`,
+                              backgroundColor: isWinner ? PLAYER_COLORS[i] : PLAYER_COLORS[i] + '50',
+                            }}
+                          />
+                        </div>
+                        <span
+                          className={`text-sm font-semibold tabular-nums min-w-[45px] text-right ${
+                            isWinner ? '' : 'text-apple-gray-500 dark:text-apple-gray-400'
+                          }`}
+                          style={isWinner ? { color: PLAYER_COLORS[i] } : {}}
+                        >
+                          {v % 1 === 0 ? v.toFixed(0) : v.toFixed(2)}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Summary footer */}
+        <div className="px-5 py-4 border-t border-apple-gray-200/50 dark:border-apple-gray-700/50 bg-apple-gray-50/50 dark:bg-apple-gray-800/30">
+          <div className="flex items-center justify-center gap-8">
+            {players.map((p, i) => (
+              <div key={p.id} className="text-center">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PLAYER_COLORS[i] }} />
+                  <span className="text-xl font-bold" style={{ color: PLAYER_COLORS[i] }}>
+                    {metricWins[i]}
+                  </span>
+                </div>
+                <div className="text-2xs text-apple-gray-500 dark:text-apple-gray-400 mt-1">
+                  {p.name.split(' ').pop()}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
+export default function ComparisonPage() {
+  const { players: allPlayers, loading } = usePlayersList({ pageSize: 500 })
+
+  const [playerA, setPlayerA] = useState<PlayerWithScore | null>(null)
+  const [playerB, setPlayerB] = useState<PlayerWithScore | null>(null)
+  const [playerC, setPlayerC] = useState<PlayerWithScore | null>(null)
+  const [showC, setShowC] = useState(false)
+
+  const activePlayers = [playerA, playerB, ...(showC && playerC ? [playerC] : [])].filter(Boolean) as PlayerWithScore[]
+  const canCompare = activePlayers.length >= 2
 
   if (loading) return <LoadingSpinner fullScreen message="Cargando datos para comparación..." />
 
@@ -321,30 +578,13 @@ export default function ComparisonPage() {
           <div className="flex items-center gap-2">
             <AddToReportButton
               type="comparison"
-              title={`Comparacion: ${[playerA, playerB, playerC].filter(Boolean).map(p => p?.Jugador).join(' vs ')}`}
-              description={`Comparacion detallada de ${[playerA, playerB, playerC].filter(Boolean).length} jugadores.`}
+              title={`Comparacion: ${activePlayers.map(p => p.name).join(' vs ')}`}
+              description={`Comparacion detallada de ${activePlayers.length} jugadores.`}
               captureId="comparison-container"
               source="Comparacion"
               variant="compact"
-              players={[playerA, playerB, playerC].filter(Boolean).map(p => p?.Jugador || '')}
+              players={activePlayers.map(p => p.name)}
             />
-            <button
-              onClick={handleExport}
-              disabled={exporting}
-              className="btn-apple-primary disabled:opacity-50"
-            >
-              {exporting ? (
-                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              )}
-              Exportar PDF
-            </button>
           </div>
         )}
       </div>
@@ -359,7 +599,6 @@ export default function ComparisonPage() {
               onSelect={setPlayerA}
               color={PLAYER_COLORS[0]}
               label="Jugador A"
-              leagues={leagues}
             />
           </div>
           <div className="flex-shrink-0 text-2xl font-bold text-apple-gray-300 dark:text-apple-gray-600 pt-8">VS</div>
@@ -370,7 +609,6 @@ export default function ComparisonPage() {
               onSelect={setPlayerB}
               color={PLAYER_COLORS[1]}
               label="Jugador B"
-              leagues={leagues}
             />
           </div>
           {showC && (
@@ -383,7 +621,6 @@ export default function ComparisonPage() {
                   onSelect={setPlayerC}
                   color={PLAYER_COLORS[2]}
                   label="Jugador C"
-                  leagues={leagues}
                 />
               </div>
             </>
@@ -412,11 +649,7 @@ export default function ComparisonPage() {
       {/* Comparison content */}
       {canCompare ? (
         <div id="comparison-container" className="animate-fade-in">
-          <ComparisonView
-            players={activePlayers}
-            allNormalized={normalized}
-            allPlayers={allPlayers}
-          />
+          <ComparisonContent players={activePlayers} />
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
