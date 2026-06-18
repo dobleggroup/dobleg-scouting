@@ -4,6 +4,7 @@ import { computeGGScores, normalizeName, parseMarketValue, formatMarketValue, pa
 import { POSITION_MAP, SCORING_CONFIG, FILTER_POSITION_MAP } from '@/constants/scoring'
 import { loadAgencyPlayers } from '@/services/agencyPlayersService'
 import { getAgencyPlayersList, type AgencyPlayer } from '@/constants/agencyPlayers'
+import { nameKey } from '@/utils/nameUtils'
 import type { AppData, EnrichedPlayer, EvolutionEntry, TransfermarktData, MonitoringPlayer, MarketValueHistoryEntry, GPSEntry } from '@/types'
 
 const DataContext = createContext<AppData | null>(null)
@@ -40,21 +41,44 @@ function agencyToEnriched(a: AgencyPlayer): EnrichedPlayer {
   }
 }
 
+/**
+ * Clave de identidad tolerante al formato del nombre (sin acentos).
+ * Reconcilia "A. Steimbach" (formato corto del sheet) con "Alexis Steimbach"
+ * (nombre completo de la lista Doble G) → ambos dan "a:steimbach".
+ */
+function identityKey(name: string): string {
+  return nameKey(name.normalize('NFD').replace(/[̀-ͯ]/g, ''))
+}
+
 /** internal base + jugadores Doble G agregados que no estén ya en internal. */
 export function mergeAgencyIntoInternal(
   baseInternal: EnrichedPlayer[],
   external: EnrichedPlayer[],
   agencyPlayers: AgencyPlayer[],
 ): EnrichedPlayer[] {
-  const present = new Set(baseInternal.map(p => normalizeName(p.Jugador)))
-  const extByName = new Map(external.map(p => [normalizeName(p.Jugador), p]))
+  // Presencia por nombre exacto Y por clave inicial:apellido, para no re-agregar
+  // a un jugador que ya está bajo otro formato de nombre (causa de duplicados).
+  const present = new Set<string>()
+  for (const p of baseInternal) {
+    present.add(normalizeName(p.Jugador))
+    present.add(identityKey(p.Jugador))
+  }
+  const extByExact = new Map(external.map(p => [normalizeName(p.Jugador), p]))
+  const extByKey = new Map<string, EnrichedPlayer>()
+  for (const p of external) {
+    const k = identityKey(p.Jugador)
+    if (!extByKey.has(k)) extByKey.set(k, p)
+  }
   const additions: EnrichedPlayer[] = []
   for (const a of agencyPlayers) {
-    const key = normalizeName(a.fullName)
-    if (present.has(key)) continue
-    const fromExternal = extByName.get(key)
+    const exact = normalizeName(a.fullName)
+    const keyFull = identityKey(a.fullName)
+    const keyShort = identityKey(a.shortName)
+    if (present.has(exact) || present.has(keyFull) || present.has(keyShort)) continue
+    const fromExternal = extByExact.get(exact) ?? extByKey.get(keyFull) ?? extByKey.get(keyShort)
     additions.push(fromExternal ? { ...fromExternal, source: 'interno' } : agencyToEnriched(a))
-    present.add(key)
+    present.add(exact)
+    present.add(keyFull)
   }
   return [...baseInternal, ...additions]
 }
