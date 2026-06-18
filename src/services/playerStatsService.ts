@@ -37,96 +37,33 @@ export async function fetchPlayersList(filters: {
   const page = filters.page ?? 0;
   const pageSize = filters.pageSize ?? 50;
 
-  let query = supabase
-    .from('player_season_scores')
-    .select(`
-      *,
-      player:players!inner(
-        id, name, photo, birth_date, nationality, preferred_foot, height_cm,
-        primary_position, position_distribution, current_team_id,
-        market_value_eur, contract_end_date, agent, transfermarkt_url, transfermarkt_id,
-        team:teams(id, name, logo, league_id)
-      )
-    `, { count: 'exact' })
-    .in('season', seasons)
-    .not('avg_score', 'is', null);
-
-  if (filters.positions?.length) query = query.in('position', filters.positions);
-  if (filters.league_id) {
-    query = query.eq('league_id', filters.league_id);
-    query = query.eq('player.team.league_id', filters.league_id);
-  }
-  if (filters.team_id) query = query.eq('player.current_team_id', filters.team_id);
-  if (filters.min_score) query = query.gte('avg_score', filters.min_score);
-  if (filters.min_matches) query = query.gte('matches_played', filters.min_matches);
-  if (filters.search) query = query.ilike('player.name', `%${filters.search}%`);
-  if (filters.min_age) {
-    const maxBirth = new Date();
-    maxBirth.setFullYear(maxBirth.getFullYear() - filters.min_age);
-    query = query.lte('player.birth_date', maxBirth.toISOString().split('T')[0]);
-  }
-  if (filters.max_age) {
-    const minBirth = new Date();
-    minBirth.setFullYear(minBirth.getFullYear() - filters.max_age);
-    query = query.gte('player.birth_date', minBirth.toISOString().split('T')[0]);
-  }
-  if (filters.min_market_value) {
-    query = query.gte('player.market_value_eur', filters.min_market_value);
-  }
-  if (filters.max_market_value) {
-    query = query.lte('player.market_value_eur', filters.max_market_value);
-  }
-  if (filters.max_contract_months) {
-    const limit = new Date();
-    limit.setMonth(limit.getMonth() + filters.max_contract_months);
-    query = query.lte('player.contract_end_date', limit.toISOString().split('T')[0]);
-  }
-  if (filters.agents?.length) {
-    query = query.in('player.agent', filters.agents);
-  }
-
-  query = query
-    .order('avg_score', { ascending: false })
-    .range(page * pageSize, (page + 1) * pageSize - 1);
-
-  const { data, count, error } = await query;
+  // El colapso a 1 fila por jugador (sobre las múltiples filas posición/temporada/liga
+  // de player_season_scores) se hace en el RPC fetch_players_list ANTES de paginar.
+  // Así el contador es de JUGADORES únicos y un jugador no reaparece en varias páginas.
+  const { data, error } = await supabase.rpc('fetch_players_list', {
+    p_seasons: seasons,
+    p_positions: filters.positions?.length ? filters.positions : null,
+    p_league_id: filters.league_id ?? null,
+    p_team_id: filters.team_id ?? null,
+    p_min_score: filters.min_score ?? null,
+    p_min_matches: filters.min_matches ?? null,
+    p_min_age: filters.min_age ?? null,
+    p_max_age: filters.max_age ?? null,
+    p_min_market_value: filters.min_market_value ?? null,
+    p_max_market_value: filters.max_market_value ?? null,
+    p_max_contract_months: filters.max_contract_months ?? null,
+    p_agents: filters.agents?.length ? filters.agents : null,
+    p_search: filters.search ?? null,
+    p_page: page,
+    p_page_size: pageSize,
+  });
   if (error) throw error;
 
-  const rows = data ?? [];
-
-  // Deduplicate by player ID (position), then by name+team (API-Football vs Sofascore)
-  let deduped = rows;
-  {
-    const bestById = new Map<number, any>();
-    for (const row of rows) {
-      const pid = (row as any).player?.id;
-      if (!pid) continue;
-      const existing = bestById.get(pid);
-      if (!existing || row.matches_played > existing.matches_played) {
-        bestById.set(pid, row);
-      }
-    }
-    const byNameTeam = new Map<string, any>();
-    for (const row of bestById.values()) {
-      const p = (row as any).player;
-      const key = `${p?.name}|${p?.current_team_id}`;
-      const existing = byNameTeam.get(key);
-      if (!existing || row.matches_played > existing.matches_played) {
-        byNameTeam.set(key, row);
-      }
-    }
-    deduped = Array.from(byNameTeam.values());
-  }
-
-  const players: PlayerWithScore[] = deduped.map((row: any) => ({
-    ...row.player,
-    team: row.player.team,
-    season_scores: [row],
-    primary_score: row.avg_score,
-    primary_percentile: row.percentile,
-  }));
-
-  return { players, count: count ?? 0 };
+  const result = (data ?? { count: 0, players: [] }) as {
+    count: number;
+    players: PlayerWithScore[];
+  };
+  return { players: result.players ?? [], count: result.count ?? 0 };
 }
 
 export async function fetchPlayerDetail(playerId: number, season?: number): Promise<{
