@@ -17,25 +17,25 @@ export interface InformeCanvaCardProps {
   logoDataUrl?: string   // base64 del logo-white.png, si el usuario lo eligió
 }
 
-// ─── Color helpers ────────────────────────────────────────────────────────────
+// ─── Color helpers (escala 1-10) ──────────────────────────────────────────────
 
 function scoreColor(s: number): string {
-  if (s >= 80) return '#34D399'
-  if (s >= 55) return '#10B981'
-  if (s >= 35) return '#F59E0B'
-  if (s >= 20) return '#F97316'
+  if (s >= 8) return '#34D399'
+  if (s >= 5.5) return '#10B981'
+  if (s >= 3.5) return '#F59E0B'
+  if (s >= 2) return '#F97316'
   return '#EF4444'
 }
 
 function scoreLabel(s: number, avg?: number | null): string {
-  if (s >= 80) return 'ÉLITE'
+  if (s >= 8) return 'ÉLITE'
   if (avg != null) {
-    if (s >= avg + 5) return 'SOBRE EL PROMEDIO'
-    if (s >= avg - 5) return 'EN EL PROMEDIO'
+    if (s >= avg + 0.5) return 'SOBRE EL PROMEDIO'
+    if (s >= avg - 0.5) return 'EN EL PROMEDIO'
     return 'BAJO EL PROMEDIO'
   }
-  if (s >= 55) return 'BUENO'
-  if (s >= 35) return 'PROMEDIO'
+  if (s >= 5.5) return 'BUENO'
+  if (s >= 3.5) return 'PROMEDIO'
   return 'BAJO'
 }
 
@@ -87,8 +87,9 @@ function generateAnalysis(barData: BarDataRow[], poolLabel: string): string {
   if (rows.length < 3) return ''
 
   // Gaps normalizados: diferencia en escala 0-100 sobre el promedio de ese pool
-  const GAP_STRENGTH = 18   // ≥18 pts sobre el promedio → fortaleza clara
-  const GAP_DEFICIT = 14    // ≥14 pts por debajo → área de mejora
+  // (barData.jugador/promedio ya vienen normalizados 0-100 desde el adaptador)
+  const GAP_STRENGTH = 18   // ≥18 pts sobre el promedio normalizado → fortaleza clara
+  const GAP_DEFICIT = 14    // ≥14 pts por debajo del promedio normalizado → área de mejora
 
   const strengths = rows
     .filter(d => (d.jugador - d.promedio) >= GAP_STRENGTH)
@@ -138,13 +139,16 @@ function arcPath(cx: number, cy: number, r: number, s: number, e: number) {
   return `M ${sp.x.toFixed(2)} ${sp.y.toFixed(2)} A ${r} ${r} 0 ${e - s > 180 ? 1 : 0} 1 ${ep.x.toFixed(2)} ${ep.y.toFixed(2)}`
 }
 
-// ─── Gauge SVG (compact) ──────────────────────────────────────────────────────
+// ─── Gauge SVG (compact) — escala 1-10 ───────────────────────────────────────
+// El arco va de 1 (start) a 10 (end). La aguja se posiciona con (score-1)/9.
 
 function GaugeSVG({ score, avg, color }: { score: number; avg?: number | null; color: string }) {
   const cx = 75, cy = 65, r = 48, sw = 6
   const start = 135, full = 270
-  const valDeg = start + (Math.max(0, Math.min(100, score)) / 100) * full
-  const avgDeg = avg != null ? start + (Math.max(0, Math.min(100, avg)) / 100) * full : null
+  // Normalizar 1-10 → 0-1 para posicionar sobre el arco
+  const norm = (v: number) => Math.max(0, Math.min(1, (v - 1) / 9))
+  const valDeg = start + norm(score) * full
+  const avgDeg = avg != null ? start + norm(avg) * full : null
   const nRad = ((valDeg - 90) * Math.PI) / 180
   const nLen = r - 12
   const tipX = cx + nLen * Math.cos(nRad), tipY = cy + nLen * Math.sin(nRad)
@@ -152,30 +156,40 @@ function GaugeSVG({ score, avg, color }: { score: number; avg?: number | null; c
   const b1 = { x: cx + bR * Math.cos(nRad + Math.PI / 2), y: cy + bR * Math.sin(nRad + Math.PI / 2) }
   const b2 = { x: cx + bR * Math.cos(nRad - Math.PI / 2), y: cy + bR * Math.sin(nRad - Math.PI / 2) }
 
+  // Zonas de color recalibradas a 1-10: 1-2 / 2-3.5 / 3.5-5.5 / 5.5-8 / 8-10
+  const zones = [
+    { s: 1, e: 2,   c: '#EF4444' },
+    { s: 2, e: 3.5, c: '#F97316' },
+    { s: 3.5, e: 5.5, c: '#F59E0B' },
+    { s: 5.5, e: 8,  c: '#10B981' },
+    { s: 8, e: 10,  c: '#34D399' },
+  ]
+
   // viewBox 158 para que el score quede bien por debajo del arco (arc bottom ≈ 116, score a y=148)
   return (
     <svg width="150" height="158" viewBox="0 0 150 158" style={{ display: 'block' }}>
       <path d={arcPath(cx, cy, r, start, start + full)} stroke="rgba(255,255,255,0.08)" strokeWidth={sw} fill="none" strokeLinecap="round" />
-      {[{ s: 0, e: 20, c: '#EF4444' }, { s: 20, e: 35, c: '#F97316' }, { s: 35, e: 55, c: '#F59E0B' }, { s: 55, e: 80, c: '#10B981' }, { s: 80, e: 100, c: '#34D399' }].map((z, i) => (
-        <path key={i} d={arcPath(cx, cy, r, start + (z.s / 100) * full, start + (z.e / 100) * full)} stroke={z.c} strokeWidth={sw + 14} fill="none" strokeLinecap="butt" opacity={0.09} />
+      {zones.map((z, i) => (
+        <path key={i} d={arcPath(cx, cy, r, start + norm(z.s) * full, start + norm(z.e) * full)} stroke={z.c} strokeWidth={sw + 14} fill="none" strokeLinecap="butt" opacity={0.09} />
       ))}
-      {score > 0 && <path d={arcPath(cx, cy, r, start, valDeg)} stroke={color} strokeWidth={sw} fill="none" strokeLinecap="round" />}
+      {score > 1 && <path d={arcPath(cx, cy, r, start, valDeg)} stroke={color} strokeWidth={sw} fill="none" strokeLinecap="round" />}
       {avgDeg && (() => {
         const pi = polarToCartesian(cx, cy, r - sw / 2 - 6, avgDeg)
         const po = polarToCartesian(cx, cy, r + sw / 2 + 6, avgDeg)
         return <line x1={pi.x} y1={pi.y} x2={po.x} y2={po.y} stroke="rgba(255,255,255,0.45)" strokeWidth={2} strokeLinecap="round" />
       })()}
-      {[0, 50, 100].map(v => {
-        const p = polarToCartesian(cx, cy, r + sw / 2 + 13, start + (v / 100) * full)
+      {/* Etiquetas de eje: 1 (min), 5.5 (medio), 10 (max) */}
+      {[1, 5.5, 10].map(v => {
+        const p = polarToCartesian(cx, cy, r + sw / 2 + 13, start + norm(v) * full)
         return <text key={v} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" style={{ fontSize: 8, fill: '#4B5563', fontFamily: 'Arial,sans-serif' }}>{v}</text>
       })}
       <circle cx={cx} cy={cy} r={8} fill="#1c1c1e" />
       <circle cx={cx} cy={cy} r={4} fill="#0f0f11" />
       <polygon points={`${tipX.toFixed(2)},${tipY.toFixed(2)} ${b1.x.toFixed(2)},${b1.y.toFixed(2)} ${b2.x.toFixed(2)},${b2.y.toFixed(2)}`} fill={color} />
       <circle cx={cx} cy={cy} r={3.5} fill={color} />
-      {/* Score cómodamente separado del arco (arc bottom ≈ 113+3stroke = 116, texto a 148) */}
+      {/* Score con un decimal (ej. "6.8"), no redondeado al entero */}
       <text x={cx} y={148} textAnchor="middle" style={{ fontSize: 24, fontWeight: 'bold', fill: color, fontFamily: 'Arial,sans-serif' }}>
-        {Math.round(score)}
+        {score.toFixed(1)}
       </text>
     </svg>
   )

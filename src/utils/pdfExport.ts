@@ -752,6 +752,3 @@ export async function exportPlayerToPdfAdvanced(config: PlayerExportConfig): Pro
 export async function exportTableToPdf(title: string): Promise<void> {
   console.log('Table export:', title)
 }
-export async function exportComparisonToPdf(names: string[]): Promise<void> {
-  console.log('Comparison export:', names)
-}

@@ -1,24 +1,22 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
-import { useData } from '@/context/DataContext'
 import { useAuth } from '@/context/AuthContext'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import AuthModal from '@/components/auth/AuthModal'
-import { FILTER_POSITION_MAP, sortLeaguesByPriority } from '@/constants/scoring'
-import { smartSearch } from '@/lib/search'
+import { usePlayersList, useLeagues } from '@/hooks/usePlayerStats'
 import {
   fetchFormations,
   saveFormation,
-  updateFormationPositions,
   deleteFormation,
   addPlayerToPosition,
   removePlayerFromPosition,
   type FormationData,
   type PositionPlayer,
 } from '@/services/formationService'
-import type { EnrichedPlayer } from '@/types'
-import { getRelativeScoreColorClass, type ScoreScale } from '@/components/ui/ScoreBar'
-import { useScoreLookup } from '@/hooks/usePlayerStats'
-import { normalizeName } from '@/utils/scoring'
+import type { PlayerWithScore, Position } from '@/types/scoring'
+import { getScoreColorClass, type ScoreScale } from '@/components/ui/ScoreBar'
+import { smartSearch } from '@/lib/search'
+
+// ─── Formation definitions ────────────────────────────────────────────────────
 
 const FORMATIONS: Record<string, { name: string; positions: { key: string; x: number; y: number }[] }> = {
   '4-3-3': {
@@ -103,64 +101,66 @@ const FORMATIONS: Record<string, { name: string; positions: { key: string; x: nu
   },
 }
 
-const POSITION_KEY_MAP: Record<string, string[]> = {
-  'GK': ['Arquero'],
-  'LB': ['Lateral Izquierdo', 'Lateral'],
-  'RB': ['Lateral Derecho', 'Lateral'],
-  'LWB': ['Lateral Izquierdo', 'Lateral'],
-  'RWB': ['Lateral Derecho', 'Lateral'],
-  'CB1': ['Defensor Central'],
-  'CB2': ['Defensor Central'],
-  'CB3': ['Defensor Central'],
-  'CDM': ['Volante Central'],
-  'CDM1': ['Volante Central'],
-  'CDM2': ['Volante Central'],
-  'CM1': ['Volante Central', 'Volante Interno'],
-  'CM2': ['Volante Central', 'Volante Interno'],
-  'CM3': ['Volante Central', 'Volante Interno'],
-  'CAM': ['Volante Interno', 'Mediapunta'],
-  'LM': ['Extremo Izquierdo', 'Extremo'],
-  'RM': ['Extremo Derecho', 'Extremo'],
-  'LW': ['Extremo Izquierdo', 'Extremo'],
-  'RW': ['Extremo Derecho', 'Extremo'],
-  'ST': ['Delantero'],
-  'ST1': ['Delantero'],
-  'ST2': ['Delantero'],
+// ─── Position key → API Position[] mapping ───────────────────────────────────
+// Maps formation slot keys to the API Position values (ARQ|LD|CB|LI|VC|VI|EXT|DEL)
+
+const POSITION_KEY_API_MAP: Record<string, Position[]> = {
+  'GK':   ['ARQ'],
+  'LB':   ['LI'],
+  'RB':   ['LD'],
+  'LWB':  ['LI'],
+  'RWB':  ['LD'],
+  'CB1':  ['CB'],
+  'CB2':  ['CB'],
+  'CB3':  ['CB'],
+  'CDM':  ['VC'],
+  'CDM1': ['VC'],
+  'CDM2': ['VC'],
+  'CM1':  ['VC', 'VI'],
+  'CM2':  ['VC', 'VI'],
+  'CM3':  ['VC', 'VI'],
+  'CAM':  ['VI'],
+  'LM':   ['EXT'],
+  'RM':   ['EXT'],
+  'LW':   ['EXT'],
+  'RW':   ['EXT'],
+  'ST':   ['DEL'],
+  'ST1':  ['DEL'],
+  'ST2':  ['DEL'],
+}
+
+// Formation-specific overrides for CM positions in 4-3-3
+const FORMATION_POSITION_API_OVERRIDES: Record<string, Record<string, Position[]>> = {
+  '4-3-3': {
+    'CM1': ['VI'],
+    'CM2': ['VC'],
+    'CM3': ['VI'],
+  },
 }
 
 const POSITION_DISPLAY_NAME: Record<string, string> = {
-  'GK': 'Arquero',
-  'LB': 'Lateral Izquierdo',
-  'RB': 'Lateral Derecho',
-  'LWB': 'Lateral Izquierdo',
-  'RWB': 'Lateral Derecho',
-  'CB1': 'Defensor Central',
-  'CB2': 'Defensor Central',
-  'CB3': 'Defensor Central',
-  'CDM': 'Volante Central',
+  'GK':   'Arquero',
+  'LB':   'Lateral Izquierdo',
+  'RB':   'Lateral Derecho',
+  'LWB':  'Lateral Izquierdo',
+  'RWB':  'Lateral Derecho',
+  'CB1':  'Defensor Central',
+  'CB2':  'Defensor Central',
+  'CB3':  'Defensor Central',
+  'CDM':  'Volante Central',
   'CDM1': 'Volante Central',
   'CDM2': 'Volante Central',
-  'CM1': 'Mediocampista',
-  'CM2': 'Mediocampista',
-  'CM3': 'Mediocampista',
-  'CAM': 'Mediapunta',
-  'LM': 'Extremo Izquierdo',
-  'RM': 'Extremo Derecho',
-  'LW': 'Extremo Izquierdo',
-  'RW': 'Extremo Derecho',
-  'ST': 'Delantero',
-  'ST1': 'Delantero',
-  'ST2': 'Delantero',
-}
-
-// Formation-specific overrides: in 4-3-3 the center CM is only Volante Central,
-// the two flanking CMs are only Volante Interno. In 4-4-2 both CMs accept either.
-const FORMATION_POSITION_OVERRIDES: Record<string, Record<string, string[]>> = {
-  '4-3-3': {
-    'CM1': ['Volante Interno'],
-    'CM2': ['Volante Central'],
-    'CM3': ['Volante Interno'],
-  },
+  'CM1':  'Mediocampista',
+  'CM2':  'Mediocampista',
+  'CM3':  'Mediocampista',
+  'CAM':  'Mediapunta',
+  'LM':   'Extremo Izquierdo',
+  'RM':   'Extremo Derecho',
+  'LW':   'Extremo Izquierdo',
+  'RW':   'Extremo Derecho',
+  'ST':   'Delantero',
+  'ST1':  'Delantero',
+  'ST2':  'Delantero',
 }
 
 const FORMATION_DISPLAY_OVERRIDES: Record<string, Record<string, string>> = {
@@ -171,7 +171,6 @@ const FORMATION_DISPLAY_OVERRIDES: Record<string, Record<string, string>> = {
   },
 }
 
-// Short labels shown on the pitch circle when no player is assigned
 const FORMATION_SHORT_LABEL_OVERRIDES: Record<string, Record<string, string>> = {
   '4-3-3': {
     'CM1': 'VI',
@@ -180,157 +179,136 @@ const FORMATION_SHORT_LABEL_OVERRIDES: Record<string, Record<string, string>> = 
   },
 }
 
-// Leagues that appear in our data but have limited/incomplete metrics
-function isLimitedDataLeague(league: string): boolean {
-  const keywords = ['bolivia', 'emirat', 'honduras', 'portugal', 'reserv']
-  return keywords.some(kw => league.toLowerCase().includes(kw))
+// ─── Age helper ──────────────────────────────────────────────────────────────
+
+function getAge(birthDate: string | null): number | null {
+  if (!birthDate) return null
+  const diff = Date.now() - new Date(birthDate).getTime()
+  return Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000))
 }
+
+// ─── PlayerSelector ───────────────────────────────────────────────────────────
 
 interface PlayerSelectorProps {
   positionKey: string
   formationType: string
-  selectedLeagues: string[]
+  selectedLeagueIds: number[]
   nationality: string
   minAge: number
   maxAge: number
-  allPlayers: EnrichedPlayer[]
+  allPlayers: PlayerWithScore[]
+  playersLoading: boolean
   currentPlayers: PositionPlayer[]
-  allSelectedPlayerIds: Set<string>
-  onAddPlayer: (player: EnrichedPlayer) => void
+  allSelectedPlayerIds: Set<number>
+  onAddPlayer: (player: PlayerWithScore) => void
   onRemovePlayer: (playerId: string) => void
   onClose: () => void
-  userName: string
-  getPlayerScore: (player: EnrichedPlayer) => { score: number | null; scale: ScoreScale }
-  getPositionPlayerScore: (p: PositionPlayer) => { score: number | null; scale: ScoreScale }
 }
 
 function PlayerSelector({
   positionKey,
   formationType,
-  selectedLeagues,
+  selectedLeagueIds,
   nationality,
   minAge,
   maxAge,
   allPlayers,
+  playersLoading,
   currentPlayers,
   allSelectedPlayerIds,
   onAddPlayer,
   onRemovePlayer,
   onClose,
-  userName,
-  getPlayerScore,
-  getPositionPlayerScore,
 }: PlayerSelectorProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState<'search' | 'suggestions'>('suggestions')
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const { positionAverages } = useData()
 
-  // Promedio de posición para un EnrichedPlayer (0-100 scale)
-  function getPosAvg(p: EnrichedPlayer): number | null {
-    const normPos = FILTER_POSITION_MAP[p['Posición']] ?? ''
-    return normPos ? (positionAverages[normPos] ?? null) : null
-  }
-
-  // Promedio de posición para los PositionPlayer de esta posición (0-100 scale)
-  function getPosAvgForAllowed(positions: string[]): number | null {
-    const avgs = positions.map(pos => positionAverages[pos]).filter((v): v is number => v != null)
-    if (!avgs.length) return null
-    return avgs.reduce((a, b) => a + b, 0) / avgs.length
-  }
-
-  // Returns posAvg scaled to match the given score scale
-  function scaledPosAvg(avg: number | null, scale: ScoreScale): number | null {
-    if (avg === null) return null
-    return scale === '10' ? avg / 10 : avg
-  }
-
-  const allowedPositions =
-    FORMATION_POSITION_OVERRIDES[formationType]?.[positionKey] ??
-    POSITION_KEY_MAP[positionKey] ??
+  const allowedPositions: Position[] =
+    FORMATION_POSITION_API_OVERRIDES[formationType]?.[positionKey] ??
+    POSITION_KEY_API_MAP[positionKey] ??
     []
+
   const displayName =
     FORMATION_DISPLAY_OVERRIDES[formationType]?.[positionKey] ??
     POSITION_DISPLAY_NAME[positionKey] ??
     positionKey
+
   const canAddMore = currentPlayers.length < 3
   const currentPosIds = new Set(currentPlayers.map(p => p.playerId))
 
-  // Players available (not already selected anywhere)
+  // Players not already selected anywhere (use string id stored in PositionPlayer.playerId)
   const availablePlayers = useMemo(() => {
     return allPlayers.filter(p => {
-      if (currentPosIds.has(p.Jugador)) return false
-      if (allSelectedPlayerIds.has(p.Jugador)) return false
+      const strId = String(p.id)
+      if (currentPosIds.has(strId)) return false
+      if (allSelectedPlayerIds.has(p.id)) return false
       return true
     })
   }, [allPlayers, currentPosIds, allSelectedPlayerIds])
 
-  // Search results
+  // Search across all available players (no position restriction)
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return []
-    return smartSearch(availablePlayers, searchQuery, p => `${p.Jugador} ${p.Equipo}`, 12)
+    return smartSearch(availablePlayers, searchQuery, p => `${p.name} ${p.team?.name ?? ''}`, 12)
   }, [availablePlayers, searchQuery])
 
-  // Suggested candidates (filtered by position and other criteria)
+  // Suggested candidates filtered by position + nationality
   const candidates = useMemo(() => {
     return availablePlayers
       .filter(p => {
-        if (selectedLeagues.length > 0 && !selectedLeagues.includes(p.Liga)) return false
+        if (!p.primary_position) return false
+        if (!allowedPositions.includes(p.primary_position)) return false
         if (nationality) {
-          const playerNat = String(p['País de nacimiento'] || '')
-          if (playerNat !== nationality) return false
+          if ((p.nationality ?? '') !== nationality) return false
         }
-        if (p.ageNum < minAge || p.ageNum > maxAge) return false
-        const rawPos = (p['Posición específica'] || p['Posición'])?.trim() ?? ''
-        const playerPosKey = FILTER_POSITION_MAP[rawPos] ?? ''
-        return allowedPositions.includes(playerPosKey)
+        if (p.primary_score === null) return false
+        return true
       })
-      .filter(p => getPlayerScore(p).score !== null)
-      .sort((a, b) => {
-        const sa = getPlayerScore(a)
-        const sb = getPlayerScore(b)
-        // Normalize to 0-100 for comparison
-        const scoreA = sa.scale === '10' ? (sa.score ?? 0) * 10 : (sa.score ?? 0)
-        const scoreB = sb.scale === '10' ? (sb.score ?? 0) * 10 : (sb.score ?? 0)
-        return scoreB - scoreA
-      })
+      .sort((a, b) => (b.primary_score ?? 0) - (a.primary_score ?? 0))
       .slice(0, 15)
-  }, [availablePlayers, selectedLeagues, nationality, minAge, maxAge, allowedPositions, getPlayerScore])
+  }, [availablePlayers, allowedPositions, nationality])
 
-  // Focus search when switching to search tab
+  // Focus search input when tab switches
   useEffect(() => {
     if (activeTab === 'search' && searchInputRef.current) {
       searchInputRef.current.focus()
     }
   }, [activeTab])
 
-  const renderPlayerCard = (p: EnrichedPlayer, i: number, showPosition = false) => {
-    const { score: playerScore, scale: playerScale } = getPlayerScore(p)
+  const renderPlayerCard = (p: PlayerWithScore, i: number, showPosition = false) => {
+    const score = p.primary_score
+    const age = getAge(p.birth_date)
     return (
       <button
-        key={`${p.Jugador}-${i}`}
+        key={`${p.id}-${i}`}
         onClick={() => onAddPlayer(p)}
         className="w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700 border border-apple-gray-100 dark:border-apple-gray-700 hover:border-brand-green/50"
       >
-        {p.Imagen ? (
-          <img src={p.Imagen} alt="" className="w-10 h-10 rounded-lg object-cover bg-apple-gray-200" />
+        {p.photo ? (
+          <img src={p.photo} alt="" className="w-10 h-10 rounded-lg object-cover bg-apple-gray-200" />
         ) : (
           <div className="w-10 h-10 rounded-lg bg-apple-gray-200 dark:bg-apple-gray-600 flex items-center justify-center text-sm font-bold text-apple-gray-500">
-            {p.Jugador.split(' ').map(w => w[0]).slice(0, 2).join('')}
+            {p.name.split(' ').map((w: string) => w[0]).slice(0, 2).join('')}
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">{p.Jugador}</p>
+          <p className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">{p.name}</p>
           <p className="text-xs text-apple-gray-500 truncate">
-            {p.Equipo} · {p.ageNum} años
-            {showPosition && <span className="text-apple-gray-400"> · {p['Posición'] || p['Posicion']}</span>}
+            {p.team?.name ?? '—'}{age !== null ? ` · ${age} años` : ''}
+            {showPosition && p.primary_position && (
+              <span className="text-apple-gray-400"> · {p.primary_position}</span>
+            )}
           </p>
         </div>
         <div className="text-right flex-shrink-0">
-          <p className={`text-sm font-bold ${getRelativeScoreColorClass(playerScore, scaledPosAvg(getPosAvg(p), playerScale), playerScale)}`}>
-            {playerScore?.toFixed(1)}
-          </p>
-          <p className="text-2xs text-apple-gray-400">{p.marketValueFormatted}</p>
+          {score !== null ? (
+            <p className={`text-sm font-bold ${getScoreColorClass(score, '10')}`}>
+              {score.toFixed(1)}
+            </p>
+          ) : (
+            <p className="text-sm font-bold text-apple-gray-400">—</p>
+          )}
         </div>
       </button>
     )
@@ -396,35 +374,34 @@ function PlayerSelector({
           <div className="p-4 bg-apple-gray-50 dark:bg-apple-gray-900/50 border-b border-apple-gray-200 dark:border-apple-gray-700">
             <p className="text-xs font-semibold text-apple-gray-500 uppercase tracking-wider mb-2">En esta posicion</p>
             <div className="space-y-2">
-              {currentPlayers.map((p, i) => {
-                const { score: posPlayerScore, scale: posPlayerScale } = getPositionPlayerScore(p)
-                return (
-                  <div key={p.playerId} className="flex items-center justify-between bg-white dark:bg-apple-gray-800 rounded-xl p-3 shadow-sm border border-apple-gray-100 dark:border-apple-gray-700">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-brand-green/20 flex items-center justify-center text-brand-green font-bold text-sm">
-                        {i + 1}
-                      </div>
-                      <div>
-                        <p className="font-medium text-sm text-apple-gray-800 dark:text-white">{p.playerName}</p>
-                        <p className="text-xs text-apple-gray-500">{p.team}</p>
-                      </div>
+              {currentPlayers.map((p) => (
+                <div key={p.playerId} className="flex items-center justify-between bg-white dark:bg-apple-gray-800 rounded-xl p-3 shadow-sm border border-apple-gray-100 dark:border-apple-gray-700">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-brand-green/20 flex items-center justify-center text-brand-green font-bold text-sm">
+                      {currentPlayers.indexOf(p) + 1}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-sm font-bold ${getRelativeScoreColorClass(posPlayerScore, scaledPosAvg(getPosAvgForAllowed(allowedPositions), posPlayerScale), posPlayerScale)}`}>
-                        {posPlayerScore?.toFixed(1)}
-                      </span>
-                      <button
-                        onClick={() => onRemovePlayer(p.playerId)}
-                        className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
+                    <div>
+                      <p className="font-medium text-sm text-apple-gray-800 dark:text-white">{p.playerName}</p>
+                      <p className="text-xs text-apple-gray-500">{p.team}</p>
                     </div>
                   </div>
-                )
-              })}
+                  <div className="flex items-center gap-2">
+                    {p.ggScore !== null && (
+                      <span className={`text-sm font-bold ${getScoreColorClass(p.ggScore, '10')}`}>
+                        {p.ggScore.toFixed(1)}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => onRemovePlayer(p.playerId)}
+                      className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -433,6 +410,10 @@ function PlayerSelector({
         <div className="p-4 max-h-[50vh] overflow-y-auto">
           {!canAddMore ? (
             <p className="text-center text-apple-gray-500 py-4 text-sm">Maximo 3 jugadores por posicion</p>
+          ) : playersLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="w-6 h-6 border-2 border-brand-green border-t-transparent rounded-full animate-spin" />
+            </div>
           ) : activeTab === 'search' ? (
             <div className="space-y-3">
               {/* Search input */}
@@ -506,38 +487,14 @@ function PlayerSelector({
   )
 }
 
+// ─── Main page ────────────────────────────────────────────────────────────────
+
 export default function FormationPage() {
-  const { external, internal, loading: dataLoading, positionAverages } = useData()
   const { user, userDisplayName } = useAuth()
-  const allPlayers = useMemo(() => [...external, ...internal], [external, internal])
-
-  // Supabase 1-10 score lookup (falls back gracefully when not yet loaded)
-  const { lookup: scoreLookup } = useScoreLookup()
-
-  /**
-   * Returns the best available score for an EnrichedPlayer.
-   * Prefers the Supabase 1-10 score (scoreLookup) over the CSV ggScore (0-100).
-   */
-  const getPlayerScore = useCallback((player: EnrichedPlayer): { score: number | null; scale: ScoreScale } => {
-    const key = normalizeName(player.Jugador)
-    const entry = scoreLookup.get(key)
-    if (entry != null) {
-      return { score: entry.score, scale: '10' }
-    }
-    return { score: null, scale: '10' }
-  }, [scoreLookup])
-
-  const getPositionPlayerScore = useCallback((p: PositionPlayer): { score: number | null; scale: ScoreScale } => {
-    const key = normalizeName(p.playerName)
-    const entry = scoreLookup.get(key)
-    if (entry != null) {
-      return { score: entry.score, scale: '10' }
-    }
-    return { score: null, scale: '10' }
-  }, [scoreLookup])
+  const allLeagues = useLeagues()
 
   const [formation, setFormation] = useState('4-3-3')
-  const [selectedLeagues, setSelectedLeagues] = useState<string[]>([])
+  const [selectedLeagueIds, setSelectedLeagueIds] = useState<number[]>([])
   const [nationality, setNationality] = useState('')
   const [minAge, setMinAge] = useState(15)
   const [maxAge, setMaxAge] = useState(40)
@@ -552,7 +509,32 @@ export default function FormationPage() {
   const [activeFormation, setActiveFormation] = useState<FormationData | null>(null)
   const [saving, setSaving] = useState(false)
 
-  // Load formations from Supabase
+  // ── Load players from Supabase ────────────────────────────────────────────
+  const playerFilters = useMemo(() => ({
+    league_id: selectedLeagueIds.length === 1 ? selectedLeagueIds[0] : undefined,
+    min_age: minAge > 15 ? minAge : undefined,
+    max_age: maxAge < 40 ? maxAge : undefined,
+    pageSize: 300,
+  }), [selectedLeagueIds, minAge, maxAge])
+
+  const { players: apiPlayers, loading: playersLoading } = usePlayersList(playerFilters)
+
+  // Client-side filter for multiple leagues (when > 1 selected)
+  const allPlayers = useMemo(() => {
+    if (selectedLeagueIds.length <= 1) return apiPlayers
+    return apiPlayers.filter(p =>
+      p.league ? selectedLeagueIds.includes(p.league.id) : false
+    )
+  }, [apiPlayers, selectedLeagueIds])
+
+  // Distinct nationalities from loaded players
+  const nationalities = useMemo(() => {
+    const set = new Set<string>()
+    allPlayers.forEach(p => { if (p.nationality) set.add(p.nationality) })
+    return [...set].sort()
+  }, [allPlayers])
+
+  // ── Load saved formations from Supabase ───────────────────────────────────
   useEffect(() => {
     async function load() {
       setLoadingFormations(true)
@@ -563,43 +545,31 @@ export default function FormationPage() {
     load()
   }, [user?.id])
 
-  const leagues = useMemo(() => {
-    const set = new Set<string>()
-    allPlayers.forEach(p => { if (p.Liga) set.add(p.Liga) })
-    return sortLeaguesByPriority([...set])
-  }, [allPlayers])
-
-  const nationalities = useMemo(() => {
-    const set = new Set<string>()
-    allPlayers.forEach(p => {
-      const nat = String(p['País de nacimiento'] || '')
-      if (nat) set.add(nat)
-    })
-    return [...set].sort()
-  }, [allPlayers])
-
   const currentFormation = FORMATIONS[formation]
 
-  // Get all selected player IDs across all positions
+  // All selected player IDs (numeric) across all positions
   const allSelectedPlayerIds = useMemo(() => {
-    const ids = new Set<string>()
+    const ids = new Set<number>()
     Object.values(positions).forEach(players => {
-      players.forEach(p => ids.add(p.playerId))
+      players.forEach(p => {
+        const numId = Number(p.playerId)
+        if (!isNaN(numId)) ids.add(numId)
+      })
     })
     return ids
   }, [positions])
 
-  const handleAddPlayer = useCallback((posKey: string, player: EnrichedPlayer) => {
+  const handleAddPlayer = useCallback((posKey: string, player: PlayerWithScore) => {
     if (!user) {
       setShowAuthModal(true)
       return
     }
 
     const newPlayer: PositionPlayer = {
-      playerName: player.Jugador,
-      playerId: player.Jugador,
-      team: player.Equipo,
-      ggScore: player.ggScore,
+      playerName: player.name,
+      playerId: String(player.id),
+      team: player.team?.name ?? '',
+      ggScore: player.primary_score,
       addedBy: user.id,
       addedByName: userDisplayName,
       addedAt: new Date().toISOString(),
@@ -658,8 +628,6 @@ export default function FormationPage() {
   }
 
   const totalPlayers = Object.values(positions).reduce((sum, arr) => sum + arr.length, 0)
-
-  if (dataLoading) return <LoadingSpinner fullScreen message="Cargando datos..." />
 
   return (
     <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6">
@@ -725,10 +693,10 @@ export default function FormationPage() {
             </div>
 
             {/* Clear filters button */}
-            {(selectedLeagues.length > 0 || nationality || minAge !== 15 || maxAge !== 40) && (
+            {(selectedLeagueIds.length > 0 || nationality || minAge !== 15 || maxAge !== 40) && (
               <button
                 onClick={() => {
-                  setSelectedLeagues([])
+                  setSelectedLeagueIds([])
                   setNationality('')
                   setMinAge(15)
                   setMaxAge(40)
@@ -744,33 +712,21 @@ export default function FormationPage() {
 
             <div>
               <label className="block text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-2">
-                Ligas {selectedLeagues.length > 0 && <span className="text-brand-green">({selectedLeagues.length})</span>}
+                Liga {selectedLeagueIds.length > 0 && <span className="text-brand-green">({selectedLeagueIds.length})</span>}
               </label>
-              <div className="flex flex-wrap gap-1.5">
-                {leagues.map(l => {
-                  const limited = isLimitedDataLeague(l)
-                  const active = selectedLeagues.includes(l)
-                  return (
-                    <button
-                      key={l}
-                      onClick={() => setSelectedLeagues(prev =>
-                        prev.includes(l) ? prev.filter(x => x !== l) : [...prev, l]
-                      )}
-                      title={limited ? 'Datos limitados para esta liga' : undefined}
-                      className={`px-2.5 py-1.5 rounded-lg text-xs transition-all ${
-                        active
-                          ? 'bg-brand-green text-black font-medium'
-                          : limited
-                            ? 'border border-dashed border-apple-gray-300 dark:border-apple-gray-600 text-apple-gray-400 dark:text-apple-gray-500 hover:border-apple-gray-400 dark:hover:border-apple-gray-500 italic'
-                            : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600'
-                      }`}
-                    >
-                      {l}{limited && <span className="ml-0.5 not-italic text-apple-gray-400">*</span>}
-                    </button>
-                  )
-                })}
-              </div>
-              <p className="text-[10px] text-apple-gray-400 dark:text-apple-gray-500 mt-1.5 italic">* datos limitados</p>
+              <select
+                value={selectedLeagueIds.length === 1 ? selectedLeagueIds[0] : ''}
+                onChange={e => {
+                  const val = e.target.value
+                  setSelectedLeagueIds(val ? [Number(val)] : [])
+                }}
+                className="input-apple"
+              >
+                <option value="">Todas las ligas</option>
+                {allLeagues.map(l => (
+                  <option key={l.id} value={l.id}>{l.name} ({l.country})</option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -883,14 +839,7 @@ export default function FormationPage() {
                     {/* Player badges */}
                     {hasPlayers && (
                       <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-0.5">
-                        {playersInPos.slice(0, 3).map((p, i) => {
-                          const { score: pitchScore, scale: pitchScale } = getPositionPlayerScore(p)
-                          const posKeys = FORMATION_POSITION_OVERRIDES[formation]?.[pos.key] ?? POSITION_KEY_MAP[pos.key] ?? []
-                          const avgs = posKeys.map((k: string) => positionAverages[k]).filter((v: number | undefined): v is number => v != null)
-                          const posAvg = avgs.length ? avgs.reduce((a: number, b: number) => a + b, 0) / avgs.length : null
-                          // When scale is '10', positionAverages are 0-100 — scale down avg to match
-                          const adjustedPosAvg = pitchScale === '10' && posAvg !== null ? posAvg / 10 : posAvg
-                          return (
+                        {playersInPos.slice(0, 3).map((p) => (
                           <div
                             key={p.playerId}
                             className="whitespace-nowrap bg-white dark:bg-apple-gray-800 rounded-md px-2 py-0.5 shadow-md text-xs"
@@ -898,12 +847,13 @@ export default function FormationPage() {
                             <span className="font-semibold text-apple-gray-800 dark:text-white">
                               {p.playerName.split(' ').slice(-1)[0]}
                             </span>
-                            <span className={`ml-1.5 font-bold ${getRelativeScoreColorClass(pitchScore, adjustedPosAvg, pitchScale)}`}>
-                              {pitchScore?.toFixed(0)}
-                            </span>
+                            {p.ggScore !== null && (
+                              <span className={`ml-1.5 font-bold ${getScoreColorClass(p.ggScore, '10')}`}>
+                                {p.ggScore.toFixed(0)}
+                              </span>
+                            )}
                           </div>
-                          )
-                        })}
+                        ))}
                       </div>
                     )}
                   </div>
@@ -919,19 +869,17 @@ export default function FormationPage() {
         <PlayerSelector
           positionKey={selectedPos}
           formationType={formation}
-          selectedLeagues={selectedLeagues}
+          selectedLeagueIds={selectedLeagueIds}
           nationality={nationality}
           minAge={minAge}
           maxAge={maxAge}
           allPlayers={allPlayers}
+          playersLoading={playersLoading}
           currentPlayers={positions[selectedPos] || []}
           allSelectedPlayerIds={allSelectedPlayerIds}
           onAddPlayer={(p) => handleAddPlayer(selectedPos, p)}
           onRemovePlayer={(id) => handleRemovePlayer(selectedPos, id)}
           onClose={() => setSelectedPos(null)}
-          userName={userDisplayName}
-          getPlayerScore={getPlayerScore}
-          getPositionPlayerScore={getPositionPlayerScore}
         />
       )}
 

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { SCOUTING_PROJECTS, getNationalityFlag, getPositionColor, type ScoutingProject, type ScoutedPlayer } from '@/data/scoutingProjects'
+import { SCOUTING_PROJECTS, getNationalityFlag, type ScoutingProject, type ScoutedPlayer } from '@/data/scoutingProjects'
 import { fuzzyMatch } from '@/lib/search'
 
 // Project Card Component
