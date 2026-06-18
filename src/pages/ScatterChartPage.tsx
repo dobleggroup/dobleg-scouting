@@ -1,49 +1,42 @@
 import { useMemo, useState, useRef } from 'react'
 import CopyChartButton from '@/components/ui/CopyChartButton'
 import { useNavigate } from 'react-router-dom'
-import { useData } from '@/context/DataContext'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
-import { ScatterChart, Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ReferenceLine, Label, LabelList } from 'recharts'
+import { ScatterChart, Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ReferenceLine, Label } from 'recharts'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import AddToReportButton from '@/components/pdf/AddToReportButton'
 import ScoutsGGBadge from '@/components/ui/ScoutsGGBadge'
-import { smartSearch } from '@/lib/search'
-import type { EnrichedPlayer } from '@/types'
-import { useScoreLookup } from '@/hooks/usePlayerStats'
-import { normalizeName } from '@/utils/scoring'
+import { usePlayersList, useLeagues } from '@/hooks/usePlayerStats'
+import type { PlayerWithScore, Position } from '@/types/scoring'
+import { POSITION_DISPLAY } from '@/types/scoring'
+import { API_METRICS, getMetricValue, type ApiMetricKey } from '@/constants/apiMetrics'
 
-// Color interpolation from red (bad) to yellow (medium) to green (good)
-function getColorForValue(value: number, min: number, max: number): string {
-  if (max === min) return '#F59E0B' // amber if no range
+// ─── Color interpolation: red (bad) → yellow (medium) → green (good) ────────
+// Input range recalibrated to 1-10 (Score GG scale)
+function getColorForScore(score: number, min: number, max: number): string {
+  if (max === min) return '#F59E0B'
+  const normalized = Math.max(0, Math.min(1, (score - min) / (max - min)))
 
-  // Normalize to 0-1
-  const normalized = Math.max(0, Math.min(1, (value - min) / (max - min)))
-
-  // Color stops: red (0) -> orange (0.25) -> yellow (0.5) -> lime (0.75) -> green (1)
   if (normalized <= 0.25) {
-    // Red to Orange
     const t = normalized / 0.25
     const r = 239
     const g = Math.round(68 + (158 - 68) * t)
     const b = Math.round(68 + (11 - 68) * t)
     return `rgb(${r}, ${g}, ${b})`
   } else if (normalized <= 0.5) {
-    // Orange to Yellow
     const t = (normalized - 0.25) / 0.25
     const r = Math.round(245 - (245 - 234) * t)
     const g = Math.round(158 + (179 - 158) * t)
     const b = Math.round(11 + (8 - 11) * t)
     return `rgb(${r}, ${g}, ${b})`
   } else if (normalized <= 0.75) {
-    // Yellow to Lime
     const t = (normalized - 0.5) / 0.25
     const r = Math.round(234 - (234 - 132) * t)
     const g = Math.round(179 + (204 - 179) * t)
     const b = Math.round(8 + (22 - 8) * t)
     return `rgb(${r}, ${g}, ${b})`
   } else {
-    // Lime to Green
     const t = (normalized - 0.75) / 0.25
     const r = Math.round(132 - (132 - 34) * t)
     const g = Math.round(204 + (197 - 204) * t)
@@ -52,7 +45,6 @@ function getColorForValue(value: number, min: number, max: number): string {
   }
 }
 
-// Get a darker version of a color for the stroke
 function getDarkerColor(color: string): string {
   const match = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
   if (!match) return color
@@ -62,409 +54,235 @@ function getDarkerColor(color: string): string {
   return `rgb(${r}, ${g}, ${b})`
 }
 
-// Metric categories for organized dropdowns - based on Wyscout glossary
-const METRIC_GROUPS = {
-  general: {
-    label: 'General',
-    icon: '📊',
-    metrics: ['ggScore', 'minutesPlayed', 'ageNum', 'marketValueRaw', 'monthsRemaining']
+// ─── Metric groups for organized dropdowns ───────────────────────────────────
+interface MetricGroup {
+  label: string
+  keys: ApiMetricKey[]
+}
+
+const SCATTER_METRIC_GROUPS: MetricGroup[] = [
+  {
+    label: 'Gol & Creación',
+    keys: ['goals_p90', 'assists_p90', 'shots_on_p90', 'shots_pct'],
   },
-  shooting: {
-    label: 'Finalización',
-    icon: '⚽',
-    metrics: ['Goles', 'xG', 'xG/90', 'Remates/90', 'Remates a portería/90', 'Remates a portería, %', 'Toques en el área de penalti/90']
+  {
+    label: 'Pases',
+    keys: ['passes_accuracy', 'passes_key_p90', 'passes_total_p90'],
   },
-  creation: {
-    label: 'Creación',
-    icon: '🎯',
-    metrics: ['Asistencias', 'xA', 'xA/90', 'Jugadas claves/90', 'Pases progresivos exitosos/90']
+  {
+    label: 'Regates & Conducción',
+    keys: ['dribbles_success_p90', 'dribbles_pct', 'fouls_drawn_p90'],
   },
-  passing: {
-    label: 'Pase',
-    icon: '📐',
-    metrics: ['Pases/90', 'Pases precisos/90', 'Pases, %', 'Pases hacia adelante/90', 'Precisión pases hacia adelante, %', 'Pases largos/90', 'Precisión pases largos, %']
-  },
-  dribbling: {
-    label: 'Regate y Progresión',
-    icon: '💨',
-    metrics: ['Gambetas completadas/90', 'Gambetas completadas, %', 'Carreras en progresión/90', 'Acciones de ataque exitosas/90']
-  },
-  duels: {
+  {
     label: 'Duelos',
-    icon: '💪',
-    metrics: ['Duelos ganados, %', 'Duelos atacantes ganados/90', 'Duelos atacantes ganados, %', 'Duelos defensivos ganados, %', 'Duelos aéreos ganados, %']
+    keys: ['duels_won_pct'],
   },
-  defense: {
-    label: 'Defensa',
-    icon: '🛡️',
-    metrics: ['Interceptaciones/90', 'Entradas/90', 'Rechaces/90', 'Acciones defensivas realizadas/90']
+  {
+    label: 'Defensiva',
+    keys: ['tackles_p90', 'interceptions_p90', 'blocks_p90'],
   },
-  crossing: {
-    label: 'Centros',
-    icon: '↗️',
-    metrics: ['Centros/90', 'Centros precisos/90', 'Precisión centros, %']
-  }
+  {
+    label: 'Rating & Portero',
+    keys: ['avg_rating', 'saves_p90', 'goals_conceded_p90', 'penalty_saved_avg', 'clean_sheet_pct'],
+  },
+]
+
+// Lookup metric info by key
+const METRIC_BY_KEY = new Map(API_METRICS.map(m => [m.key, m]))
+
+function getMetricLabel(key: ApiMetricKey): string {
+  return METRIC_BY_KEY.get(key)?.label ?? key
 }
 
-// Flatten for easy access
-const METRIC_OPTIONS = Object.values(METRIC_GROUPS).flatMap(g => g.metrics)
-
-// Get display name for metric
-function getMetricDisplayName(metric: string): string {
-  const names: Record<string, string> = {
-    'ggScore': 'GG Score',
-    'minutesPlayed': 'Minutos jugados',
-    'ageNum': 'Edad',
-    'marketValueRaw': 'Valor de mercado (€)',
-    'monthsRemaining': 'Meses de contrato',
-    'Goles': 'Goles',
-    'Asistencias': 'Asistencias',
-    'xG': 'xG (Goles esperados)',
-    'xA': 'xA (Asist. esperadas)',
-    'xG/90': 'xG por 90 min',
-    'xA/90': 'xA por 90 min',
-    'Remates/90': 'Remates/90',
-    'Remates a portería/90': 'Tiros a puerta/90',
-    'Remates a portería, %': 'Precisión de tiro %',
-    'Toques en el área de penalti/90': 'Toques en área/90',
-    'Pases/90': 'Pases/90',
-    'Pases precisos/90': 'Pases precisos/90',
-    'Pases, %': 'Precisión de pase %',
-    'Pases hacia adelante/90': 'Pases adelante/90',
-    'Precisión pases hacia adelante, %': 'Pases adelante %',
-    'Pases largos/90': 'Pases largos/90',
-    'Precisión pases largos, %': 'Pases largos %',
-    'Pases progresivos exitosos/90': 'Pases progresivos/90',
-    'Jugadas claves/90': 'Pases clave/90',
-    'Centros/90': 'Centros/90',
-    'Centros precisos/90': 'Centros precisos/90',
-    'Precisión centros, %': 'Precisión centros %',
-    'Gambetas completadas/90': 'Regates exitosos/90',
-    'Gambetas completadas, %': 'Efectividad regate %',
-    'Duelos atacantes ganados/90': 'Duelos ofensivos/90',
-    'Duelos atacantes ganados, %': 'Duelos ofensivos %',
-    'Acciones de ataque exitosas/90': 'Acciones ofensivas/90',
-    'Carreras en progresión/90': 'Carreras progresivas/90',
-    'Duelos ganados, %': 'Duelos ganados %',
-    'Duelos defensivos ganados, %': 'Duelos defensivos %',
-    'Duelos aéreos ganados, %': 'Duelos aéreos %',
-    'Interceptaciones/90': 'Intercepciones/90',
-    'Entradas/90': 'Entradas/90',
-    'Rechaces/90': 'Despejes/90',
-    'Acciones defensivas realizadas/90': 'Acciones defensivas/90',
-  }
-  return names[metric] || metric
+// ─── Safe metric value from player ───────────────────────────────────────────
+function getPlayerMetricValue(player: PlayerWithScore, key: ApiMetricKey): number | null {
+  if (!player.season_scores?.length) return null
+  return getMetricValue(player.season_scores[0], key)
 }
 
-// Wyscout-based metric explanations
-const METRIC_EXPLANATIONS: Record<string, string> = {
-  'ggScore': 'Puntuación global calculada ponderando múltiples métricas según la posición del jugador.',
-  'xG': 'Expected Goals: Modelo predictivo que evalúa la probabilidad de gol de cada remate basándose en ubicación, tipo de asistencia, método de disparo y contexto del juego.',
-  'xG/90': 'xG normalizado por 90 minutos. Indica la calidad de las oportunidades que genera un jugador independientemente de los minutos jugados.',
-  'xA': 'Expected Assists: Suma de valores xG de los remates generados por los pases del jugador.',
-  'xA/90': 'xA normalizado por 90 minutos. Mide la capacidad de crear ocasiones de gol de alta calidad.',
-  'Goles': 'Goles marcados en la temporada. Comparar con xG revela si el jugador sobre/sub-rinde su rendimiento esperado.',
-  'Asistencias': 'Pases que resultan directamente en gol. Comparar con xA indica eficiencia en creación.',
-  'Remates/90': 'Cantidad de remates por 90 minutos. Indica participación en ataque y llegada al área.',
-  'Remates a portería, %': 'Porcentaje de remates que van a portería. Mide precisión en la finalización.',
-  'Toques en el área de penalti/90': 'Toques en el área rival por 90 min. Indicador clave para delanteros de área.',
-  'Jugadas claves/90': 'Pases que generan remates (incluyendo asistencias). Métrica fundamental de creatividad.',
-  'Pases progresivos exitosos/90': 'Pases que avanzan significativamente hacia portería rival. Clave para mediocampistas creativos.',
-  'Gambetas completadas/90': 'Regates exitosos por 90 min. Mide capacidad de desborde individual.',
-  'Gambetas completadas, %': 'Efectividad en el regate. >50% es excelente, <40% sugiere pérdidas excesivas.',
-  'Duelos ganados, %': 'Porcentaje general de duelos ganados. Métrica de intensidad y capacidad física.',
-  'Duelos aéreos ganados, %': 'Porcentaje de duelos aéreos ganados. Crucial para defensores centrales y delanteros de área.',
-  'Interceptaciones/90': 'Cortes de pase rival por 90 min. Indica lectura del juego y posicionamiento.',
-  'Carreras en progresión/90': 'Conducciones que avanzan el balón significativamente. Mide capacidad de transporte.',
-  'Pases, %': 'Precisión general de pase. >85% es sólido, >90% es excelente.',
-  'Centros/90': 'Centros intentados por 90 min. Indicador de participación en ataque lateral.',
-  'Precisión centros, %': 'Efectividad de centros. >30% es bueno para extremos.',
-}
-
-// Get metric explanation
-function getMetricExplanation(metric: string): string {
-  return METRIC_EXPLANATIONS[metric] || `Métrica que mide ${getMetricDisplayName(metric).toLowerCase()}.`
-}
-
-// Get value from player. An optional ggScoreResolver supports dual-source scoring (CSV 0-100 or Supabase 1-10).
-function getPlayerValue(
-  player: EnrichedPlayer,
-  metric: string,
-  ggScoreResolver?: (player: EnrichedPlayer) => number | null
-): number | null {
-  if (metric === 'ggScore') {
-    if (ggScoreResolver) return ggScoreResolver(player)
-    return player.ggScore ?? null
-  }
-  if (metric === 'minutesPlayed') return player.minutesPlayed
-  if (metric === 'ageNum') return player.ageNum
-  if (metric === 'marketValueRaw') return player.marketValueRaw || null
-  if (metric === 'monthsRemaining') return player.monthsRemaining
-
-  const val = player[metric as keyof EnrichedPlayer]
-  if (val === undefined || val === null || val === '') return null
-  const num = typeof val === 'number' ? val : parseFloat(String(val).replace(',', '.'))
-  return isNaN(num) ? null : num
-}
-
-// Smart analysis combinations - what do different metric pairs tell us?
-const METRIC_PAIR_INSIGHTS: Record<string, string> = {
-  'xG|Goles': 'Comparar xG vs Goles revela la eficiencia de finalización. Jugadores por encima de la diagonal (más goles que xG) son finalizadores elite. Por debajo, están sub-rindiendo o tienen mala suerte.',
-  'Goles|xG': 'Comparar xG vs Goles revela la eficiencia de finalización. Jugadores por encima de la diagonal (más goles que xG) son finalizadores elite.',
-  'xA|Asistencias': 'xA vs Asistencias muestra quién convierte mejor las ocasiones creadas. Más asistencias que xA indica que sus compañeros finalizan bien.',
-  'Remates/90|xG/90': 'Volumen de remates vs calidad de ocasiones. Alto xG/90 con pocos remates = pocas pero buenas oportunidades. Muchos remates con bajo xG = tiros de baja calidad.',
-  'Gambetas completadas/90|Duelos atacantes ganados, %': 'Regates vs efectividad en duelos muestra el perfil de desborde. Alto en ambos = extremo desequilibrante.',
-  'Pases progresivos exitosos/90|Jugadas claves/90': 'Pases progresivos vs pases clave identifica el perfil creativo. Alto en ambos = mediocampista creativo top.',
-  'Interceptaciones/90|Duelos defensivos ganados, %': 'Intercepciones vs duelos defensivos diferencia lectores de juego (alta intercepción) vs guerreros (alto duelo).',
-  'xG/90|Toques en el área de penalti/90': 'xG/90 vs toques en área identifica delanteros de área pura. Alto en ambos = referente de área clásico.',
-  'Pases, %|Pases progresivos exitosos/90': 'Precisión vs progresión. Alto en ambos = mediocampista completo. Alta precisión/baja progresión = jugador conservador.',
-  'ageNum|marketValueRaw': 'Edad vs valor de mercado. Jóvenes con alto valor = prospectos premium. Veteranos con valor = rendimiento probado.',
-  'ggScore|marketValueRaw': 'Score vs valor muestra jugadores sobrevalorados (bajo score/alto valor) o infravalorados (alto score/bajo valor).',
-  'Centros/90|Precisión centros, %': 'Volumen vs precisión de centros. El balance ideal depende del estilo: equipos de posesión prefieren precisión.',
-}
-
-// Generate simple, easy-to-understand analysis
+// ─── Analysis ────────────────────────────────────────────────────────────────
 function generateAnalysis(
-  data: Array<{ player: EnrichedPlayer; x: number; y: number; z: number }>,
-  xMetric: string,
-  yMetric: string,
-  zMetric: string
+  data: Array<{ player: PlayerWithScore; x: number; y: number }>,
+  xKey: ApiMetricKey,
+  yKey: ApiMetricKey
 ): string {
   if (data.length === 0) return 'Selecciona una liga para ver el análisis.'
 
   const xAvg = data.reduce((sum, d) => sum + d.x, 0) / data.length
   const yAvg = data.reduce((sum, d) => sum + d.y, 0) / data.length
-
-  // Find top performers (arriba y derecha = mejor en ambas métricas)
   const topRight = data.filter(d => d.x > xAvg && d.y > yAvg)
   const best = [...data].sort((a, b) => (b.x + b.y) - (a.x + a.y)).slice(0, 3)
-  const greenest = [...data].sort((a, b) => b.z - a.z).slice(0, 3)
 
-  let analysis = ''
-
-  // Simple intro
-  analysis += `Se analizaron **${data.length} jugadores**.\n\n`
-
-  // Where to look
+  let analysis = `Se analizaron **${data.length} jugadores**.\n\n`
   analysis += `**¿Dónde buscar los mejores?**\n`
   analysis += `Los jugadores más completos están arriba a la derecha del gráfico (${topRight.length} jugadores).\n`
-  analysis += `El color verde indica mejor ${getMetricDisplayName(zMetric).toLowerCase()}.\n\n`
+  analysis += `El color verde indica mayor Score GG.\n\n`
 
-  // Top 3 overall
   if (best.length > 0) {
     analysis += `**Los 3 mejores en este análisis:**\n`
     best.forEach((d, i) => {
-      const emoji = i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'
-      analysis += `${emoji} **${d.player.Jugador}** - ${d.player.Equipo}\n`
+      const medal = i === 0 ? '1.' : i === 1 ? '2.' : '3.'
+      analysis += `${medal} **${d.player.name}** - ${d.player.team?.name ?? ''}\n`
     })
     analysis += '\n'
   }
 
-  // Greenest (best in color metric)
-  if (greenest.length > 0 && zMetric !== 'ggScore') {
-    analysis += `**Mejor ${getMetricDisplayName(zMetric)}:** ${greenest[0].player.Jugador}\n\n`
-  }
-
-  // Simple tip based on quadrant
   const topRightPct = Math.round((topRight.length / data.length) * 100)
   if (topRightPct > 25) {
     analysis += `**Resumen:** Hay varios buenos jugadores para elegir (${topRightPct}% en zona elite).`
   } else if (topRightPct > 10) {
     analysis += `**Resumen:** Pocos jugadores destacan en ambas métricas. Revisa los marcados arriba.`
   } else {
-    analysis += `**Resumen:** Es difícil encontrar jugadores buenos en ambas cosas a la vez. Considera priorizar una métrica.`
+    analysis += `**Resumen:** Es difícil encontrar jugadores buenos en ambas métricas a la vez. Considera priorizar una.`
   }
 
   return analysis
 }
 
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export default function ScatterChartPage() {
-  const { external, internal, loading } = useData()
   const navigate = useNavigate()
   const chartRef = useRef<HTMLDivElement>(null)
   const [exporting, setExporting] = useState(false)
 
-  // Supabase score lookup (1-10 scale). Falls back to CSV ggScore (0-100) when not ready or not found.
-  const { lookup: scoreLookup, ready: scoreReady } = useScoreLookup()
-
-  function getPlayerScoreValue(player: EnrichedPlayer): number | null {
-    if (scoreReady && scoreLookup.size > 0) {
-      const key = normalizeName(player.Jugador)
-      const entry = scoreLookup.get(key)
-      if (entry) return entry.score
-    }
-    return player.ggScore ?? null
-  }
-
-  // State for metric selection
-  const [xMetric, setXMetric] = useState('xG')
-  const [yMetric, setYMetric] = useState('Goles')
-  const [zMetric, setZMetric] = useState('ggScore')
+  // Metric axis selectors
+  const [xKey, setXKey] = useState<ApiMetricKey>('goals_p90')
+  const [yKey, setYKey] = useState<ApiMetricKey>('assists_p90')
 
   // Filters
-  const [source, setSource] = useState<'all' | 'external' | 'internal'>('all')
-  const [selectedLeagues, setSelectedLeagues] = useState<string[]>([])
-  const [selectedPositions, setSelectedPositions] = useState<string[]>([])
-  const [minMinutes, setMinMinutes] = useState(200)
+  const [selectedLeagueId, setSelectedLeagueId] = useState<number | null>(null)
+  const [selectedPositions, setSelectedPositions] = useState<Position[]>([])
+  const [minMatches, setMinMatches] = useState(5)
   const [ageRange, setAgeRange] = useState<[number, number]>([15, 40])
 
-  // Search and selection
+  // Search / highlighting
   const [searchTerm, setSearchTerm] = useState('')
-  const [highlightedPlayer, setHighlightedPlayer] = useState<string | null>(null)
-  const [selectedPlayers, setSelectedPlayers] = useState<Set<string>>(new Set())
+  const [highlightedId, setHighlightedId] = useState<number | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
-  // All players
-  const allPlayers = useMemo(() => {
-    if (source === 'external') return external
-    if (source === 'internal') return internal
-    return [...external, ...internal]
-  }, [external, internal, source])
+  // Fetch leagues for the filter chips
+  const leagues = useLeagues()
 
-  // Get unique leagues
-  const leagues = useMemo(() => {
-    const set = new Set<string>()
-    allPlayers.forEach(p => { if (p.Liga) set.add(p.Liga) })
-    return Array.from(set).sort()
+  // Fetch full player pool (500 max, filtered by position/league)
+  const { players: allPlayers, loading } = usePlayersList({
+    pageSize: 500,
+    positions: selectedPositions.length > 0 ? selectedPositions : undefined,
+    league_id: selectedLeagueId ?? undefined,
+  })
+
+  // Derived positions from loaded pool
+  const availablePositions = useMemo<Position[]>(() => {
+    const set = new Set<Position>()
+    allPlayers.forEach(p => { if (p.primary_position) set.add(p.primary_position) })
+    return (Array.from(set) as Position[]).sort()
   }, [allPlayers])
 
-  // Get unique positions
-  const positions = useMemo(() => {
-    const set = new Set<string>()
-    allPlayers.forEach(p => { if (p['Posición']) set.add(p['Posición']) })
-    return Array.from(set).sort()
-  }, [allPlayers])
-
-  // Age range from data
+  // Age extremes from loaded pool
   const { minAge, maxAge } = useMemo(() => {
-    const ages = allPlayers.map(p => p.ageNum).filter(a => a > 0)
+    const ages = allPlayers
+      .map(p => {
+        if (!p.birth_date) return null
+        return Math.floor((Date.now() - new Date(p.birth_date).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+      })
+      .filter((a): a is number => a !== null)
     return {
       minAge: ages.length > 0 ? Math.min(...ages) : 15,
-      maxAge: ages.length > 0 ? Math.max(...ages) : 45
+      maxAge: ages.length > 0 ? Math.max(...ages) : 45,
     }
   }, [allPlayers])
 
-  // Search results for autocomplete
-  const searchResults = useMemo(() => {
+  // Search autocomplete against loaded pool
+  const searchResults = useMemo<PlayerWithScore[]>(() => {
     if (!searchTerm.trim()) return []
-    return smartSearch(allPlayers, searchTerm, p => `${p.Jugador} ${p.Equipo || ''}`, 8)
+    const q = searchTerm.toLowerCase()
+    return allPlayers
+      .filter(p => p.name.toLowerCase().includes(q) || (p.team?.name ?? '').toLowerCase().includes(q))
+      .slice(0, 8)
   }, [allPlayers, searchTerm])
 
-  // Filter and prepare data
+  // Chart data: apply age + minMatches + both metric values must be non-null
   const chartData = useMemo(() => {
-    // Require at least one league selected
-    if (selectedLeagues.length === 0) return []
+    if (!selectedLeagueId) return []
 
     return allPlayers
       .filter(p => {
-        if (p.minutesPlayed < minMinutes) return false
-        if (!selectedLeagues.includes(p.Liga)) return false
-        if (selectedPositions.length > 0 && !selectedPositions.includes(p['Posición'])) return false
-        if (p.ageNum < ageRange[0] || p.ageNum > ageRange[1]) return false
+        const score = p.season_scores[0]
+        if (!score) return false
+        if (score.matches_played < minMatches) return false
+        if (p.birth_date) {
+          const age = Math.floor((Date.now() - new Date(p.birth_date).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+          if (age < ageRange[0] || age > ageRange[1]) return false
+        }
         return true
       })
       .map(player => {
-        const x = getPlayerValue(player, xMetric, getPlayerScoreValue)
-        const y = getPlayerValue(player, yMetric, getPlayerScoreValue)
-        const z = getPlayerValue(player, zMetric, getPlayerScoreValue)
-        if (x === null || y === null || z === null) return null
-        const id = `${player.Jugador}-${player.Equipo}`
-        return { player, x, y, z, name: player.Jugador, id }
+        const x = getPlayerMetricValue(player, xKey)
+        const y = getPlayerMetricValue(player, yKey)
+        if (x === null || y === null) return null
+        return { player, x, y }
       })
       .filter((d): d is NonNullable<typeof d> => d !== null)
-  }, [allPlayers, xMetric, yMetric, zMetric, selectedLeagues, selectedPositions, minMinutes, ageRange])
+  }, [allPlayers, xKey, yKey, selectedLeagueId, minMatches, ageRange])
 
-  // Toggle league selection
-  const toggleLeague = (league: string) => {
-    setSelectedLeagues(prev =>
-      prev.includes(league) ? prev.filter(l => l !== league) : [...prev, league]
-    )
-  }
-
-  // Toggle position selection
-  const togglePosition = (position: string) => {
-    setSelectedPositions(prev =>
-      prev.includes(position) ? prev.filter(p => p !== position) : [...prev, position]
-    )
-  }
-
-  // Toggle player selection (for marking on chart)
-  const togglePlayerSelection = (playerId: string) => {
-    setSelectedPlayers(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(playerId)) {
-        newSet.delete(playerId)
-      } else {
-        newSet.add(playerId)
-      }
-      return newSet
-    })
-  }
-
-  // Highlight player from search
-  const highlightPlayer = (player: EnrichedPlayer) => {
-    const id = `${player.Jugador}-${player.Equipo}`
-    setHighlightedPlayer(id)
-    setSearchTerm('')
-    // Auto-clear highlight after 5 seconds
-    setTimeout(() => setHighlightedPlayer(null), 5000)
-  }
-
-  // Clear all selections
-  const clearSelections = () => {
-    setSelectedPlayers(new Set())
-    setHighlightedPlayer(null)
-  }
-
-  // Calculate min/max for z metric (for color scale)
-  const { zMin, zMax } = useMemo(() => {
-    if (chartData.length === 0) return { zMin: 0, zMax: 100 }
-    const zValues = chartData.map(d => d.z)
+  // Score range for color scale (1-10)
+  const { scoreMin, scoreMax } = useMemo(() => {
+    const scores = chartData.map(d => d.player.primary_score).filter((s): s is number => s !== null)
     return {
-      zMin: Math.min(...zValues),
-      zMax: Math.max(...zValues)
+      scoreMin: scores.length > 0 ? Math.min(...scores) : 1,
+      scoreMax: scores.length > 0 ? Math.max(...scores) : 10,
     }
   }, [chartData])
 
-  // Analysis
-  const analysis = useMemo(() =>
-    generateAnalysis(chartData, xMetric, yMetric, zMetric),
-    [chartData, xMetric, yMetric, zMetric]
-  )
+  // Averages for reference lines
+  const xAvg = chartData.length > 0 ? chartData.reduce((s, d) => s + d.x, 0) / chartData.length : 0
+  const yAvg = chartData.length > 0 ? chartData.reduce((s, d) => s + d.y, 0) / chartData.length : 0
+
+  // Analysis text
+  const analysis = useMemo(() => generateAnalysis(chartData, xKey, yKey), [chartData, xKey, yKey])
+
+  // Handlers
+  const togglePosition = (pos: Position) => {
+    setSelectedPositions(prev =>
+      prev.includes(pos) ? prev.filter(p => p !== pos) : [...prev, pos]
+    )
+  }
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const highlightPlayer = (player: PlayerWithScore) => {
+    setHighlightedId(player.id)
+    setSearchTerm('')
+    setTimeout(() => setHighlightedId(null), 5000)
+  }
 
   // Export to PDF
   const exportToPDF = async () => {
     if (!chartRef.current) return
     setExporting(true)
-
     try {
       const canvas = await html2canvas(chartRef.current, {
         scale: 2,
         backgroundColor: '#ffffff',
         useCORS: true,
       })
-
       const imgData = canvas.toDataURL('image/png')
-      const pdf = new jsPDF({
-        orientation: 'landscape',
-        unit: 'mm',
-        format: 'a4',
-      })
-
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
       const pdfWidth = pdf.internal.pageSize.getWidth()
       const pdfHeight = pdf.internal.pageSize.getHeight()
-      const imgWidth = canvas.width
-      const imgHeight = canvas.height
-      const ratio = Math.min((pdfWidth - 20) / imgWidth, (pdfHeight - 20) / imgHeight)
-
-      const imgX = (pdfWidth - imgWidth * ratio) / 2
-      const imgY = 10
-
-      pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio)
-
-      const fileName = `dispersion_${xMetric}_vs_${yMetric}_${new Date().toISOString().split('T')[0]}.pdf`
+      const ratio = Math.min((pdfWidth - 20) / canvas.width, (pdfHeight - 20) / canvas.height)
+      const imgX = (pdfWidth - canvas.width * ratio) / 2
+      pdf.addImage(imgData, 'PNG', imgX, 10, canvas.width * ratio, canvas.height * ratio)
+      const fileName = `dispersion_${xKey}_vs_${yKey}_${new Date().toISOString().split('T')[0]}.pdf`
       pdf.save(fileName)
-    } catch (error) {
-      console.error('Error exporting PDF:', error)
+    } catch (err) {
+      console.error('Error exporting PDF:', err)
     } finally {
       setExporting(false)
     }
@@ -473,45 +291,52 @@ export default function ScatterChartPage() {
   // Custom tooltip
   const CustomTooltip = ({ active, payload }: any) => {
     if (!active || !payload?.[0]?.payload) return null
-    const data = payload[0].payload
-    const zColor = getColorForValue(data.z, zMin, zMax)
-    const isSelected = selectedPlayers.has(data.id)
+    const d = payload[0].payload as { player: PlayerWithScore; x: number; y: number }
+    const score = d.player.primary_score
+    const color = score !== null ? getColorForScore(score, scoreMin, scoreMax) : '#9CA3AF'
+    const isSelected = selectedIds.has(d.player.id)
+    const age = d.player.birth_date
+      ? Math.floor((Date.now() - new Date(d.player.birth_date).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+      : null
 
     return (
       <div className={`bg-white dark:bg-apple-gray-800 rounded-2xl shadow-2xl border-2 p-4 max-w-xs ${isSelected ? 'border-blue-500' : 'border-apple-gray-200 dark:border-apple-gray-700'}`}>
         <div className="flex items-center gap-3 mb-3">
-          {data.player.Imagen ? (
-            <img src={data.player.Imagen} alt="" className={`w-11 h-11 rounded-full object-cover ring-2 ${isSelected ? 'ring-blue-500' : 'ring-apple-gray-200 dark:ring-apple-gray-600'}`} />
+          {d.player.photo ? (
+            <img src={d.player.photo} alt="" className={`w-11 h-11 rounded-full object-cover ring-2 ${isSelected ? 'ring-blue-500' : 'ring-apple-gray-200 dark:ring-apple-gray-600'}`} />
           ) : (
             <div
               className={`w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold text-white ring-2 ${isSelected ? 'ring-blue-500 bg-blue-500' : 'ring-white/30'}`}
-              style={{ backgroundColor: isSelected ? undefined : zColor }}
+              style={{ backgroundColor: isSelected ? undefined : color }}
             >
-              {data.player.Jugador.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
+              {d.player.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
             </div>
           )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <p className="font-bold text-apple-gray-800 dark:text-white truncate">{data.player.Jugador}</p>
-              <ScoutsGGBadge playerName={data.player.Jugador} />
+              <p className="font-bold text-apple-gray-800 dark:text-white truncate">{d.player.name}</p>
+              <ScoutsGGBadge playerName={d.player.name} />
               {isSelected && <span className="text-2xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-medium">MARCADO</span>}
             </div>
-            <p className="text-xs text-apple-gray-500 truncate">{data.player.Equipo}</p>
-            <p className="text-2xs text-apple-gray-400">{data.player['Posición']} · {data.player.ageNum} años</p>
+            <p className="text-xs text-apple-gray-500 truncate">{d.player.team?.name ?? ''}</p>
+            <p className="text-2xs text-apple-gray-400">
+              {d.player.primary_position ? (POSITION_DISPLAY[d.player.primary_position] ?? d.player.primary_position) : ''}
+              {age !== null ? ` · ${age} años` : ''}
+            </p>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-2 text-center">
           <div className="p-2 bg-apple-gray-50 dark:bg-apple-gray-700/50 rounded-lg">
-            <p className="text-lg font-bold text-apple-gray-800 dark:text-white">{data.x.toFixed(1)}</p>
-            <p className="text-2xs text-apple-gray-400 truncate">{getMetricDisplayName(xMetric)}</p>
+            <p className="text-lg font-bold text-apple-gray-800 dark:text-white">{d.x.toFixed(2)}</p>
+            <p className="text-2xs text-apple-gray-400 truncate">{getMetricLabel(xKey)}</p>
           </div>
           <div className="p-2 bg-apple-gray-50 dark:bg-apple-gray-700/50 rounded-lg">
-            <p className="text-lg font-bold text-apple-gray-800 dark:text-white">{data.y.toFixed(1)}</p>
-            <p className="text-2xs text-apple-gray-400 truncate">{getMetricDisplayName(yMetric)}</p>
+            <p className="text-lg font-bold text-apple-gray-800 dark:text-white">{d.y.toFixed(2)}</p>
+            <p className="text-2xs text-apple-gray-400 truncate">{getMetricLabel(yKey)}</p>
           </div>
-          <div className="p-2 rounded-lg" style={{ backgroundColor: `${zColor}15` }}>
-            <p className="text-lg font-bold" style={{ color: zColor }}>{data.z.toFixed(1)}</p>
-            <p className="text-2xs text-apple-gray-400 truncate">{getMetricDisplayName(zMetric)}</p>
+          <div className="p-2 rounded-lg" style={{ backgroundColor: `${color}15` }}>
+            <p className="text-lg font-bold" style={{ color }}>{score !== null ? score.toFixed(1) : '—'}</p>
+            <p className="text-2xs text-apple-gray-400">Score GG</p>
           </div>
         </div>
         <p className="mt-2 text-center text-2xs text-apple-gray-400">
@@ -521,11 +346,7 @@ export default function ScatterChartPage() {
     )
   }
 
-  if (loading) return <LoadingSpinner fullScreen message="Cargando datos..." />
-
-  // Calculate averages for reference lines
-  const xAvg = chartData.length > 0 ? chartData.reduce((sum, d) => sum + d.x, 0) / chartData.length : 0
-  const yAvg = chartData.length > 0 ? chartData.reduce((sum, d) => sum + d.y, 0) / chartData.length : 0
+  if (loading && allPlayers.length === 0) return <LoadingSpinner fullScreen message="Cargando datos..." />
 
   return (
     <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6">
@@ -533,21 +354,21 @@ export default function ScatterChartPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-apple-gray-800 dark:text-white tracking-tight">
-            Grafico de Dispersion
+            Gráfico de Dispersión
           </h1>
           <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
-            Compara jugadores en multiples dimensiones
+            Compara jugadores en múltiples dimensiones
           </p>
         </div>
         <div className="flex items-center gap-2">
           <AddToReportButton
             type="scatter"
-            title={`Dispersion: ${getMetricDisplayName(xMetric)} vs ${getMetricDisplayName(yMetric)}`}
-            description={`Grafico de dispersion con ${chartData.length} jugadores. Color por ${getMetricDisplayName(zMetric)}.`}
+            title={`Dispersión: ${getMetricLabel(xKey)} vs ${getMetricLabel(yKey)}`}
+            description={`Gráfico de dispersión con ${chartData.length} jugadores. Color por Score GG.`}
             captureId="scatter-chart-container"
             source="Dispersion"
             variant="compact"
-            players={chartData.filter(d => selectedPlayers.has(d.id)).map(d => d.name)}
+            players={chartData.filter(d => selectedIds.has(d.player.id)).map(d => d.player.name)}
           />
           <CopyChartButton targetId="scatter-chart-container" filename="dispersion" />
           <button
@@ -577,7 +398,7 @@ export default function ScatterChartPage() {
 
       {/* Metric Selectors */}
       <div className="bg-white dark:bg-apple-gray-800 rounded-2xl border border-apple-gray-200 dark:border-apple-gray-700 p-6 mb-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {/* X Axis */}
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-xs font-medium text-apple-gray-500 uppercase tracking-wider">
@@ -585,21 +406,18 @@ export default function ScatterChartPage() {
               Eje Horizontal
             </label>
             <select
-              value={xMetric}
-              onChange={e => setXMetric(e.target.value)}
+              value={xKey}
+              onChange={e => setXKey(e.target.value as ApiMetricKey)}
               className="w-full px-4 py-3 rounded-xl bg-apple-gray-50 dark:bg-apple-gray-700 border-0 text-apple-gray-800 dark:text-white font-medium focus:ring-2 focus:ring-brand-green"
             >
-              {Object.entries(METRIC_GROUPS).map(([key, group]) => (
-                <optgroup key={key} label={`${group.icon} ${group.label}`}>
-                  {group.metrics.map(m => (
-                    <option key={m} value={m}>{getMetricDisplayName(m)}</option>
+              {SCATTER_METRIC_GROUPS.map(group => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.keys.map(k => (
+                    <option key={k} value={k}>{getMetricLabel(k)}</option>
                   ))}
                 </optgroup>
               ))}
             </select>
-            <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 line-clamp-2 min-h-[2.5rem]">
-              {getMetricExplanation(xMetric)}
-            </p>
           </div>
 
           {/* Y Axis */}
@@ -609,83 +427,42 @@ export default function ScatterChartPage() {
               Eje Vertical
             </label>
             <select
-              value={yMetric}
-              onChange={e => setYMetric(e.target.value)}
+              value={yKey}
+              onChange={e => setYKey(e.target.value as ApiMetricKey)}
               className="w-full px-4 py-3 rounded-xl bg-apple-gray-50 dark:bg-apple-gray-700 border-0 text-apple-gray-800 dark:text-white font-medium focus:ring-2 focus:ring-brand-green"
             >
-              {Object.entries(METRIC_GROUPS).map(([key, group]) => (
-                <optgroup key={key} label={`${group.icon} ${group.label}`}>
-                  {group.metrics.map(m => (
-                    <option key={m} value={m}>{getMetricDisplayName(m)}</option>
+              {SCATTER_METRIC_GROUPS.map(group => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.keys.map(k => (
+                    <option key={k} value={k}>{getMetricLabel(k)}</option>
                   ))}
                 </optgroup>
               ))}
             </select>
-            <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 line-clamp-2 min-h-[2.5rem]">
-              {getMetricExplanation(yMetric)}
-            </p>
-          </div>
-
-          {/* Color metric */}
-          <div className="space-y-2">
-            <label className="flex items-center gap-2 text-xs font-medium text-apple-gray-500 uppercase tracking-wider">
-              <span className="w-6 h-6 rounded-full bg-gradient-to-r from-red-500 via-yellow-500 to-green-500 flex items-center justify-center text-white text-xs font-bold shadow-inner">C</span>
-              Color (3ra métrica)
-            </label>
-            <select
-              value={zMetric}
-              onChange={e => setZMetric(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl bg-apple-gray-50 dark:bg-apple-gray-700 border-0 text-apple-gray-800 dark:text-white font-medium focus:ring-2 focus:ring-brand-green"
-            >
-              {Object.entries(METRIC_GROUPS).map(([key, group]) => (
-                <optgroup key={key} label={`${group.icon} ${group.label}`}>
-                  {group.metrics.map(m => (
-                    <option key={m} value={m}>{getMetricDisplayName(m)}</option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-            <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 line-clamp-2 min-h-[2.5rem]">
-              {getMetricExplanation(zMetric)}
-            </p>
           </div>
         </div>
 
         {/* Advanced Filters */}
         <div className="pt-5 border-t border-apple-gray-100 dark:border-apple-gray-700 space-y-4">
-          {/* Row 1: Source, Min Minutes, Age Range */}
+          {/* Row 1: Min Matches + Age Range */}
           <div className="flex flex-wrap items-center gap-6">
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-apple-gray-500 font-medium">Fuente:</label>
-              <select
-                value={source}
-                onChange={e => setSource(e.target.value as typeof source)}
-                className="px-3 py-1.5 rounded-lg bg-apple-gray-100 dark:bg-apple-gray-700 border-0 text-sm"
-              >
-                <option value="all">Todos</option>
-                <option value="external">Externo</option>
-                <option value="internal">Interno</option>
-              </select>
-            </div>
-
-            {/* Minutes Slider */}
             <div className="flex items-center gap-3">
-              <label className="text-xs text-apple-gray-500 font-medium whitespace-nowrap">Min. minutos:</label>
+              <label className="text-xs text-apple-gray-500 font-medium whitespace-nowrap">Min. partidos:</label>
               <div className="flex items-center gap-2 flex-1 max-w-[180px]">
                 <input
                   type="range"
                   min={0}
-                  max={2000}
-                  step={50}
-                  value={minMinutes}
-                  onChange={e => setMinMinutes(parseInt(e.target.value))}
+                  max={30}
+                  step={1}
+                  value={minMatches}
+                  onChange={e => setMinMatches(parseInt(e.target.value))}
                   className="flex-1 h-1.5 bg-apple-gray-200 dark:bg-apple-gray-600 rounded-full appearance-none cursor-pointer accent-brand-green"
                 />
-                <span className="text-xs font-medium text-apple-gray-600 dark:text-apple-gray-300 w-12 text-right tabular-nums">{minMinutes}</span>
+                <span className="text-xs font-medium text-apple-gray-600 dark:text-apple-gray-300 w-8 text-right tabular-nums">{minMatches}</span>
               </div>
             </div>
 
-            {/* Age Range Dual Slider */}
+            {/* Age Range */}
             <div className="flex items-center gap-3">
               <label className="text-xs text-apple-gray-500 font-medium">Edad:</label>
               <div className="flex items-center gap-2">
@@ -719,39 +496,33 @@ export default function ScatterChartPage() {
             </div>
           </div>
 
-          {/* Row 2: Leagues Multi-select */}
+          {/* Row 2: League selector */}
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <label className={`text-xs font-medium ${selectedLeagues.length === 0 ? 'text-brand-green' : 'text-apple-gray-500'}`}>
-                Ligas {selectedLeagues.length === 0 && <span className="text-brand-green">*</span>}
+              <label className={`text-xs font-medium ${!selectedLeagueId ? 'text-brand-green' : 'text-apple-gray-500'}`}>
+                Liga {!selectedLeagueId && <span className="text-brand-green">*</span>}
               </label>
-              {selectedLeagues.length > 0 && (
+              {selectedLeagueId && (
                 <button
-                  onClick={() => setSelectedLeagues([])}
+                  onClick={() => setSelectedLeagueId(null)}
                   className="text-2xs text-apple-gray-400 hover:text-red-500 transition-colors"
                 >
                   Limpiar
                 </button>
               )}
-              <button
-                onClick={() => setSelectedLeagues(leagues)}
-                className="text-2xs text-brand-green hover:text-brand-green/80 transition-colors"
-              >
-                Todas
-              </button>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {leagues.map(l => (
                 <button
-                  key={l}
-                  onClick={() => toggleLeague(l)}
+                  key={l.id}
+                  onClick={() => setSelectedLeagueId(l.id === selectedLeagueId ? null : l.id)}
                   className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
-                    selectedLeagues.includes(l)
+                    selectedLeagueId === l.id
                       ? 'bg-brand-green text-gray-900 shadow-sm'
                       : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-400 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600'
                   }`}
                 >
-                  {l}
+                  {l.name}
                 </button>
               ))}
             </div>
@@ -774,7 +545,7 @@ export default function ScatterChartPage() {
               </span>
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {positions.map(p => (
+              {availablePositions.map(p => (
                 <button
                   key={p}
                   onClick={() => togglePosition(p)}
@@ -784,13 +555,13 @@ export default function ScatterChartPage() {
                       : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-400 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600'
                   }`}
                 >
-                  {p}
+                  {POSITION_DISPLAY[p] ?? p}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Row 4: Search and Summary */}
+          {/* Row 4: Search + Summary */}
           <div className="flex flex-wrap items-center gap-4 pt-3 border-t border-apple-gray-100 dark:border-apple-gray-700">
             {/* Player Search */}
             <div className="relative flex-1 min-w-[250px] max-w-md">
@@ -806,20 +577,19 @@ export default function ScatterChartPage() {
                   className="w-full pl-9 pr-4 py-2 rounded-xl bg-apple-gray-100 dark:bg-apple-gray-700 border-0 text-sm placeholder:text-apple-gray-400 focus:ring-2 focus:ring-brand-green"
                 />
               </div>
-              {/* Search Results Dropdown */}
               {searchResults.length > 0 && (
                 <div className="absolute z-20 w-full mt-1 bg-white dark:bg-apple-gray-800 rounded-xl shadow-xl border border-apple-gray-200 dark:border-apple-gray-700 max-h-64 overflow-y-auto">
-                  {searchResults.map((player, idx) => {
-                    const isInChart = chartData.some(d => d.player.Jugador === player.Jugador && d.player.Equipo === player.Equipo)
+                  {searchResults.map(player => {
+                    const isInChart = chartData.some(d => d.player.id === player.id)
                     return (
                       <button
-                        key={idx}
+                        key={player.id}
                         onClick={() => highlightPlayer(player)}
                         className="w-full flex items-center gap-3 px-3 py-2 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700 transition-colors text-left"
                       >
                         <div className="flex-1">
-                          <p className="text-sm font-medium text-apple-gray-800 dark:text-white">{player.Jugador}</p>
-                          <p className="text-xs text-apple-gray-500">{player.Equipo} · {player.Liga}</p>
+                          <p className="text-sm font-medium text-apple-gray-800 dark:text-white">{player.name}</p>
+                          <p className="text-xs text-apple-gray-500">{player.team?.name ?? ''} · {player.league?.name ?? ''}</p>
                         </div>
                         {isInChart ? (
                           <span className="text-xs bg-brand-green/20 text-brand-green px-2 py-0.5 rounded-full">En gráfico</span>
@@ -833,14 +603,14 @@ export default function ScatterChartPage() {
               )}
             </div>
 
-            {/* Selected Players Count */}
-            {selectedPlayers.size > 0 && (
+            {/* Selected count */}
+            {selectedIds.size > 0 && (
               <div className="flex items-center gap-2">
                 <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-1 rounded-lg font-medium">
-                  {selectedPlayers.size} marcado{selectedPlayers.size > 1 ? 's' : ''}
+                  {selectedIds.size} marcado{selectedIds.size > 1 ? 's' : ''}
                 </span>
                 <button
-                  onClick={clearSelections}
+                  onClick={() => setSelectedIds(new Set())}
                   className="text-xs text-apple-gray-400 hover:text-red-500 transition-colors"
                 >
                   Limpiar
@@ -860,13 +630,13 @@ export default function ScatterChartPage() {
 
       {/* Chart */}
       <div ref={chartRef} id="scatter-chart-container" className="bg-white dark:bg-apple-gray-800 rounded-2xl border border-apple-gray-200 dark:border-apple-gray-700 p-6">
-        {/* Chart Title for PDF */}
+        {/* Title for PDF */}
         <div className="mb-6 text-center">
           <h2 className="text-xl font-bold text-apple-gray-800 dark:text-white">
-            {getMetricDisplayName(xMetric)} vs {getMetricDisplayName(yMetric)}
+            {getMetricLabel(xKey)} vs {getMetricLabel(yKey)}
           </h2>
           <p className="text-sm text-apple-gray-500 mt-1">
-            Color: {getMetricDisplayName(zMetric)} | {chartData.length} jugadores analizados
+            Color: Score GG (1-10) | {chartData.length} jugadores analizados
           </p>
         </div>
 
@@ -877,10 +647,10 @@ export default function ScatterChartPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
               </svg>
             </div>
-            {selectedLeagues.length === 0 ? (
+            {!selectedLeagueId ? (
               <>
-                <p className="text-xl font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-2">Selecciona al menos una liga</p>
-                <p className="text-sm text-apple-gray-400 max-w-md text-center">Elige una o más ligas en los filtros de arriba para cargar los jugadores</p>
+                <p className="text-xl font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-2">Selecciona una liga</p>
+                <p className="text-sm text-apple-gray-400 max-w-md text-center">Elige una liga en los filtros de arriba para cargar los jugadores</p>
               </>
             ) : (
               <>
@@ -896,14 +666,14 @@ export default function ScatterChartPage() {
                 <XAxis
                   type="number"
                   dataKey="x"
-                  name={getMetricDisplayName(xMetric)}
+                  name={getMetricLabel(xKey)}
                   tick={{ fill: '#6B7280', fontSize: 11 }}
                   tickLine={{ stroke: '#E5E7EB' }}
                   axisLine={{ stroke: '#D1D5DB', strokeWidth: 1 }}
-                  domain={['dataMin - 0.5', 'dataMax + 0.5']}
+                  domain={['dataMin - 0.1', 'dataMax + 0.1']}
                 >
                   <Label
-                    value={getMetricDisplayName(xMetric)}
+                    value={getMetricLabel(xKey)}
                     position="bottom"
                     offset={45}
                     style={{ fill: '#374151', fontWeight: 600, fontSize: 13 }}
@@ -912,14 +682,14 @@ export default function ScatterChartPage() {
                 <YAxis
                   type="number"
                   dataKey="y"
-                  name={getMetricDisplayName(yMetric)}
+                  name={getMetricLabel(yKey)}
                   tick={{ fill: '#6B7280', fontSize: 11 }}
                   tickLine={{ stroke: '#E5E7EB' }}
                   axisLine={{ stroke: '#D1D5DB', strokeWidth: 1 }}
-                  domain={['dataMin - 0.5', 'dataMax + 0.5']}
+                  domain={['dataMin - 0.1', 'dataMax + 0.1']}
                 >
                   <Label
-                    value={getMetricDisplayName(yMetric)}
+                    value={getMetricLabel(yKey)}
                     angle={-90}
                     position="left"
                     offset={50}
@@ -946,16 +716,17 @@ export default function ScatterChartPage() {
                 <Scatter
                   data={chartData}
                   onClick={(data: any) => {
-                    if (data?.payload?.id) {
-                      togglePlayerSelection(data.payload.id)
+                    if (data?.payload?.player?.id != null) {
+                      toggleSelect(data.payload.player.id)
                     }
                   }}
                 >
                   {chartData.map((entry, index) => {
-                    const color = getColorForValue(entry.z, zMin, zMax)
+                    const score = entry.player.primary_score
+                    const color = score !== null ? getColorForScore(score, scoreMin, scoreMax) : '#9CA3AF'
                     const strokeColor = getDarkerColor(color)
-                    const isHighlighted = highlightedPlayer === entry.id
-                    const isSelected = selectedPlayers.has(entry.id)
+                    const isHighlighted = highlightedId === entry.player.id
+                    const isSelected = selectedIds.has(entry.player.id)
                     const isSpecial = isHighlighted || isSelected
 
                     return (
@@ -967,7 +738,11 @@ export default function ScatterChartPage() {
                         fillOpacity={isSpecial ? 1 : 0.8}
                         style={{
                           cursor: 'pointer',
-                          filter: isHighlighted ? 'drop-shadow(0 0 12px rgba(59, 130, 246, 0.8))' : isSelected ? 'drop-shadow(0 0 6px rgba(59, 130, 246, 0.5))' : 'none',
+                          filter: isHighlighted
+                            ? 'drop-shadow(0 0 12px rgba(59, 130, 246, 0.8))'
+                            : isSelected
+                            ? 'drop-shadow(0 0 6px rgba(59, 130, 246, 0.5))'
+                            : 'none',
                         }}
                       />
                     )
@@ -978,22 +753,20 @@ export default function ScatterChartPage() {
           </div>
         )}
 
-        {/* Selected Players List (for PDF) */}
-        {selectedPlayers.size > 0 && (
+        {/* Selected Players List */}
+        {selectedIds.size > 0 && (
           <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border-2 border-blue-200 dark:border-blue-800">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-4 h-4 rounded-full bg-blue-500 shadow-md" />
-              <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">Jugadores Marcados ({selectedPlayers.size})</span>
+              <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">Jugadores Marcados ({selectedIds.size})</span>
               <span className="text-xs text-blue-500 ml-auto">Click en un círculo para desmarcar</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-              {chartData.filter(d => selectedPlayers.has(d.id)).map((d, idx) => {
-                const color = getColorForValue(d.z, zMin, zMax)
+              {chartData.filter(d => selectedIds.has(d.player.id)).map((d, idx) => {
+                const score = d.player.primary_score
+                const color = score !== null ? getColorForScore(score, scoreMin, scoreMax) : '#9CA3AF'
                 return (
-                  <div
-                    key={idx}
-                    className="flex items-center gap-3 p-2 bg-white dark:bg-apple-gray-800 rounded-xl group"
-                  >
+                  <div key={d.player.id} className="flex items-center gap-3 p-2 bg-white dark:bg-apple-gray-800 rounded-xl group">
                     <div
                       className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ring-2 ring-blue-500 ring-offset-2"
                       style={{ backgroundColor: color }}
@@ -1001,24 +774,20 @@ export default function ScatterChartPage() {
                       {idx + 1}
                     </div>
                     <button
-                      onClick={() => {
-                        const encoded = encodeURIComponent(d.player.Jugador)
-                        navigate(`/jugador/${encoded}?source=${d.player.source}`)
-                      }}
+                      onClick={() => navigate(`/jugador/${encodeURIComponent(d.player.name)}?source=externo&apiId=${d.player.id}`)}
                       className="flex-1 min-w-0 text-left hover:opacity-80 transition-opacity"
                     >
                       <div className="flex items-center gap-1.5">
-                        <p className="text-sm font-semibold text-apple-gray-800 dark:text-white truncate group-hover:text-brand-green transition-colors">{d.player.Jugador}</p>
-                        <ScoutsGGBadge playerName={d.player.Jugador} />
+                        <p className="text-sm font-semibold text-apple-gray-800 dark:text-white truncate group-hover:text-brand-green transition-colors">{d.player.name}</p>
+                        <ScoutsGGBadge playerName={d.player.name} />
                       </div>
-                      <p className="text-xs text-apple-gray-500 truncate">{d.player.Equipo} · {d.player.ageNum} años</p>
+                      <p className="text-xs text-apple-gray-500 truncate">
+                        {d.player.team?.name ?? ''} · {score !== null ? `Score GG: ${score.toFixed(1)}` : ''}
+                      </p>
                     </button>
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() => {
-                          const encoded = encodeURIComponent(d.player.Jugador)
-                          navigate(`/jugador/${encoded}?source=${d.player.source}`)
-                        }}
+                        onClick={() => navigate(`/jugador/${encodeURIComponent(d.player.name)}?source=externo&apiId=${d.player.id}`)}
                         className="p-1.5 hover:bg-brand-green/10 rounded-lg transition-colors"
                         title="Ver ficha"
                       >
@@ -1027,7 +796,7 @@ export default function ScatterChartPage() {
                         </svg>
                       </button>
                       <button
-                        onClick={() => togglePlayerSelection(d.id)}
+                        onClick={() => toggleSelect(d.player.id)}
                         className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                         title="Desmarcar"
                       >
@@ -1043,17 +812,17 @@ export default function ScatterChartPage() {
           </div>
         )}
 
-        {/* Legend - Color Scale */}
+        {/* Color Scale Legend */}
         {chartData.length > 0 && (
           <div className="mt-6 p-5 bg-apple-gray-50 dark:bg-apple-gray-700/50 rounded-2xl">
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <div className="flex items-center gap-3">
-                <span className="text-sm font-medium text-apple-gray-600 dark:text-apple-gray-300">{getMetricDisplayName(zMetric)}:</span>
+                <span className="text-sm font-medium text-apple-gray-600 dark:text-apple-gray-300">Score GG:</span>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-xs text-apple-gray-500 font-medium">{zMin.toFixed(1)}</span>
+                <span className="text-xs text-apple-gray-500 font-medium">{scoreMin.toFixed(1)}</span>
                 <div className="w-48 h-4 rounded-full bg-gradient-to-r from-red-500 via-yellow-400 to-green-500 shadow-inner" />
-                <span className="text-xs text-apple-gray-500 font-medium">{zMax.toFixed(1)}</span>
+                <span className="text-xs text-apple-gray-500 font-medium">{scoreMax.toFixed(1)}</span>
               </div>
               <div className="flex items-center gap-4 text-xs text-apple-gray-500">
                 <div className="flex items-center gap-1.5">
