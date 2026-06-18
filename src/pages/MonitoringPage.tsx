@@ -285,7 +285,7 @@ export default function MonitoringPage() {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-apple-gray-800 dark:text-white tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-bold text-apple-gray-800 dark:text-white tracking-tight">
             Seguimiento de Datos
           </h1>
           <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">

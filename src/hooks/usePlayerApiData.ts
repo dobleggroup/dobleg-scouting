@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react'
 import {
   fetchPlayerInjuries,
   fetchPlayerTransfers,
+  fetchAgencyTransfers,
   searchApiPlayerId,
   type PlayerSidelined,
   type PlayerTransfer,
+  type AgencyTransfer,
 } from '@/services/footballApiService'
 import { AGENCY_PLAYERS } from '@/constants/agencyPlayers'
 
@@ -86,4 +88,25 @@ export function usePlayerTransfers(playerId: number | null) {
   }, [playerId])
 
   return { transfers, loading }
+}
+
+export function useAgencyTransfers() {
+  const [transfers, setTransfers] = useState<AgencyTransfer[]>([])
+  const [loading, setLoading] = useState(false)
+  const [progress, setProgress] = useState({ done: 0, total: 0 })
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+
+    fetchAgencyTransfers((done, total) => {
+      if (!cancelled) setProgress({ done, total })
+    })
+      .then(data => { if (!cancelled) setTransfers(data) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+
+    return () => { cancelled = true }
+  }, [])
+
+  return { transfers, loading, progress }
 }

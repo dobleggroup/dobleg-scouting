@@ -247,7 +247,7 @@ export default function OpportunitiesPage() {
     <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-apple-gray-800 dark:text-white tracking-tight">
+        <h1 className="text-xl sm:text-2xl font-bold text-apple-gray-800 dark:text-white tracking-tight">
           Oportunidades de Mercado
         </h1>
         <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">

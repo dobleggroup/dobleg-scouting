@@ -10,6 +10,8 @@ import { normalizeName } from '@/utils/scoring'
 import { useScoreLookup } from '@/hooks/usePlayerStats'
 import PortfolioValueChart from '@/components/charts/PortfolioValueChart'
 import LeagueAnalysis from '@/components/dashboard/LeagueAnalysis'
+import AgencyTransferHistory from '@/components/dashboard/AgencyTransferHistory'
+import { useAgencyTransfers } from '@/hooks/usePlayerApiData'
 import type { EnrichedPlayer, MonitoringPlayer } from '@/types'
 
 // Helper to format currency
@@ -192,6 +194,7 @@ export default function DashboardPage() {
   const navigate = useNavigate()
   const { internal, monitoring, marketValueHistory, positionAverages, loading } = useData()
   const { lookup: scoreLookup } = useScoreLookup()
+  const { transfers: agencyTransfers, loading: transfersLoading, progress: transfersProgress } = useAgencyTransfers()
 
   function getPlayerScore(player: EnrichedPlayer): { score: number | null; scale: ScoreScale } {
     const entry = scoreLookup.get(normalizeName(player.Jugador))
@@ -422,6 +425,39 @@ export default function DashboardPage() {
     }
   }, [monitoring])
 
+  // Portfolio sparkline data from market value history (same logic as PortfolioValueChart)
+  const portfolioSparkline = useMemo(() => {
+    if (marketValueHistory.length === 0) return { points: [] as number[], growth: 0, chartTotal: 0 }
+    const allDates = [...new Set(marketValueHistory.map(d => d.fecha.toISOString().split('T')[0]))].sort()
+    const playerData = new Map<string, typeof marketValueHistory>()
+    for (const entry of marketValueHistory) {
+      if (!playerData.has(entry.Jugador)) playerData.set(entry.Jugador, [])
+      playerData.get(entry.Jugador)!.push(entry)
+    }
+    // Players without history – add their value on the last point (matching chart)
+    const namesWithHistory = new Set(Array.from(playerData.keys()).map(n => n.trim().toLowerCase()))
+    const withoutHistoryValue = internal
+      .filter(p => !namesWithHistory.has((p.Jugador || '').trim().toLowerCase()))
+      .reduce((sum, p) => sum + (p.marketValueRaw || 0), 0)
+
+    const totals: number[] = []
+    for (let i = 0; i < allDates.length; i++) {
+      const date = new Date(allDates[i])
+      let total = 0
+      for (const [, entries] of playerData) {
+        const relevant = entries.filter(e => e.fecha <= date)
+        if (relevant.length > 0) total += relevant[relevant.length - 1].valor
+      }
+      if (i === allDates.length - 1) total += withoutHistoryValue
+      totals.push(total)
+    }
+    const last12 = totals.slice(-12)
+    const first = last12[0] || 0
+    const last = last12[last12.length - 1] || 0
+    const growth = first > 0 ? ((last - first) / first) * 100 : 0
+    return { points: last12, growth, chartTotal: last }
+  }, [marketValueHistory, internal])
+
   // Position distribution
   const positionDistribution = useMemo(() => {
     const groups: Record<string, number> = {
@@ -472,12 +508,43 @@ export default function DashboardPage() {
           value={kpis.totalPlayers}
           large
         />
-        <StatCard
-          label="Valor Total Portfolio"
-          value={formatValue(kpis.totalValue)}
-          subtitle={`Promedio: ${formatValue(kpis.totalValue / kpis.totalPlayers || 0)}`}
-          large
-        />
+        <div className="bg-white dark:bg-apple-gray-800 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 p-4 flex flex-col justify-between">
+          <p className="text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">Valor Total Portfolio</p>
+          {(() => {
+            const displayTotal = portfolioSparkline.chartTotal > 0 ? portfolioSparkline.chartTotal : kpis.totalValue
+            const pts = portfolioSparkline.points
+            return (
+              <>
+                <div className="mt-1">
+                  <p className="text-2xl font-bold text-apple-gray-800 dark:text-white tabular-nums">{formatValue(displayTotal)}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-xs text-apple-gray-500 dark:text-apple-gray-400">Prom: {formatValue(kpis.totalPlayers > 0 ? displayTotal / kpis.totalPlayers : 0)}</span>
+                    {portfolioSparkline.growth !== 0 && (
+                      <span className={`text-xs font-semibold ${portfolioSparkline.growth >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                        {portfolioSparkline.growth >= 0 ? '+' : ''}{portfolioSparkline.growth.toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {pts.length >= 2 && (() => {
+                  const min = Math.min(...pts)
+                  const max = Math.max(...pts)
+                  const range = max - min || 1
+                  const w = 120
+                  const h = 28
+                  const line = pts.map((v, i) => `${(i / (pts.length - 1)) * w},${h - ((v - min) / range) * h}`).join(' ')
+                  const area = `0,${h} ${line} ${w},${h}`
+                  return (
+                    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-7 mt-2" preserveAspectRatio="none">
+                      <polygon points={area} fill="rgba(34,197,94,0.15)" />
+                      <polyline points={line} fill="none" stroke="#22C55E" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )
+                })()}
+              </>
+            )
+          })()}
+        </div>
         <StatCard
           label="Edad Promedio"
           value={kpis.avgAge.toFixed(1)}
@@ -494,24 +561,25 @@ export default function DashboardPage() {
           </p>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             {positionScores.map(({ label, avg, count, globalAvg }) => {
-              // Adapt color thresholds to the active scale
+              // Normalize globalAvg to match the active scale (positionAverages is 0-100 from CSV, Supabase scores are 1-10)
+              const normGlobalAvg = useSupabaseScale && globalAvg !== null && globalAvg > 10 ? globalAvg / 10 : globalAvg
               const eliteThreshold = useSupabaseScale ? 8.0 : 80
               const goodThreshold = useSupabaseScale ? 5.5 : 55
               const devThreshold = useSupabaseScale ? 3.5 : 35
               const colorClass =
                 avg >= eliteThreshold ? 'text-emerald-400' :
-                globalAvg !== null
-                  ? avg >= globalAvg ? 'text-emerald-500' :
-                    avg >= globalAvg * 0.85 ? 'text-amber-500' :
-                    avg >= globalAvg * 0.70 ? 'text-orange-500' : 'text-red-500'
+                normGlobalAvg !== null
+                  ? avg >= normGlobalAvg ? 'text-emerald-500' :
+                    avg >= normGlobalAvg * 0.85 ? 'text-amber-500' :
+                    avg >= normGlobalAvg * 0.70 ? 'text-orange-500' : 'text-red-500'
                   : avg >= goodThreshold ? 'text-emerald-500' :
                     avg >= devThreshold ? 'text-amber-500' : 'text-orange-500'
               const barColor =
                 avg >= eliteThreshold ? 'bg-emerald-400' :
-                globalAvg !== null
-                  ? avg >= globalAvg ? 'bg-emerald-500' :
-                    avg >= globalAvg * 0.85 ? 'bg-amber-500' :
-                    avg >= globalAvg * 0.70 ? 'bg-orange-500' : 'bg-red-500'
+                normGlobalAvg !== null
+                  ? avg >= normGlobalAvg ? 'bg-emerald-500' :
+                    avg >= normGlobalAvg * 0.85 ? 'bg-amber-500' :
+                    avg >= normGlobalAvg * 0.70 ? 'bg-orange-500' : 'bg-red-500'
                   : avg >= goodThreshold ? 'bg-emerald-500' :
                     avg >= devThreshold ? 'bg-amber-500' : 'bg-orange-500'
               // Bar width: normalize avg to 0-100% regardless of scale
@@ -556,10 +624,17 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Agency Transfer History */}
+      {(agencyTransfers.length > 0 || transfersLoading) && (
+        <div className="mb-8">
+          <AgencyTransferHistory transfers={agencyTransfers} loading={transfersLoading} progress={transfersProgress} />
+        </div>
+      )}
+
       {/* Alert Banner */}
       {kpis.contractCritical > 0 && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-8">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center flex-shrink-0">
               <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -575,7 +650,7 @@ export default function DashboardPage() {
             </div>
             <button
               onClick={() => navigate('/interno')}
-              className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
+              className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors flex-shrink-0"
             >
               Ver detalles
             </button>
@@ -638,21 +713,21 @@ export default function DashboardPage() {
               </div>
               <div className="space-y-2">
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-apple-gray-500 w-24">{useSupabaseScale ? `Elite (${thresholds.elite}+)` : 'Elite (60+)'}</span>
+                  <span className="text-xs text-apple-gray-500 w-28 truncate">{useSupabaseScale ? `Elite (${thresholds.elite}+)` : 'Elite (60+)'}</span>
                   <div className="flex-1">
                     <ProgressBar value={kpis.elite} max={kpis.totalPlayers} color="bg-emerald-500" />
                   </div>
                   <span className="text-sm font-medium text-apple-gray-700 dark:text-apple-gray-200 w-8 text-right">{kpis.elite}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-apple-gray-500 w-24">{useSupabaseScale ? `Buenos (${thresholds.good}-${thresholds.elite})` : 'Buenos (45-59)'}</span>
+                  <span className="text-xs text-apple-gray-500 w-28 truncate">{useSupabaseScale ? `Buenos (${thresholds.good}-${thresholds.elite})` : 'Buenos (45-59)'}</span>
                   <div className="flex-1">
                     <ProgressBar value={kpis.good} max={kpis.totalPlayers} color="bg-blue-500" />
                   </div>
                   <span className="text-sm font-medium text-apple-gray-700 dark:text-apple-gray-200 w-8 text-right">{kpis.good}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-apple-gray-500 w-24">En desarrollo</span>
+                  <span className="text-xs text-apple-gray-500 w-28 truncate">En desarrollo</span>
                   <div className="flex-1">
                     <ProgressBar value={kpis.developing} max={kpis.totalPlayers} color="bg-apple-gray-400" />
                   </div>
@@ -874,10 +949,10 @@ export default function DashboardPage() {
       {seguimientoStats.total > 0 && (
         <div className="mt-10 pt-8 border-t border-apple-gray-200 dark:border-apple-gray-700">
           {/* Section Header */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
             <div>
               <h2 className="text-xl font-bold text-apple-gray-800 dark:text-white flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-green to-emerald-600 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-green to-emerald-600 flex items-center justify-center flex-shrink-0">
                   <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
@@ -890,7 +965,7 @@ export default function DashboardPage() {
             </div>
             <button
               onClick={() => navigate('/seguimiento-datos')}
-              className="px-4 py-2 bg-brand-green text-black text-sm font-semibold rounded-lg hover:bg-green-400 transition-colors"
+              className="px-4 py-2 bg-brand-green text-black text-sm font-semibold rounded-lg hover:bg-green-400 transition-colors flex-shrink-0"
             >
               Ver todos los seguimientos
             </button>

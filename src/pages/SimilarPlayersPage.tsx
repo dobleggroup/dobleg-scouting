@@ -228,11 +228,11 @@ export default function SimilarPlayersPage() {
       {/* Selected player card */}
       {selectedPlayer && (
         <div className="card-apple p-6 mb-6">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
             {selectedPlayer.Imagen ? (
-              <img src={selectedPlayer.Imagen} alt="" className="w-16 h-16 rounded-full object-cover" />
+              <img src={selectedPlayer.Imagen} alt="" className="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover" />
             ) : (
-              <div className="w-16 h-16 rounded-full bg-brand-green/20 flex items-center justify-center text-xl font-semibold text-brand-green">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-brand-green/20 flex items-center justify-center text-xl font-semibold text-brand-green">
                 {selectedPlayer.Jugador.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
               </div>
             )}
@@ -322,12 +322,12 @@ export default function SimilarPlayersPage() {
                   </div>
 
                   {/* Score */}
-                  <div className="w-24">
+                  <div className="w-16 sm:w-24">
                     {(() => { const s = getPlayerScore(player); return <ScoreBar score={s.score} size="md" scale={s.scale} /> })()}
                   </div>
 
                   {/* Similarity */}
-                  <div className="w-20 text-right">
+                  <div className="w-14 sm:w-20 text-right">
                     <div className="text-xs text-apple-gray-400 dark:text-apple-gray-500">Similitud</div>
                     <div className={`text-sm font-bold ${
                       similarity >= 80 ? 'text-emerald-500' :

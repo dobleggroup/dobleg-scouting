@@ -881,7 +881,7 @@ export default function BusquedaPage() {
       )}
 
       {/* Header row */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-apple-gray-900 dark:text-white tracking-tight">Análisis Completo</h1>
           <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-1">
@@ -1288,7 +1288,7 @@ export default function BusquedaPage() {
                         <BarChart data={barData} layout="vertical" margin={{ top: 4, right: 90, left: 10, bottom: 4 }}>
                           <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(156,163,175,0.1)" />
                           <XAxis type="number" domain={[0, 100]} tick={false} axisLine={false} tickLine={false} />
-                          <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fontWeight: 500 }} width={210} />
+                          <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fontWeight: 500 }} width={140} />
                           <Tooltip
                             cursor={{ fill: 'rgba(0,0,0,0.03)' }}
                             content={({ active, payload }) => {
@@ -1500,7 +1500,7 @@ export default function BusquedaPage() {
 
                   {/* Above/below */}
                   {(conclusions.above.length > 0 || conclusions.below.length > 0) && (
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {conclusions.above.length > 0 && (
                         <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/15 border border-emerald-200 dark:border-emerald-800">
                           <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5">Supera el promedio ({conclusions.above.length})</p>

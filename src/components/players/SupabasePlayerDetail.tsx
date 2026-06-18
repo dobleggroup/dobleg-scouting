@@ -14,9 +14,10 @@ import PositionFieldMap from '@/components/ui/PositionFieldMap'
 import TrackingWidget from '@/components/tracking/TrackingWidget'
 import AddToReportButton from '@/components/pdf/AddToReportButton'
 import MarketValueChart from '@/components/charts/MarketValueChart'
+import DobleGWidget from '@/components/agency/DobleGWidget'
 import type { Position, PlayerMatchStat } from '@/types/scoring'
 import { displayPosition } from '@/types/scoring'
-import type { MarketValueHistoryEntry } from '@/types'
+import type { MarketValueHistoryEntry, EnrichedPlayer } from '@/types'
 
 function getAge(birthDate: string | null): number | null {
   if (!birthDate) return null
@@ -84,6 +85,15 @@ export default function SupabasePlayerDetail() {
 
   const { player, allSeasonScores } = data
   const age = getAge(player.birth_date)
+
+  // Objeto compatible con DobleGWidget (lee Jugador/Equipo/Imagen/contrato/valor)
+  const dgPlayer = {
+    Jugador: player.name,
+    Equipo: player.team?.name ?? '',
+    Imagen: player.photo ?? '',
+    'Vencimiento contrato': player.contract_end_date ?? '',
+    'Valor de mercado (Transfermarkt)': player.market_value_eur ? String(player.market_value_eur) : '',
+  } as unknown as EnrichedPlayer
 
   return (
     <div id="supabase-player-detail" className="max-w-screen-xl mx-auto px-4 sm:px-6 py-6 animate-fade-in">
@@ -273,6 +283,7 @@ export default function SupabasePlayerDetail() {
 
           {/* Actions */}
           <div className="card-apple p-4 space-y-2">
+            <DobleGWidget player={dgPlayer} apiPlayerId={playerId} />
             <TrackingWidget
               playerName={player.name}
               playerDbId={String(player.id)}

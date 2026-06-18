@@ -301,7 +301,7 @@ export default function RadarAnalysisPage() {
     <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-apple-gray-800 dark:text-white tracking-tight">
+        <h1 className="text-xl sm:text-2xl font-bold text-apple-gray-800 dark:text-white tracking-tight">
           Detector de Talentos
         </h1>
         <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-1">
@@ -310,8 +310,8 @@ export default function RadarAnalysisPage() {
       </div>
 
       <div className="grid lg:grid-cols-4 gap-6">
-        {/* Sidebar */}
-        <aside className="lg:col-span-1 space-y-6">
+        {/* Sidebar — on mobile, chart shows first via order */}
+        <aside className="lg:col-span-1 space-y-6 order-2 lg:order-1">
           {/* Player search */}
           <div className="bg-white dark:bg-apple-gray-800 rounded-2xl p-5 shadow-sm border border-apple-gray-100 dark:border-apple-gray-700">
             <h3 className="text-sm font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-4">
@@ -713,7 +713,7 @@ export default function RadarAnalysisPage() {
         </aside>
 
         {/* Main content */}
-        <div className="lg:col-span-3 space-y-6">
+        <div className="lg:col-span-3 space-y-6 order-1 lg:order-2">
           {/* Radar Chart */}
           <div id="radar-detector-container" className="bg-white dark:bg-apple-gray-800 rounded-2xl p-6 shadow-sm border border-apple-gray-100 dark:border-apple-gray-700">
             <div className="flex items-center justify-between mb-4">
