@@ -375,7 +375,7 @@ export default function OpportunitiesPage() {
             return (
               <div
                 key={`${opp.player.id}-${idx}`}
-                onClick={() => navigate(`/jugador-interno/${opp.player.id}`)}
+                onClick={() => navigate(`/jugador/${encodeURIComponent(opp.player.name)}?source=externo&apiId=${opp.player.id}`)}
                 className="bg-white dark:bg-apple-gray-800 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 p-4 cursor-pointer hover:shadow-lg transition-all hover:-translate-y-0.5"
               >
                 {/* Header */}
