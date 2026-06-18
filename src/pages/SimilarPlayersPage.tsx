@@ -1,130 +1,58 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useData } from '@/context/DataContext'
+import { usePlayersList } from '@/hooks/usePlayerStats'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import EmptyState from '@/components/ui/EmptyState'
 import ScoreBar from '@/components/ui/ScoreBar'
 import CopyChartButton from '@/components/ui/CopyChartButton'
-import { POSITION_MAP, SCORING_CONFIG } from '@/constants/scoring'
-import { smartSearch } from '@/lib/search'
-import type { EnrichedPlayer } from '@/types'
-import { useScoreLookup } from '@/hooks/usePlayerStats'
-import { normalizeName } from '@/utils/scoring'
+import { displayPosition } from '@/types/scoring'
+import type { PlayerWithScore, Position } from '@/types/scoring'
+import { computeSimilarity } from '@/utils/similarity'
 
-const STORAGE_KEY = 'similar-players-state'
+const STORAGE_KEY = 'similar-players-state-v2'
 
-function getPlayerPosition(p: EnrichedPlayer): string {
-  const rawPos = (p['Posición específica'] || p['Posición'])?.trim() ?? ''
-  return POSITION_MAP[rawPos] ?? ''
-}
-
-function getMetricValue(player: EnrichedPlayer, metric: string): number {
-  const val = player[metric]
-  if (typeof val === 'number') return val
-  if (typeof val === 'string') {
-    const num = parseFloat(val.replace(',', '.').replace('%', ''))
-    return isNaN(num) ? 0 : num
-  }
-  return 0
-}
-
-function computeSimilarity(
-  target: EnrichedPlayer,
-  candidate: EnrichedPlayer,
-  metrics: { column: string; weight: number }[]
-): number {
-  // Calculate weighted Euclidean distance, then convert to similarity
-  let sumWeightedSquares = 0
-  let totalWeight = 0
-
-  for (const m of metrics) {
-    const targetVal = getMetricValue(target, m.column)
-    const candidateVal = getMetricValue(candidate, m.column)
-
-    // Normalize by max of the two values to get relative difference
-    const maxVal = Math.max(Math.abs(targetVal), Math.abs(candidateVal), 1)
-    const normalizedDiff = (targetVal - candidateVal) / maxVal
-
-    sumWeightedSquares += m.weight * normalizedDiff * normalizedDiff
-    totalWeight += m.weight
-  }
-
-  const distance = Math.sqrt(sumWeightedSquares / totalWeight)
-  // Convert distance to similarity (0-100 scale)
-  const similarity = Math.max(0, 100 - distance * 100)
-  return similarity
-}
-
-function findSimilarPlayers(
-  target: EnrichedPlayer,
-  allPlayers: EnrichedPlayer[],
-  count: number = 10
-): { player: EnrichedPlayer; similarity: number }[] {
-  const targetPos = getPlayerPosition(target)
-  const metrics = SCORING_CONFIG[targetPos] || []
-
-  if (metrics.length === 0) {
-    // Fallback: use a generic set of metrics
-    return []
-  }
-
-  // Filter players with same position, excluding the target
-  const candidates = allPlayers.filter(p => {
-    if (p.Jugador === target.Jugador && p.Equipo === target.Equipo) return false
-    const pos = getPlayerPosition(p)
-    return pos === targetPos
-  })
-
-  // Calculate similarity for each candidate
-  const withSimilarity = candidates.map(candidate => ({
-    player: candidate,
-    similarity: computeSimilarity(target, candidate, metrics),
-  }))
-
-  // Sort by similarity (highest first)
-  withSimilarity.sort((a, b) => b.similarity - a.similarity)
-
-  return withSimilarity.slice(0, count)
+// Convert similarity distance (0 = identical) to a 0–100% display value
+function distanceToPercent(distance: number, maxDistance: number): number {
+  if (maxDistance === 0) return 100
+  return Math.max(0, Math.round((1 - distance / maxDistance) * 100))
 }
 
 export default function SimilarPlayersPage() {
-  const { external, internal, loading, error } = useData()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
-  const [selectedPlayer, setSelectedPlayer] = useState<EnrichedPlayer | null>(null)
+  const [selectedPlayer, setSelectedPlayer] = useState<PlayerWithScore | null>(null)
   const [restored, setRestored] = useState(false)
 
-  // Supabase score lookup (1-10 scale). Falls back to CSV ggScore (0-100) when not ready or not found.
-  const { lookup: scoreLookup, ready: scoreReady } = useScoreLookup()
+  // Load all players for the search dropdown (no position filter)
+  const { players: allPlayers, loading: loadingAll, error: errorAll } = usePlayersList({
+    pageSize: 500,
+    min_matches: 5,
+  })
 
-  function getPlayerScore(player: EnrichedPlayer): { score: number | null; scale: '100' | '10' } {
-    if (scoreReady && scoreLookup.size > 0) {
-      const key = normalizeName(player.Jugador)
-      const entry = scoreLookup.get(key)
-      if (entry) return { score: entry.score, scale: '10' }
-    }
-    return { score: null, scale: '10' }
-  }
+  // Once a player is selected, load the pool for the same position
+  const selectedPosition = selectedPlayer?.primary_position ?? null
 
-  // Combine all players for search
-  const allPlayers = useMemo(() => [...external, ...internal], [external, internal])
+  const { players: poolPlayers, loading: loadingPool } = usePlayersList(
+    selectedPosition
+      ? { positions: [selectedPosition], pageSize: 300, min_matches: 5 }
+      : { pageSize: 0 }
+  )
 
   // Restore state from sessionStorage on mount
   useEffect(() => {
     if (restored || allPlayers.length === 0) return
-
     try {
       const saved = sessionStorage.getItem(STORAGE_KEY)
       if (saved) {
-        const { searchText, playerName, playerTeam } = JSON.parse(saved)
+        const { searchText, playerId } = JSON.parse(saved)
         if (searchText) setSearch(searchText)
-        if (playerName && playerTeam) {
-          const player = allPlayers.find(p => p.Jugador === playerName && p.Equipo === playerTeam)
+        if (playerId) {
+          const player = allPlayers.find(p => p.id === playerId)
           if (player) setSelectedPlayer(player)
         }
       }
-    } catch (e) {
-      // Ignore errors
+    } catch {
+      // Ignore
     }
     setRestored(true)
   }, [allPlayers, restored])
@@ -132,33 +60,47 @@ export default function SimilarPlayersPage() {
   // Save state to sessionStorage when it changes
   useEffect(() => {
     if (!restored) return
-
     const state = {
       searchText: search,
-      playerName: selectedPlayer?.Jugador || null,
-      playerTeam: selectedPlayer?.Equipo || null,
+      playerId: selectedPlayer?.id ?? null,
     }
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   }, [search, selectedPlayer, restored])
 
-  // Filter players for dropdown
+  // Filter players for the search dropdown
   const searchResults = useMemo(() => {
-    if (!search.trim()) return []
-    return smartSearch(allPlayers, search, p => `${p.Jugador} ${p.Equipo || ''}`, 10)
+    const q = search.trim().toLowerCase()
+    if (!q) return []
+    return allPlayers
+      .filter(p => p.name.toLowerCase().includes(q))
+      .slice(0, 10)
   }, [allPlayers, search])
 
-  // Find similar players when one is selected
+  // Compute similarity when base player and pool are ready
   const similarPlayers = useMemo(() => {
-    if (!selectedPlayer) return []
-    return findSimilarPlayers(selectedPlayer, allPlayers, 10)
-  }, [selectedPlayer, allPlayers])
+    if (!selectedPlayer || !selectedPosition) return []
+    const baseScore = selectedPlayer.season_scores[0]
+    if (!baseScore) return []
 
-  const selectedPosition = selectedPlayer ? getPlayerPosition(selectedPlayer) : ''
+    const others = poolPlayers
+      .filter(p => p.id !== selectedPlayer.id && p.season_scores.length > 0)
+      .map(p => ({ player: p, score: p.season_scores[0] }))
 
-  if (loading) return <LoadingSpinner fullScreen message="Cargando jugadores..." />
-  if (error) return (
+    const ranked = computeSimilarity(baseScore, others, selectedPosition as Position)
+    return ranked.slice(0, 10)
+  }, [selectedPlayer, selectedPosition, poolPlayers])
+
+  const maxDistance = useMemo(() => {
+    if (similarPlayers.length === 0) return 1
+    return Math.max(...similarPlayers.map(r => r.distance), 0.001)
+  }, [similarPlayers])
+
+  const loading = loadingAll || (!!selectedPlayer && loadingPool)
+
+  if (loadingAll) return <LoadingSpinner fullScreen message="Cargando jugadores..." />
+  if (errorAll) return (
     <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-8">
-      <EmptyState title="Error al cargar datos" description={error} icon="error" />
+      <EmptyState title="Error al cargar datos" description={errorAll} icon="error" />
     </div>
   )
 
@@ -198,24 +140,24 @@ export default function SimilarPlayersPage() {
             <div className="absolute z-20 mt-1 w-full max-w-md bg-white dark:bg-apple-gray-800 border border-apple-gray-200 dark:border-apple-gray-700 rounded-xl shadow-lg overflow-hidden">
               {searchResults.map(p => (
                 <button
-                  key={`${p.Jugador}-${p.Equipo}`}
+                  key={p.id}
                   onClick={() => {
                     setSelectedPlayer(p)
-                    setSearch(p.Jugador)
+                    setSearch(p.name)
                   }}
                   className="w-full px-4 py-3 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700 transition-colors flex items-center gap-3"
                 >
-                  {p.Imagen ? (
-                    <img src={p.Imagen} alt="" className="w-8 h-8 rounded-full object-cover" />
+                  {p.photo ? (
+                    <img src={p.photo} alt="" className="w-8 h-8 rounded-full object-cover" />
                   ) : (
                     <div className="w-8 h-8 rounded-full bg-apple-gray-200 dark:bg-apple-gray-600 flex items-center justify-center text-xs font-medium text-apple-gray-600 dark:text-apple-gray-300">
-                      {p.Jugador.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                      {p.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-apple-gray-800 dark:text-white truncate">{p.Jugador}</div>
+                    <div className="font-medium text-apple-gray-800 dark:text-white truncate">{p.name}</div>
                     <div className="text-xs text-apple-gray-500 dark:text-apple-gray-400 truncate">
-                      {p.Equipo} · {p['Posición']} · {p.Liga}
+                      {p.team?.name} · {displayPosition(p.primary_position)}
                     </div>
                   </div>
                 </button>
@@ -229,22 +171,22 @@ export default function SimilarPlayersPage() {
       {selectedPlayer && (
         <div className="card-apple p-6 mb-6">
           <div className="flex items-center gap-3 sm:gap-4">
-            {selectedPlayer.Imagen ? (
-              <img src={selectedPlayer.Imagen} alt="" className="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover" />
+            {selectedPlayer.photo ? (
+              <img src={selectedPlayer.photo} alt="" className="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover" />
             ) : (
               <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-brand-green/20 flex items-center justify-center text-xl font-semibold text-brand-green">
-                {selectedPlayer.Jugador.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                {selectedPlayer.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
               </div>
             )}
             <div className="flex-1">
-              <h2 className="text-xl font-bold text-apple-gray-800 dark:text-white">{selectedPlayer.Jugador}</h2>
+              <h2 className="text-xl font-bold text-apple-gray-800 dark:text-white">{selectedPlayer.name}</h2>
               <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400">
-                {selectedPlayer.Equipo} · {selectedPosition || selectedPlayer['Posición']} · {selectedPlayer.Liga}
+                {selectedPlayer.team?.name} · {displayPosition(selectedPlayer.primary_position)}
               </p>
             </div>
             <div className="text-right">
               <div className="text-xs text-apple-gray-500 dark:text-apple-gray-400 mb-1">Score GG</div>
-              {(() => { const s = getPlayerScore(selectedPlayer); return <ScoreBar score={s.score} size="sm" scale={s.scale} /> })()}
+              <ScoreBar score={selectedPlayer.primary_score} size="sm" scale="10" />
             </div>
             <button
               onClick={() => {
@@ -270,80 +212,78 @@ export default function SimilarPlayersPage() {
                 10 Jugadores más similares
               </h3>
               <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
-                Basado en métricas de rendimiento para {selectedPosition || 'la posición'}
+                Basado en métricas de rendimiento para {displayPosition(selectedPosition) || 'la posición'}
               </p>
             </div>
-            <CopyChartButton targetId="similar-players-container" filename={`similares_${selectedPlayer.Jugador.replace(/\s+/g,'_')}`} />
+            <CopyChartButton targetId="similar-players-container" filename={`similares_${selectedPlayer.name.replace(/\s+/g, '_')}`} />
           </div>
 
-          {similarPlayers.length === 0 ? (
+          {loading ? (
+            <div className="p-8 flex justify-center">
+              <LoadingSpinner message="Calculando similares..." />
+            </div>
+          ) : similarPlayers.length === 0 ? (
             <div className="p-8 text-center text-apple-gray-500 dark:text-apple-gray-400">
               No se encontraron jugadores similares para esta posición.
             </div>
           ) : (
             <div className="divide-y divide-apple-gray-100 dark:divide-apple-gray-700/50">
-              {similarPlayers.map(({ player, similarity }, index) => (
-                <button
-                  key={`${player.Jugador}-${player.Equipo}`}
-                  onClick={() => {
-                    const encoded = encodeURIComponent(player.Jugador)
-                    navigate(`/jugador/${encoded}?source=${player.source}`)
-                  }}
-                  className="w-full px-6 py-4 flex items-center gap-4 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-800/50 transition-colors text-left"
-                >
-                  {/* Rank */}
-                  <div className="w-8 h-8 rounded-full bg-apple-gray-100 dark:bg-apple-gray-700 flex items-center justify-center text-sm font-semibold text-apple-gray-600 dark:text-apple-gray-300">
-                    {index + 1}
-                  </div>
-
-                  {/* Player image */}
-                  {player.Imagen ? (
-                    <img src={player.Imagen} alt="" className="w-10 h-10 rounded-full object-cover" />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-apple-gray-200 dark:bg-apple-gray-600 flex items-center justify-center text-xs font-medium text-apple-gray-600 dark:text-apple-gray-300">
-                      {player.Jugador.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+              {similarPlayers.map(({ player, distance }, index) => {
+                const similarity = distanceToPercent(distance, maxDistance)
+                return (
+                  <button
+                    key={player.id}
+                    onClick={() => {
+                      navigate(`/jugador/${encodeURIComponent(player.name)}?source=externo&apiId=${player.id}`)
+                    }}
+                    className="w-full px-6 py-4 flex items-center gap-4 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-800/50 transition-colors text-left"
+                  >
+                    {/* Rank */}
+                    <div className="w-8 h-8 rounded-full bg-apple-gray-100 dark:bg-apple-gray-700 flex items-center justify-center text-sm font-semibold text-apple-gray-600 dark:text-apple-gray-300">
+                      {index + 1}
                     </div>
-                  )}
 
-                  {/* Player info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-apple-gray-800 dark:text-white truncate">{player.Jugador}</div>
-                    <div className="text-xs text-apple-gray-500 dark:text-apple-gray-400 truncate">
-                      {player.Equipo} · {player.Liga}
+                    {/* Player image */}
+                    {player.photo ? (
+                      <img src={player.photo} alt="" className="w-10 h-10 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-apple-gray-200 dark:bg-apple-gray-600 flex items-center justify-center text-xs font-medium text-apple-gray-600 dark:text-apple-gray-300">
+                        {player.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+
+                    {/* Player info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-apple-gray-800 dark:text-white truncate">{player.name}</div>
+                      <div className="text-xs text-apple-gray-500 dark:text-apple-gray-400 truncate">
+                        {player.team?.name}
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Market value */}
-                  <div className="text-right hidden sm:block">
-                    <div className="text-xs text-apple-gray-400 dark:text-apple-gray-500">Valor</div>
-                    <div className="text-sm font-medium text-apple-gray-700 dark:text-apple-gray-200">
-                      {player.marketValueFormatted || '—'}
+                    {/* Score GG */}
+                    <div className="w-16 sm:w-24">
+                      <ScoreBar score={player.primary_score} size="md" scale="10" />
                     </div>
-                  </div>
 
-                  {/* Score */}
-                  <div className="w-16 sm:w-24">
-                    {(() => { const s = getPlayerScore(player); return <ScoreBar score={s.score} size="md" scale={s.scale} /> })()}
-                  </div>
-
-                  {/* Similarity */}
-                  <div className="w-14 sm:w-20 text-right">
-                    <div className="text-xs text-apple-gray-400 dark:text-apple-gray-500">Similitud</div>
-                    <div className={`text-sm font-bold ${
-                      similarity >= 80 ? 'text-emerald-500' :
-                      similarity >= 60 ? 'text-amber-500' :
-                      'text-orange-500'
-                    }`}>
-                      {similarity.toFixed(0)}%
+                    {/* Similarity */}
+                    <div className="w-14 sm:w-20 text-right">
+                      <div className="text-xs text-apple-gray-400 dark:text-apple-gray-500">Similitud</div>
+                      <div className={`text-sm font-bold ${
+                        similarity >= 80 ? 'text-emerald-500' :
+                        similarity >= 60 ? 'text-amber-500' :
+                        'text-orange-500'
+                      }`}>
+                        {similarity}%
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Arrow */}
-                  <svg className="w-4 h-4 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              ))}
+                    {/* Arrow */}
+                    <svg className="w-4 h-4 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                )
+              })}
             </div>
           )}
         </div>
