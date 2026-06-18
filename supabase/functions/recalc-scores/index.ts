@@ -88,6 +88,23 @@ serve(async (req) => {
           const scores = rows.map(r => r.match_score).filter((s: any) => s !== null);
           const ratings = rows.map(r => r.rating).filter((r: any) => r !== null);
 
+          // Métricas /90 y porcentajes del jugador en esta posición (mismas que el radar)
+          const mins = rows.filter((r: any) => r.minutes > 0);
+          const p90 = (field: string) => {
+            const vals = mins.map((r: any) => ((r[field] ?? 0) / r.minutes) * 90);
+            return vals.length > 0 ? vals.reduce((a: number, b: number) => a + b, 0) / vals.length : null;
+          };
+          const avg = (field: string) => {
+            const vals = rows.map((r: any) => r[field] ?? 0).filter((v: number) => v > 0);
+            return vals.length > 0 ? vals.reduce((a: number, b: number) => a + b, 0) / vals.length : null;
+          };
+          const pct = (num: string, den: string) => {
+            const totN = rows.reduce((acc: number, r: any) => acc + (r[num] ?? 0), 0);
+            const totD = rows.reduce((acc: number, r: any) => acc + (r[den] ?? 0), 0);
+            return totD > 0 ? (totN / totD) * 100 : null;
+          };
+          const rd = (v: number | null) => (v === null ? null : Math.round(v * 100) / 100);
+
           upsertRows.push({
             player_id: parseInt(playerId),
             season,
@@ -102,6 +119,24 @@ serve(async (req) => {
               : null,
             total_goals: rows.reduce((s: number, r: any) => s + (r.goals ?? 0), 0),
             total_assists: rows.reduce((s: number, r: any) => s + (r.assists ?? 0), 0),
+            tackles_p90: rd(p90('tackles')),
+            interceptions_p90: rd(p90('interceptions')),
+            blocks_p90: rd(p90('blocks')),
+            duels_won_pct: rd(pct('duels_won', 'duels_total')),
+            passes_accuracy: rd(avg('passes_accuracy')),
+            passes_key_p90: rd(p90('passes_key')),
+            passes_total_p90: rd(p90('passes_total')),
+            dribbles_success_p90: rd(p90('dribbles_success')),
+            dribbles_pct: rd(pct('dribbles_success', 'dribbles_attempted')),
+            shots_on_p90: rd(p90('shots_on')),
+            shots_pct: rd(pct('shots_on', 'shots_total')),
+            goals_p90: rd(p90('goals')),
+            assists_p90: rd(p90('assists')),
+            fouls_drawn_p90: rd(p90('fouls_drawn')),
+            saves_p90: rd(p90('saves')),
+            goals_conceded_p90: rd(p90('goals_conceded')),
+            penalty_saved_avg: rd(avg('penalty_saved')),
+            clean_sheet_pct: rd((rows.filter((r: any) => r.goals_conceded === 0).length / rows.length) * 100),
             updated_at: new Date().toISOString(),
           });
         }
