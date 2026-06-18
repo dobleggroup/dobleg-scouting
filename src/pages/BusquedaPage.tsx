@@ -5,24 +5,67 @@ import {
   ResponsiveContainer, ScatterChart, Scatter, ReferenceLine,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, LabelList,
 } from 'recharts'
-import { useData } from '@/context/DataContext'
-import type { EnrichedPlayer } from '@/types'
-import { POSITION_MAP, SCORING_CONFIG, METRIC_ABBREVIATIONS, DISPLAY_POSITION_MAP } from '@/constants/scoring'
 import { fuzzyMatch } from '@/lib/search'
-import { useScoreLookup } from '@/hooks/usePlayerStats'
-import { normalizeName } from '@/utils/scoring'
-import { getScoreColorClass, getScoreBgClass, type ScoreScale } from '@/components/ui/ScoreBar'
-
-// Normaliza una posición cruda del CSV (puede ser código Wyscout o string con comas)
-// a un nombre amigable en español para mostrar en dropdowns y filtros.
-function normalizePositionDisplay(raw: string): string {
-  if (!raw) return ''
-  // Si tiene coma (ej: "RCMF3, LB5, LW"), tomar la primera
-  const first = raw.split(',')[0].trim()
-  // Intentar POSITION_MAP primero (más completo con variantes), luego DISPLAY_POSITION_MAP
-  return POSITION_MAP[first] ?? DISPLAY_POSITION_MAP[first] ?? first
-}
+import { usePlayersList, usePositionMetricAverages } from '@/hooks/usePlayerStats'
+import type { PlayerWithScore, Position, PositionMetricAverages } from '@/types/scoring'
+import { POSITION_DISPLAY, displayPosition } from '@/types/scoring'
+import {
+  API_METRICS,
+  METRICS_BY_POSITION,
+  getMetricValue as apiGetMetricValue,
+  type ApiMetricKey,
+} from '@/constants/apiMetrics'
+import { getScoreColorClass, getScoreBgClass } from '@/components/ui/ScoreBar'
 import CanvaExportModal, { type CanvaExportOptions } from '@/components/pdf/CanvaExportModal'
+import type { EnrichedPlayer } from '@/types'
+
+// ─── Helper: adapt PlayerWithScore → EnrichedPlayer (for PDF/Canva export) ────
+
+function playerToEnriched(p: PlayerWithScore): EnrichedPlayer {
+  const score = p.season_scores[0]
+  const age = p.birth_date
+    ? Math.floor((Date.now() - new Date(p.birth_date).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+    : null
+
+  const mv = p.market_value_eur
+  const mvFormatted = mv == null ? '—'
+    : mv >= 1_000_000 ? `€${(mv / 1_000_000).toFixed(mv % 1_000_000 === 0 ? 0 : 1)}M`
+    : mv >= 1_000 ? `€${(mv / 1_000).toFixed(0)}K`
+    : `€${mv}`
+
+  return {
+    Jugador: p.name,
+    Liga: p.league?.name ?? '',
+    Equipo: p.team?.name ?? '',
+    'Posición': p.primary_position ?? '',
+    'Posición específica': p.primary_position ?? '',
+    Edad: age != null ? String(age) : '',
+    'País de nacimiento': p.nationality ?? '',
+    Pie: p.preferred_foot ?? '',
+    Altura: p.height_cm != null ? String(p.height_cm) : '',
+    'Valor de mercado (Transfermarkt)': mvFormatted,
+    'Vencimiento contrato': p.contract_end_date ?? '',
+    'Partidos jugados': score ? String(score.matches_played) : '',
+    'Minutos jugados': '',
+    Goles: score ? String(score.total_goals) : '',
+    xG: '',
+    Asistencias: score ? String(score.total_assists) : '',
+    xA: '',
+    id: String(p.id),
+    Transfermkt: p.transfermarkt_url ?? '',
+    Representante: p.agent ?? '',
+    Imagen: p.photo ?? '',
+    ggScore: p.primary_score,
+    ggScorePercentile: p.primary_percentile,
+    source: 'externo',
+    contractStatus: 'ok',
+    monthsRemaining: null,
+    marketValueFormatted: mvFormatted,
+    marketValueRaw: mv ?? 0,
+    minutesPlayed: score ? score.matches_played * 90 : 0,
+    ageNum: age ?? 0,
+  } as unknown as EnrichedPlayer
+}
 
 // ─── Copy-as-PNG button ───────────────────────────────────────────────────────
 
@@ -81,146 +124,10 @@ function CopyBtn({ targetId, filename = 'grafico' }: { targetId: string; filenam
   )
 }
 
-// ─── Leagues excluded from pool (no quality external data) ────────────────────
-
-function isExcludedLeague(liga: string | null | undefined): boolean {
-  if (!liga) return false
-  const l = liga.toLowerCase().trim()
-  return (
-    l.includes('honduras') ||
-    l.includes('emiratos') ||
-    l.includes('bolivia') ||
-    l.includes('portugal') ||
-    l.includes('reserva') ||
-    l === 'mexico' ||
-    l.startsWith('mexico ') ||
-    l === 'liga de mexico'
-  )
-}
-
-// ─── All available metrics, grouped ───────────────────────────────────────────
-
-interface MetricDef {
-  key: string
-  label: string   // Full label for selectors, bar chart, rankings
-  radar: string   // Short label for radar axis
-}
-
-const ALL_METRIC_GROUPS: Array<{ label: string; keys: MetricDef[] }> = [
-  {
-    label: 'Gol & Creación',
-    keys: [
-      { key: 'Goles',                             label: 'Goles',                              radar: 'Goles' },
-      { key: 'xG',                                label: 'Expected Goals (xG)',                radar: 'xG' },
-      { key: 'Asistencias',                       label: 'Asistencias',                        radar: 'Asistencias' },
-      { key: 'xA',                                label: 'Expected Assists (xA)',              radar: 'xA' },
-      { key: 'xA/90',                             label: 'xA /90\'',                           radar: 'xA /90\'' },
-      { key: 'Remates/90',                        label: 'Remates /90\'',                      radar: 'Remates /90\'' },
-      { key: 'Toques en el área de penalti/90',   label: 'Toques en área rival /90\'',        radar: 'Toques área /90\'' },
-    ],
-  },
-  {
-    label: 'Pases',
-    keys: [
-      { key: 'Pases precisos/90',                      label: 'Pases precisos /90\'',                  radar: 'Pases prec. /90\'' },
-      { key: 'Precisión pases, %',                     label: 'Precisión de pases (%)',                radar: 'Precisión pases %' },
-      { key: 'Precisión pases hacia adelante, %',      label: 'Precisión pases hacia adelante (%)',    radar: 'Pases adel. %' },
-      { key: 'Pases hacia adelante/90',                label: 'Pases hacia adelante /90\'',            radar: 'Pases adel. /90\'' },
-      { key: 'Precisión pases largos, %',              label: 'Precisión pases largos (%)',            radar: 'Pases largos %' },
-      { key: 'Pases progresivos exitosos/90',          label: 'Pases progresivos exitosos /90\'',     radar: 'Pases prog. /90\'' },
-      { key: 'Pases al tercer tercio/90',              label: 'Pases al último tercio /90\'',         radar: '3er tercio /90\'' },
-      { key: 'Centros precisos/90',                    label: 'Centros precisos /90\'',               radar: 'Centros /90\'' },
-      { key: 'Jugadas claves/90',                      label: 'Jugadas clave /90\'',                  radar: 'Jug. clave /90\'' },
-    ],
-  },
-  {
-    label: 'Conducción',
-    keys: [
-      { key: 'Dribling completados/90',            label: 'Dribling completados /90\'',          radar: 'Dribling /90\'' },
-      { key: 'Gambetas completadas, %',            label: 'Precisión de regates (%)',            radar: 'Regates %' },
-      { key: 'Carreras en progresión/90',          label: 'Carreras en progresión /90\'',       radar: 'Carrer. prog. /90\'' },
-      { key: 'Ataque en profundidad/90',           label: 'Ataques en profundidad /90\'',       radar: 'Ataq. prof. /90\'' },
-      { key: 'Acciones de ataque exitosas/90',     label: 'Acciones de ataque exitosas /90\'',  radar: 'Ataq. exit. /90\'' },
-      { key: 'Faltas recibidas/90',                label: 'Faltas recibidas /90\'',             radar: 'Faltas rec. /90\'' },
-    ],
-  },
-  {
-    label: 'Duelos',
-    keys: [
-      { key: 'Duelos ganados, %',                  label: 'Duelos ganados (total) %',           radar: 'Duelos tot. %' },
-      { key: 'Duelos defensivos ganados, %',       label: 'Duelos defensivos ganados %',        radar: 'Duelos def. %' },
-      { key: 'Duelos aéreos ganados, %',           label: 'Duelos aéreos ganados %',            radar: 'Duelos aéreos %' },
-      { key: 'Duelos atacantes ganados/90',        label: 'Duelos atacantes ganados /90\'',     radar: 'Duelos atac. /90\'' },
-      { key: 'Duelos atacantes ganados, %',        label: 'Duelos atacantes ganados %',         radar: 'Duelos atac. %' },
-    ],
-  },
-  {
-    label: 'Defensiva',
-    keys: [
-      { key: 'Interceptaciones/90',                   label: 'Interceptaciones /90\'',                radar: 'Intercep. /90\'' },
-      { key: 'Entradas/90',                           label: 'Entradas (tackles) /90\'',              radar: 'Entradas /90\'' },
-      { key: 'Acciones defensivas realizadas/90',     label: 'Acciones defensivas realizadas /90\'',  radar: 'Acc. def. /90\'' },
-    ],
-  },
-]
-
-const MAX_METRICS = 10
-
-function findMetric(key: string): MetricDef | undefined {
-  for (const g of ALL_METRIC_GROUPS) {
-    const m = g.keys.find(m => m.key === key)
-    if (m) return m
-  }
-  return undefined
-}
-
-function getAllMetricKeys(): string[] {
-  return ALL_METRIC_GROUPS.flatMap(g => g.keys.map(m => m.key))
-}
-
-// ─── Position default metrics ─────────────────────────────────────────────────
-
-const POSITION_DEFAULT_METRICS: Record<string, string[]> = {
-  'Arquero':           ['Goles evitados/90', 'Paradas, %', 'Porterías imbatidas en los 90', 'Salidas/90', 'Duelos aéreos en los 90'],
-  'Defensor central':  ['Duelos aéreos ganados, %', 'Duelos defensivos ganados, %', 'Interceptaciones/90', 'Entradas/90', 'Precisión pases, %'],
-  'Lateral derecho':   ['Duelos defensivos ganados, %', 'Carreras en progresión/90', 'Centros precisos/90', 'Pases progresivos exitosos/90', 'Jugadas claves/90'],
-  'Lateral izquierdo': ['Duelos defensivos ganados, %', 'Carreras en progresión/90', 'Centros precisos/90', 'Pases progresivos exitosos/90', 'Jugadas claves/90'],
-  'Lateral':           ['Duelos defensivos ganados, %', 'Carreras en progresión/90', 'Centros precisos/90', 'Pases progresivos exitosos/90', 'Jugadas claves/90'],
-  'Volante central':   ['Interceptaciones/90', 'Entradas/90', 'Pases progresivos exitosos/90', 'Precisión pases hacia adelante, %', 'Duelos defensivos ganados, %'],
-  'Volante interno':   ['Pases progresivos exitosos/90', 'Jugadas claves/90', 'xA', 'Asistencias', 'Dribling completados/90'],
-  'Mediapunta':        ['Jugadas claves/90', 'xA', 'Asistencias', 'Goles', 'Dribling completados/90'],
-  'Extremo derecho':   ['Goles', 'xG', 'Asistencias', 'Dribling completados/90', 'Carreras en progresión/90'],
-  'Extremo izquierdo': ['Goles', 'xG', 'Asistencias', 'Dribling completados/90', 'Carreras en progresión/90'],
-  'Extremo':           ['Goles', 'xG', 'Asistencias', 'Dribling completados/90', 'Carreras en progresión/90'],
-  'Delantero':         ['Goles', 'xG', 'Asistencias', 'xA', 'Duelos atacantes ganados/90'],
-}
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function getMetricValue(player: EnrichedPlayer, key: string): number | null {
-  const raw = (player as Record<string, unknown>)[key]
-  if (raw === null || raw === undefined || raw === '' || raw === '-') return null
-  const n = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(',', '.'))
-  return isNaN(n) ? null : n
-}
 
 function getInitials(name: string): string {
   return name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('')
-}
-
-// ─── Scale-aware color helpers (delegates to ScoreBar utilities) ──────────────
-
-function scoreColor(s: number | null | undefined, scale: ScoreScale = '100') {
-  return getScoreColorClass(s ?? null, scale)
-}
-
-function scoreBg(s: number | null | undefined, scale: ScoreScale = '100') {
-  return getScoreBgClass(s ?? null, scale)
-}
-
-// Kept for non-search uses (jitter, etc.)
-function norm(s: string): string {
-  return s.toLowerCase().normalize('NFD').replace(/\p{Mn}/gu, '')
 }
 
 function playerNameJitter(name: string): number {
@@ -228,6 +135,74 @@ function playerNameJitter(name: string): number {
   const c1 = name.charCodeAt(1) || 0
   return Math.abs(c0 * 31 + c1) % 100 / 100 * 0.5 + 0.25
 }
+
+function getAge(birthDate: string | null | undefined): number | null {
+  if (!birthDate) return null
+  const diff = Date.now() - new Date(birthDate).getTime()
+  return Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000))
+}
+
+// ─── Score color helpers ──────────────────────────────────────────────────────
+
+function scoreColor(s: number | null | undefined) {
+  return getScoreColorClass(s ?? null, '10')
+}
+function scoreBg(s: number | null | undefined) {
+  return getScoreBgClass(s ?? null, '10')
+}
+
+// ─── Metric helpers ───────────────────────────────────────────────────────────
+
+const MAX_METRICS = 10
+
+/** Get value from player.season_scores[0] for a given ApiMetricKey */
+function getPlayerMetricValue(player: PlayerWithScore, key: ApiMetricKey): number | null {
+  if (!player.season_scores?.length) return null
+  return apiGetMetricValue(player.season_scores[0], key)
+}
+
+/** Get avg value from PositionMetricAverages for a given key */
+function getAvgMetricValue(avg: PositionMetricAverages | null, key: ApiMetricKey): number | null {
+  if (!avg) return null
+  const v = (avg as unknown as Record<string, number | null>)[key]
+  return v ?? null
+}
+
+// Metric info lookup
+const METRIC_BY_KEY = new Map(API_METRICS.map(m => [m.key, m]))
+
+// Grouped metrics for dropdown UI  (reuse API_METRICS split into categories)
+interface MetricGroup {
+  label: string
+  keys: ApiMetricKey[]
+}
+
+const METRIC_GROUPS: MetricGroup[] = [
+  {
+    label: 'Gol & Creación',
+    keys: ['goals_p90', 'assists_p90', 'shots_on_p90', 'shots_pct'],
+  },
+  {
+    label: 'Pases',
+    keys: ['passes_accuracy', 'passes_key_p90', 'passes_total_p90'],
+  },
+  {
+    label: 'Regates & Conducción',
+    keys: ['dribbles_success_p90', 'dribbles_pct', 'fouls_drawn_p90'],
+  },
+  {
+    label: 'Duelos',
+    keys: ['duels_won_pct'],
+  },
+  {
+    label: 'Defensiva',
+    keys: ['tackles_p90', 'interceptions_p90', 'blocks_p90'],
+  },
+  {
+    label: 'Rating & Portero',
+    keys: ['avg_rating', 'saves_p90', 'goals_conceded_p90', 'penalty_saved_avg', 'clean_sheet_pct'],
+  },
+]
 
 // ─── Tooltip for Scatter ──────────────────────────────────────────────────────
 
@@ -245,36 +220,26 @@ function ScatterTooltip({ active, payload }: { active?: boolean; payload?: Array
 // ─── Candidate type ───────────────────────────────────────────────────────────
 
 interface SearchCandidate {
-  name: string; club: string; liga: string; position: string
-  source: 'externo' | 'interno'; player: EnrichedPlayer
+  name: string
+  club: string
+  league: string
+  position: string
+  player: PlayerWithScore
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function BusquedaPage() {
-  const { external, internal, monitoring, loading } = useData()
   const navigate = useNavigate()
 
-  // ─── Supabase score lookup (1-10 scale) ───────────────────────────────────
-  const { lookup: scoreLookup } = useScoreLookup()
-
-  /**
-   * Returns the display score and its scale for a given player.
-   * Prefers Supabase (1-10) when available; falls back to CSV ggScore (0-100).
-   * NOTE: For league-level comparisons (rank, avg) we always use ggScore so
-   * that all players in the pool are on the same 0-100 scale.
-   */
-  function getPlayerScore(player: EnrichedPlayer): { score: number; scale: ScoreScale } | null {
-    const key = normalizeName(player.Jugador)
-    const entry = scoreLookup.get(key)
-    if (entry != null) return { score: entry.score, scale: '10' }
-    return null
-  }
+  // ─── Data sources ─────────────────────────────────────────────────────────
+  // Large pool from Supabase API (pageSize 500, no filters = full pool)
+  const { players: allPlayers, loading } = usePlayersList({ pageSize: 500 })
+  const { metricAverages } = usePositionMetricAverages()
 
   const [query, setQuery] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
-  const [selectedPlayer, setSelectedPlayer] = useState<EnrichedPlayer | null>(null)
-  const [selectedSource, setSelectedSource] = useState<'externo' | 'interno'>('externo')
+  const [selectedPlayer, setSelectedPlayer] = useState<PlayerWithScore | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -284,187 +249,182 @@ export default function BusquedaPage() {
   const [canvaModalData, setCanvaModalData] = useState<{ allMetrics: import('@/components/pdf/CanvaExportModal').CanvaMetricPreview[]; positionKeys: string[] } | null>(null)
 
   // Cascading search filters
-  const [searchLigaFilter, setSearchLigaFilter] = useState('')
-  const [searchEquipoFilter, setSearchEquipoFilter] = useState('')
+  const [searchLeagueFilter, setSearchLeagueFilter] = useState('')
+  const [searchTeamFilter, setSearchTeamFilter] = useState('')
   const [searchPositionFilter, setSearchPositionFilter] = useState('')
 
-  // Context filters
-  const [sourceFilter, setSourceFilter] = useState<'todos' | 'externo' | 'interno'>('todos')
-  const [ligaFilter, setLigaFilter] = useState('')
+  // Context filters for the pool
+  const [positionFilter, setPositionFilter] = useState<Position | ''>('')
+  const [leagueIdFilter, setLeagueIdFilter] = useState<number | null>(null)
   const [samePosition, setSamePosition] = useState(true)
-  const [compareLeague2, setCompareLeague2] = useState('')
+
+  // Second league comparison
+  const [compareLeagueId2, setCompareLeagueId2] = useState<number | null>(null)
 
   // Active metrics (shared by bar + radar)
-  const [activeMetrics, setActiveMetrics] = useState<string[]>([])
-  const [scatterMetrics, setScatterMetrics] = useState<string[]>([])
+  const [activeMetrics, setActiveMetrics] = useState<ApiMetricKey[]>([])
+  const [scatterMetrics, setScatterMetrics] = useState<ApiMetricKey[]>([])
 
-  // ─── Candidates ─────────────────────────────────────────────────────────────
+  // ─── Derived: all leagues from loaded players ─────────────────────────────
 
-  const candidates = useMemo<SearchCandidate[]>(() => {
-    const seen = new Set<string>()
-    const result: SearchCandidate[] = []
-    const add = (p: EnrichedPlayer, src: 'externo' | 'interno') => {
-      const key = `${src}::${p.Jugador}`
-      if (seen.has(key)) return
-      seen.add(key)
-      result.push({ name: p.Jugador, club: p.Equipo, liga: p.Liga, position: normalizePositionDisplay(p['Posición']), source: src, player: p })
+  const allLeagues = useMemo<Array<{ id: number; name: string }>>(() => {
+    const map = new Map<number, string>()
+    for (const p of allPlayers) {
+      if (p.league?.id && p.league?.name) map.set(p.league.id, p.league.name)
     }
-    for (const p of external) add(p, 'externo')
-    for (const p of internal) add(p, 'interno')
-    for (const mp of monitoring) {
-      const ep = mp.metricsPlayer ?? mp.externalPlayer
-      if (ep) add(ep, ep.source ?? 'externo')
-    }
-    return result
-  }, [external, internal, monitoring])
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [allPlayers])
 
-  const allLeagues = useMemo<string[]>(() => {
+  const teamsByLeague = useMemo<Array<{ name: string }>>(() => {
     const set = new Set<string>()
-    for (const c of candidates) if (c.liga) set.add(c.liga)
-    return Array.from(set).sort()
-  }, [candidates])
-
-  const equiposByLiga = useMemo<string[]>(() => {
-    const set = new Set<string>()
-    for (const c of candidates) {
-      if (searchLigaFilter && c.liga !== searchLigaFilter) continue
-      if (c.club) set.add(c.club)
+    for (const p of allPlayers) {
+      if (searchLeagueFilter && p.league?.name !== searchLeagueFilter) continue
+      if (p.team?.name) set.add(p.team.name)
     }
-    return Array.from(set).sort()
-  }, [candidates, searchLigaFilter])
+    return Array.from(set).sort().map(name => ({ name }))
+  }, [allPlayers, searchLeagueFilter])
 
   const positionsByFilters = useMemo<string[]>(() => {
     const set = new Set<string>()
-    for (const c of candidates) {
-      if (searchLigaFilter && c.liga !== searchLigaFilter) continue
-      if (searchEquipoFilter && c.club !== searchEquipoFilter) continue
-      if (c.position) set.add(c.position)
+    for (const p of allPlayers) {
+      if (searchLeagueFilter && p.league?.name !== searchLeagueFilter) continue
+      if (searchTeamFilter && p.team?.name !== searchTeamFilter) continue
+      if (p.primary_position) set.add(POSITION_DISPLAY[p.primary_position] ?? p.primary_position)
     }
     return Array.from(set).sort()
-  }, [candidates, searchLigaFilter, searchEquipoFilter])
+  }, [allPlayers, searchLeagueFilter, searchTeamFilter])
+
+  // ─── Candidates (for search dropdown) ────────────────────────────────────
+
+  const candidates = useMemo<SearchCandidate[]>(() => {
+    return allPlayers.map(p => ({
+      name: p.name,
+      club: p.team?.name ?? '',
+      league: p.league?.name ?? '',
+      position: p.primary_position ? (POSITION_DISPLAY[p.primary_position] ?? p.primary_position) : '',
+      player: p,
+    }))
+  }, [allPlayers])
 
   const filteredCandidates = useMemo<SearchCandidate[]>(() => {
-    if (!query.trim() && !searchLigaFilter && !searchPositionFilter && !searchEquipoFilter) return []
+    if (!query.trim() && !searchLeagueFilter && !searchPositionFilter && !searchTeamFilter) return []
     const q = query.trim()
     return candidates
       .filter(c => {
         const matchesQuery = !q || fuzzyMatch(q, c.name) || fuzzyMatch(q, c.club) || fuzzyMatch(q, c.position)
         return matchesQuery
-          && (!searchLigaFilter || c.liga === searchLigaFilter)
-          && (!searchEquipoFilter || c.club === searchEquipoFilter)
+          && (!searchLeagueFilter || c.league === searchLeagueFilter)
+          && (!searchTeamFilter || c.club === searchTeamFilter)
           && (!searchPositionFilter || c.position === searchPositionFilter)
       })
       .slice(0, 30)
-  }, [candidates, query, searchLigaFilter, searchEquipoFilter, searchPositionFilter])
+  }, [candidates, query, searchLeagueFilter, searchTeamFilter, searchPositionFilter])
 
-  // ─── Pool (excludes bad leagues) ─────────────────────────────────────────────
+  // ─── Pool (same position/league context for comparisons) ─────────────────
 
-  const pool = useMemo<EnrichedPlayer[]>(() => {
+  const pool = useMemo<PlayerWithScore[]>(() => {
     if (!selectedPlayer) return []
-    let base: EnrichedPlayer[] =
-      sourceFilter === 'externo' ? external
-      : sourceFilter === 'interno' ? internal
-      : [...external, ...internal]
-    if (ligaFilter) base = base.filter(p => p.Liga === ligaFilter)
-    if (samePosition) base = base.filter(p => p['Posición'] === selectedPlayer['Posición'])
-    base = base.filter(p => !isExcludedLeague(p.Liga))
+    let base = allPlayers.filter(p => p.season_scores?.length > 0)
+    if (leagueIdFilter != null) base = base.filter(p => p.league?.id === leagueIdFilter)
+    if (samePosition && selectedPlayer.primary_position) {
+      base = base.filter(p => p.primary_position === selectedPlayer.primary_position)
+    }
     return base
-  }, [selectedPlayer, external, internal, sourceFilter, ligaFilter, samePosition])
+  }, [selectedPlayer, allPlayers, leagueIdFilter, samePosition])
 
-  const availableLeagues = useMemo<string[]>(() => {
-    const set = new Set<string>()
-    for (const p of [...external, ...internal]) if (p.Liga && !isExcludedLeague(p.Liga)) set.add(p.Liga)
-    return Array.from(set).sort()
-  }, [external, internal])
+  const pool2 = useMemo<PlayerWithScore[]>(() => {
+    if (!selectedPlayer || compareLeagueId2 == null) return []
+    let base = allPlayers.filter(p => p.season_scores?.length > 0 && p.league?.id === compareLeagueId2)
+    if (samePosition && selectedPlayer.primary_position) {
+      base = base.filter(p => p.primary_position === selectedPlayer.primary_position)
+    }
+    return base
+  }, [selectedPlayer, allPlayers, compareLeagueId2, samePosition])
 
-  // Second comparison league pool
-  const pool2 = useMemo<EnrichedPlayer[]>(() => {
-    if (!selectedPlayer || !compareLeague2) return []
-    let base: EnrichedPlayer[] = [...external, ...internal].filter(p => p.Liga === compareLeague2)
-    if (samePosition) base = base.filter(p => p['Posición'] === selectedPlayer['Posición'])
-    return base.filter(p => !isExcludedLeague(p.Liga))
-  }, [selectedPlayer, compareLeague2, external, internal, samePosition])
+  const pool2Label = useMemo(() =>
+    compareLeagueId2 != null
+      ? allLeagues.find(l => l.id === compareLeagueId2)?.name ?? ''
+      : '',
+    [compareLeagueId2, allLeagues]
+  )
 
-  const pool2Label = compareLeague2 || ''
+  const availableLeagues = useMemo(() => allLeagues, [allLeagues])
 
-  // ─── League score context ─────────────────────────────────────────────────────
+  // ─── League score context (1-10 scale) ────────────────────────────────────
 
   const leagueScoreContext = useMemo(() => {
-    if (!selectedPlayer || selectedPlayer.ggScore == null) return null
-    const liga = selectedPlayer.Liga
-    const leaguePlayers = [...external, ...internal].filter(p =>
-      p.Liga === liga && !isExcludedLeague(p.Liga) && p.ggScore != null
+    if (!selectedPlayer || selectedPlayer.primary_score == null) return null
+    const liga = selectedPlayer.league?.name ?? ''
+    const leagueId = selectedPlayer.league?.id
+    if (!leagueId) return null
+    const leaguePlayers = allPlayers.filter(p =>
+      p.league?.id === leagueId && p.primary_score != null &&
+      p.primary_position === selectedPlayer.primary_position
     )
     if (leaguePlayers.length < 5) return null
-    const sorted = [...leaguePlayers].sort((a, b) => (b.ggScore ?? 0) - (a.ggScore ?? 0))
-    const rank = sorted.findIndex(p => p.Jugador === selectedPlayer.Jugador) + 1
-    const avg = leaguePlayers.reduce((s, p) => s + (p.ggScore ?? 0), 0) / leaguePlayers.length
+    const sorted = [...leaguePlayers].sort((a, b) => (b.primary_score ?? 0) - (a.primary_score ?? 0))
+    const rank = sorted.findIndex(p => p.id === selectedPlayer.id) + 1
+    const avg = leaguePlayers.reduce((s, p) => s + (p.primary_score ?? 0), 0) / leaguePlayers.length
     return { rank: rank > 0 ? rank : null, total: leaguePlayers.length, avg, liga }
-  }, [selectedPlayer, external, internal])
+  }, [selectedPlayer, allPlayers])
 
-  // ─── Smart minutes for rankings ───────────────────────────────────────────────
-  // Try min-minutes thresholds 0→400 and pick the one that gives player most top-8 rankings
+  // ─── Position averages from Supabase (for radar) ─────────────────────────
 
-  const smartMinutes = useMemo(() => {
-    if (!selectedPlayer || pool.length === 0) return 0
-    let bestTop8 = -1
-    let bestThreshold = 0
-    for (const minMin of [0, 100, 200, 300, 400]) {
-      const filteredPool = pool.filter(p =>
-        p.Jugador === selectedPlayer.Jugador || p.minutesPlayed >= minMin
-      )
-      const others = filteredPool.filter(p => p.Jugador !== selectedPlayer.Jugador)
-      if (others.length < 3) continue
-      let top8 = 0
-      for (const group of ALL_METRIC_GROUPS) {
-        for (const m of group.keys) {
-          const pv = getMetricValue(selectedPlayer, m.key)
-          if (pv === null) continue
-          const allVals = others.map(p => getMetricValue(p, m.key)).filter((v): v is number => v !== null)
-          if (!allVals.length) continue
-          if (allVals.filter(v => v > pv).length + 1 <= 8) top8++
-        }
-      }
-      if (top8 > bestTop8) { bestTop8 = top8; bestThreshold = minMin }
+  const positionLeagueAvg = useMemo<PositionMetricAverages | null>(() => {
+    if (!selectedPlayer?.primary_position) return null
+    const leagueId = leagueIdFilter ?? selectedPlayer.league?.id ?? null
+    if (leagueId == null) return null
+    return metricAverages.find(
+      a => a.position === selectedPlayer.primary_position && a.league_id === leagueId
+    ) ?? null
+  }, [selectedPlayer, metricAverages, leagueIdFilter])
+
+  // ─── Rankings (top 8) ─────────────────────────────────────────────────────
+
+  type RankingEntry = { key: ApiMetricKey; label: string; rank: number; total: number; playerVal: number; avg: number }
+
+  const rankings = useMemo<RankingEntry[]>(() => {
+    if (!selectedPlayer || pool.length === 0) return []
+    const result: RankingEntry[] = []
+
+    const metricsToRank = selectedPlayer.primary_position
+      ? METRICS_BY_POSITION[selectedPlayer.primary_position]
+      : API_METRICS.map(m => m.key)
+
+    for (const key of metricsToRank) {
+      const metaInfo = METRIC_BY_KEY.get(key)
+      if (!metaInfo) continue
+      const playerVal = getPlayerMetricValue(selectedPlayer, key)
+      if (playerVal === null) continue
+
+      const others = pool.filter(p => p.id !== selectedPlayer.id)
+      const allVals = others
+        .map(p => getPlayerMetricValue(p, key))
+        .filter((v): v is number => v !== null)
+      if (!allVals.length) continue
+
+      const rank = metaInfo.higherIsBetter
+        ? allVals.filter(v => v > playerVal).length + 1
+        : allVals.filter(v => v < playerVal).length + 1
+
+      const avg = allVals.reduce((a, b) => a + b, 0) / allVals.length
+      result.push({ key, label: metaInfo.label, rank, total: allVals.length + 1, playerVal, avg })
     }
-    return bestThreshold
+
+    return result.filter(r => r.rank <= 8).sort((a, b) => a.rank - b.rank)
   }, [selectedPlayer, pool])
 
-  const rankingPool = useMemo(() =>
-    smartMinutes > 0
-      ? pool.filter(p => p.Jugador === selectedPlayer?.Jugador || p.minutesPlayed >= smartMinutes)
-      : pool
-  , [pool, smartMinutes, selectedPlayer])
-
-  // ─── Rankings (top 8) ─────────────────────────────────────────────────────────
-
-  const rankings = useMemo<Array<{ key: string; label: string; rank: number; total: number; playerVal: number; avg: number }>>(() => {
-    if (!selectedPlayer || rankingPool.length === 0) return []
-    const result: Array<{ key: string; label: string; rank: number; total: number; playerVal: number; avg: number }> = []
-    for (const group of ALL_METRIC_GROUPS) {
-      for (const m of group.keys) {
-        const playerVal = getMetricValue(selectedPlayer, m.key)
-        if (playerVal === null) continue
-        const others = rankingPool.filter(p => p.Jugador !== selectedPlayer.Jugador)
-        const allVals = others.map(p => getMetricValue(p, m.key)).filter((v): v is number => v !== null)
-        if (!allVals.length) continue
-        const rank = allVals.filter(v => v > playerVal).length + 1
-        const avg = allVals.reduce((a, b) => a + b, 0) / allVals.length
-        result.push({ key: m.key, label: m.label, rank, total: allVals.length + 1, playerVal, avg })
-      }
-    }
-    return result.filter(r => r.rank <= 8).sort((a, b) => a.rank - b.rank)
-  }, [selectedPlayer, rankingPool])
-
-  // ─── Bar chart data ───────────────────────────────────────────────────────────
+  // ─── Bar chart data ───────────────────────────────────────────────────────
 
   const barData = useMemo(() => {
     if (!selectedPlayer || !pool.length || !activeMetrics.length) return []
     return activeMetrics.map(key => {
-      const m = findMetric(key)
-      const playerVal = getMetricValue(selectedPlayer, key)
-      const poolVals = pool.map(p => getMetricValue(p, key)).filter((v): v is number => v !== null)
-      const pool2Vals = pool2.map(p => getMetricValue(p, key)).filter((v): v is number => v !== null)
+      const meta = METRIC_BY_KEY.get(key)
+      const playerVal = getPlayerMetricValue(selectedPlayer, key)
+      const poolVals = pool.map(p => getPlayerMetricValue(p, key)).filter((v): v is number => v !== null)
+      const pool2Vals = pool2.map(p => getPlayerMetricValue(p, key)).filter((v): v is number => v !== null)
       const avg = poolVals.length ? poolVals.reduce((a, b) => a + b, 0) / poolVals.length : null
       const avg2 = pool2Vals.length ? pool2Vals.reduce((a, b) => a + b, 0) / pool2Vals.length : null
       const allVals = [...poolVals, ...pool2Vals, ...(playerVal !== null ? [playerVal] : [])]
@@ -473,81 +433,116 @@ export default function BusquedaPage() {
       const range = maxV - minV || 1
       const norm = (v: number | null) => v === null ? 0 : Math.max(0, Math.min(100, ((v - minV) / range) * 100))
       return {
-        name: m?.label ?? key,
+        name: meta?.label ?? key,
         jugador: norm(playerVal),
         promedio: avg !== null ? norm(avg) : 0,
-        ...(compareLeague2 && avg2 !== null ? { promedio2: norm(avg2) } : {}),
+        ...(compareLeagueId2 != null && avg2 !== null ? { promedio2: norm(avg2) } : {}),
         jugadorRaw: playerVal !== null ? parseFloat(playerVal.toFixed(2)) : null,
         promedioRaw: avg !== null ? parseFloat(avg.toFixed(2)) : null,
         promedio2Raw: avg2 !== null ? parseFloat(avg2.toFixed(2)) : null,
       }
     })
-  }, [selectedPlayer, pool, pool2, activeMetrics, compareLeague2])
+  }, [selectedPlayer, pool, pool2, activeMetrics, compareLeagueId2])
 
   const barWins = barData.filter(d => (d.jugadorRaw ?? 0) > (d.promedioRaw ?? 0)).length
   const barLosses = barData.filter(d => (d.jugadorRaw ?? 0) < (d.promedioRaw ?? 0)).length
 
-  // ─── Radar chart data ─────────────────────────────────────────────────────────
+  // ─── Radar chart data (player vs position-league avg from Supabase) ───────
 
   const radarData = useMemo(() => {
-    if (!selectedPlayer || !pool.length || activeMetrics.length < 3) return []
+    if (!selectedPlayer || activeMetrics.length < 3) return []
     return activeMetrics.map(key => {
-      const m = findMetric(key)
-      const playerVal = getMetricValue(selectedPlayer, key)
-      const poolVals = pool.map(p => getMetricValue(p, key)).filter((v): v is number => v !== null)
-      if (!poolVals.length) return { subject: m?.radar ?? key, jugador: 0, promedio: 0 }
-      const minV = Math.min(...poolVals), maxV = Math.max(...poolVals)
+      const meta = METRIC_BY_KEY.get(key)
+      const playerVal = getPlayerMetricValue(selectedPlayer, key)
+      // Use positionLeagueAvg if available, else fall back to pool average
+      let avgVal: number | null = getAvgMetricValue(positionLeagueAvg, key)
+      if (avgVal == null) {
+        const poolVals = pool.map(p => getPlayerMetricValue(p, key)).filter((v): v is number => v !== null)
+        avgVal = poolVals.length ? poolVals.reduce((a, b) => a + b, 0) / poolVals.length : null
+      }
+
+      const allVals = [
+        ...(playerVal !== null ? [playerVal] : []),
+        ...(avgVal !== null ? [avgVal] : []),
+        // add pool for range
+        ...pool.map(p => getPlayerMetricValue(p, key)).filter((v): v is number => v !== null),
+      ]
+      if (!allVals.length) return { subject: meta?.short ?? key, jugador: 0, promedio: 0 }
+
+      const minV = Math.min(...allVals)
+      const maxV = Math.max(...allVals)
       const range = maxV - minV
       const normalize = (v: number | null) => {
         if (v === null) return 0
         return range === 0 ? 50 : Math.max(0, Math.min(100, ((v - minV) / range) * 100))
       }
-      const avg = poolVals.reduce((a, b) => a + b, 0) / poolVals.length
-      return { subject: m?.radar ?? key, jugador: normalize(playerVal), promedio: normalize(avg) }
+
+      return {
+        subject: meta?.short ?? key,
+        jugador: normalize(playerVal),
+        promedio: normalize(avgVal),
+      }
     })
-  }, [selectedPlayer, pool, activeMetrics])
+  }, [selectedPlayer, activeMetrics, positionLeagueAvg, pool])
 
-  // ─── Scatter data ─────────────────────────────────────────────────────────────
-  // Player point is ALWAYS computed from selectedPlayer directly,
-  // regardless of which league the pool is filtered to.
+  // ─── Scatter data ─────────────────────────────────────────────────────────
 
-  const buildScatterData = useCallback((metricKey: string) => {
+  const buildScatterData = useCallback((metricKey: ApiMetricKey) => {
     if (!selectedPlayer) return { poolPoints: [] as Array<{ name: string; x: number; y: number }>, playerPoint: null as null | { name: string; x: number; y: number } }
     const poolPoints: Array<{ name: string; x: number; y: number }> = []
     for (const p of pool) {
-      if (p.Jugador === selectedPlayer.Jugador) continue
-      const xVal = getMetricValue(p, metricKey)
+      if (p.id === selectedPlayer.id) continue
+      const xVal = getPlayerMetricValue(p, metricKey)
       if (xVal === null) continue
-      poolPoints.push({ name: p.Jugador, x: xVal, y: playerNameJitter(p.Jugador) })
+      poolPoints.push({ name: p.name, x: xVal, y: playerNameJitter(p.name) })
     }
-    const playerXVal = getMetricValue(selectedPlayer, metricKey)
-    const playerPoint = playerXVal !== null ? { name: selectedPlayer.Jugador, x: playerXVal, y: 0.5 } : null
+    const playerXVal = getPlayerMetricValue(selectedPlayer, metricKey)
+    const playerPoint = playerXVal !== null ? { name: selectedPlayer.name, x: playerXVal, y: 0.5 } : null
     return { poolPoints, playerPoint }
   }, [selectedPlayer, pool])
 
-  // ─── Conclusions ──────────────────────────────────────────────────────────────
+  // ─── Conclusions ──────────────────────────────────────────────────────────
 
   const conclusions = useMemo(() => {
     if (!selectedPlayer || !pool.length) return null
-    const playerScore = selectedPlayer.ggScore
-    const poolScores = pool.map(p => p.ggScore).filter((s): s is number => s != null)
+
+    const playerScore = selectedPlayer.primary_score
+    const poolScores = pool.map(p => p.primary_score).filter((s): s is number => s != null)
     const avgScore = poolScores.length ? poolScores.reduce((a, b) => a + b, 0) / poolScores.length : null
-    const scoreRank = poolScores.length && playerScore != null ? poolScores.filter(s => s > playerScore).length + 1 : null
-    const scorePct = scoreRank && poolScores.length ? Math.round(((poolScores.length - scoreRank + 1) / poolScores.length) * 100) : null
+    const scoreRank = poolScores.length && playerScore != null
+      ? poolScores.filter(s => s > playerScore).length + 1
+      : null
+    const scorePct = scoreRank && poolScores.length
+      ? Math.round(((poolScores.length - scoreRank + 1) / poolScores.length) * 100)
+      : null
+
     const top1 = rankings.filter(r => r.rank === 1)
     const top3 = rankings.filter(r => r.rank <= 3)
-    const above: string[] = [], below: string[] = []
-    for (const group of ALL_METRIC_GROUPS) {
-      for (const m of group.keys) {
-        const pv = getMetricValue(selectedPlayer, m.key)
-        if (pv === null) continue
-        const poolVals = pool.map(p => getMetricValue(p, m.key)).filter((v): v is number => v !== null)
-        if (!poolVals.length) continue
-        const avg = poolVals.reduce((a, b) => a + b, 0) / poolVals.length
-        if (pv > avg * 1.05) above.push(m.label)
-        else if (pv < avg * 0.95) below.push(m.label)
+
+    const above: string[] = []
+    const below: string[] = []
+    const metricsToCheck = selectedPlayer.primary_position
+      ? METRICS_BY_POSITION[selectedPlayer.primary_position]
+      : API_METRICS.map(m => m.key)
+
+    for (const key of metricsToCheck) {
+      const meta = METRIC_BY_KEY.get(key)
+      if (!meta) continue
+      const pv = getPlayerMetricValue(selectedPlayer, key)
+      if (pv === null) continue
+      const poolVals = pool.map(p => getPlayerMetricValue(p, key)).filter((v): v is number => v !== null)
+      if (!poolVals.length) continue
+      const avg = poolVals.reduce((a, b) => a + b, 0) / poolVals.length
+      if (meta.higherIsBetter) {
+        if (pv > avg * 1.05) above.push(meta.label)
+        else if (pv < avg * 0.95) below.push(meta.label)
+      } else {
+        // lower is better for goals_conceded_p90
+        if (pv < avg * 0.95) above.push(meta.label)
+        else if (pv > avg * 1.05) below.push(meta.label)
       }
     }
+
     let recommendation = '', recommendationLevel: 'green' | 'amber' | 'red' | 'neutral' = 'neutral'
     if (playerScore != null && avgScore != null) {
       const diff = playerScore - avgScore
@@ -557,49 +552,54 @@ export default function BusquedaPage() {
       else if (diff < -1.5 || (playerScore < 5 && below.length > above.length)) { recommendation = 'Por debajo del nivel del grupo en varios aspectos. Considerar con cautela.'; recommendationLevel = 'red' }
       else { recommendation = 'Perfil dentro del promedio del grupo. Se recomienda evaluar métricas clave para el puesto.'; recommendationLevel = 'neutral' }
     }
-    const sampleWarning = pool.length < 5 ? `Muestra pequeña (${pool.length} jugador${pool.length !== 1 ? 'es' : ''}). Los datos son referenciales.` : null
+
+    const sampleWarning = pool.length < 5
+      ? `Muestra pequeña (${pool.length} jugador${pool.length !== 1 ? 'es' : ''}). Los datos son referenciales.`
+      : null
+
     return { playerScore, avgScore, scoreRank, scorePct, poolSize: pool.length, top1, top3, above, below, recommendation, recommendationLevel, sampleWarning }
   }, [selectedPlayer, pool, rankings])
 
-  // ─── Actions ─────────────────────────────────────────────────────────────────
+  // ─── Actions ─────────────────────────────────────────────────────────────
 
   function selectCandidate(c: SearchCandidate) {
     setSelectedPlayer(c.player)
-    setSelectedSource(c.source)
     setQuery(c.name)
     setShowDropdown(false)
-    setLigaFilter(c.player.Liga || '')
-    setCompareLeague2('')
-    setSourceFilter('todos')
+    // Default league filter to player's league
+    setLeagueIdFilter(c.player.league?.id ?? null)
+    setCompareLeagueId2(null)
     setSamePosition(true)
-    const posDefaults = POSITION_DEFAULT_METRICS[c.player['Posición']]
-    const allKeys = getAllMetricKeys()
-    if (posDefaults) {
-      const filtered = posDefaults.filter(key => getMetricValue(c.player, key) !== null)
-      setActiveMetrics(filtered.length ? filtered : allKeys.filter(k => getMetricValue(c.player, k) !== null).slice(0, 5))
+
+    // Default active metrics: position defaults from METRICS_BY_POSITION
+    const pos = c.player.primary_position
+    const posMetrics = pos ? METRICS_BY_POSITION[pos] : null
+    if (posMetrics) {
+      const withData = posMetrics.filter(k => getPlayerMetricValue(c.player, k) !== null)
+      setActiveMetrics(withData.length ? withData.slice(0, MAX_METRICS) : API_METRICS.map(m => m.key).filter(k => getPlayerMetricValue(c.player, k as ApiMetricKey) !== null).slice(0, 5) as ApiMetricKey[])
     } else {
-      setActiveMetrics(allKeys.filter(k => getMetricValue(c.player, k) !== null).slice(0, 5))
+      setActiveMetrics(API_METRICS.map(m => m.key).filter(k => getPlayerMetricValue(c.player, k) !== null).slice(0, 5) as ApiMetricKey[])
     }
     setScatterMetrics([])
   }
 
-  function addMetric(key: string) {
+  function addMetric(key: ApiMetricKey) {
     setActiveMetrics(prev => prev.includes(key) || prev.length >= MAX_METRICS ? prev : [...prev, key])
   }
-  function removeMetric(key: string) {
+  function removeMetric(key: ApiMetricKey) {
     setActiveMetrics(prev => prev.filter(k => k !== key))
   }
   function addScatterMetric() {
     const used = new Set(scatterMetrics)
-    for (const g of ALL_METRIC_GROUPS) {
-      const next = g.keys.find(m => !used.has(m.key))
-      if (next) { setScatterMetrics(prev => [...prev, next.key]); return }
+    for (const group of METRIC_GROUPS) {
+      const next = group.keys.find(k => !used.has(k))
+      if (next) { setScatterMetrics(prev => [...prev, next]); return }
     }
   }
   function removeScatterMetric(idx: number) { setScatterMetrics(prev => prev.filter((_, i) => i !== idx)) }
-  function updateScatterMetric(idx: number, key: string) { setScatterMetrics(prev => prev.map((k, i) => i === idx ? key : k)) }
+  function updateScatterMetric(idx: number, key: ApiMetricKey) { setScatterMetrics(prev => prev.map((k, i) => i === idx ? key : k)) }
 
-  // ─── PDF export (react-pdf) ───────────────────────────────────────────────────
+  // ─── PDF export ───────────────────────────────────────────────────────────
 
   async function exportToPDF() {
     if (!selectedPlayer) return
@@ -612,19 +612,20 @@ export default function BusquedaPage() {
       const AnalisisCompletoPDF = pdfMod.default
       const { createElement } = await import('react')
 
-      // Build position-specific bar data (top metrics by weight for player's position)
-      const rawPos = selectedPlayer['Posición'] ?? ''
-      const mappedPos = POSITION_MAP[rawPos] ?? null
-      const posWeights = mappedPos && SCORING_CONFIG[mappedPos]
-        ? [...SCORING_CONFIG[mappedPos]].sort((a, b) => b.weight - a.weight).slice(0, 10)
-        : null
-      const pdfMetricKeys = posWeights ? posWeights.map(m => m.column) : activeMetrics
+      const enriched = playerToEnriched(selectedPlayer)
+
+      // Build bar data for PDF (use activeMetrics or position defaults)
+      const pos = selectedPlayer.primary_position
+      const pdfMetricKeys: ApiMetricKey[] = pos
+        ? (METRICS_BY_POSITION[pos] ?? activeMetrics)
+        : activeMetrics
 
       const pdfBarData = pdfMetricKeys
         .map(key => {
-          const playerVal = getMetricValue(selectedPlayer, key)
-          const poolVals = pool.map(p => getMetricValue(p, key)).filter((v): v is number => v !== null)
-          const pool2Vals = pool2.map(p => getMetricValue(p, key)).filter((v): v is number => v !== null)
+          const meta = METRIC_BY_KEY.get(key)
+          const playerVal = getPlayerMetricValue(selectedPlayer, key)
+          const poolVals = pool.map(p => getPlayerMetricValue(p, key)).filter((v): v is number => v !== null)
+          const pool2Vals = pool2.map(p => getPlayerMetricValue(p, key)).filter((v): v is number => v !== null)
           const avg = poolVals.length ? poolVals.reduce((a, b) => a + b, 0) / poolVals.length : null
           const avg2 = pool2Vals.length ? pool2Vals.reduce((a, b) => a + b, 0) / pool2Vals.length : null
           const allVals = [...poolVals, ...pool2Vals, ...(playerVal !== null ? [playerVal] : [])]
@@ -632,12 +633,11 @@ export default function BusquedaPage() {
           const maxV = allVals.length ? Math.max(...allVals) : 1
           const range = maxV - minV || 1
           const norm = (v: number | null) => v === null ? 0 : Math.max(0, Math.min(100, ((v - minV) / range) * 100))
-          const label = METRIC_ABBREVIATIONS[key] ?? findMetric(key)?.label ?? key
           return {
-            name: label,
+            name: meta?.label ?? key,
             jugador: norm(playerVal),
             promedio: avg !== null ? norm(avg) : 0,
-            ...(compareLeague2 && avg2 !== null ? { promedio2: norm(avg2) } : {}),
+            ...(compareLeagueId2 != null && avg2 !== null ? { promedio2: norm(avg2) } : {}),
             jugadorRaw: playerVal !== null ? parseFloat(playerVal.toFixed(2)) : null,
             promedioRaw: avg !== null ? parseFloat(avg.toFixed(2)) : null,
             promedio2Raw: avg2 !== null ? parseFloat(avg2.toFixed(2)) : null,
@@ -645,14 +645,18 @@ export default function BusquedaPage() {
         })
         .filter(d => d.jugadorRaw !== null)
 
+      const poolLabelStr = leagueIdFilter != null
+        ? (allLeagues.find(l => l.id === leagueIdFilter)?.name ?? 'Pool general')
+        : 'Pool general'
+
       const props = {
-        player: selectedPlayer,
+        player: enriched,
         barData: pdfBarData,
         radarData,
         rankings,
         conclusions,
-        poolLabel: ligaFilter || 'Pool general',
-        pool2Label: compareLeague2 || undefined,
+        poolLabel: poolLabelStr,
+        pool2Label: pool2Label || undefined,
         leagueContext: leagueScoreContext,
       }
       const doc = createElement(AnalisisCompletoPDF, props)
@@ -660,44 +664,38 @@ export default function BusquedaPage() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `Informe_${selectedPlayer.Jugador.replace(/[^a-zA-ZáéíóúñÁÉÍÓÚÑ\s]/g, '').replace(/\s+/g, '_')}.pdf`
+      a.download = `Informe_${selectedPlayer.name.replace(/[^a-zA-ZáéíóúñÁÉÍÓÚÑ\s]/g, '').replace(/\s+/g, '_')}.pdf`
       a.click()
       URL.revokeObjectURL(url)
     } catch (e) { console.error('PDF export error:', e) }
     finally { setExporting(false) }
   }
 
-  // ─── Canva card export ────────────────────────────────────────────────────────
+  // ─── Canva card export ────────────────────────────────────────────────────
 
-  // Pre-calcula las métricas para el modal (con colores según gap jugador vs promedio)
   function openCanvaModal() {
     if (!selectedPlayer) return
-    const rawPos = selectedPlayer['Posición'] ?? ''
-    const mappedPos = POSITION_MAP[rawPos] ?? null
-    const positionConfig = mappedPos && SCORING_CONFIG[mappedPos] ? SCORING_CONFIG[mappedPos] : null
 
-    // Top 10 por peso de posición (modo auto)
-    const sortedWeights = positionConfig ? [...positionConfig].sort((a, b) => b.weight - a.weight) : null
-    const positionKeys = sortedWeights ? sortedWeights.slice(0, 10).map(m => m.column) : activeMetrics.slice(0, 10)
+    // Position metrics for "auto" mode
+    const pos = selectedPlayer.primary_position
+    const positionKeys: string[] = pos
+      ? (METRICS_BY_POSITION[pos] ?? API_METRICS.map(m => m.key)).slice(0, 10)
+      : activeMetrics.slice(0, 10)
 
-    // TODAS las métricas conocidas (de METRIC_ABBREVIATIONS) donde el jugador tiene dato real
-    const allKeys = Object.keys(METRIC_ABBREVIATIONS)
-
-    const allMetrics = allKeys
-      .map(key => {
-        const playerVal = getMetricValue(selectedPlayer, key)
+    const allMetrics = API_METRICS
+      .map(meta => {
+        const playerVal = getPlayerMetricValue(selectedPlayer, meta.key)
         if (playerVal === null) return null
-        const poolVals = pool.map(p => getMetricValue(p, key)).filter((v): v is number => v !== null)
+        const poolVals = pool.map(p => getPlayerMetricValue(p, meta.key)).filter((v): v is number => v !== null)
         const avg = poolVals.length ? poolVals.reduce((a, b) => a + b, 0) / poolVals.length : null
         const allVals = [...poolVals, playerVal]
         const minV = Math.min(...allVals)
         const maxV = Math.max(...allVals)
         const range = maxV - minV || 1
         const norm = (v: number) => Math.max(0, Math.min(100, ((v - minV) / range) * 100))
-        const label = METRIC_ABBREVIATIONS[key] ?? findMetric(key)?.label ?? key
         return {
-          key,
-          label,
+          key: meta.key,
+          label: meta.label,
           jugador: norm(playerVal),
           promedio: avg !== null ? norm(avg) : 50,
           jugadorRaw: parseFloat(playerVal.toFixed(2)),
@@ -722,7 +720,6 @@ export default function BusquedaPage() {
         import('@/components/pdf/InformeCanvaCard'),
       ])
 
-      // Pre-fetch logo as base64 data URL if requested (needed for html-to-image)
       let logoDataUrl: string | undefined
       if (opts.showLogo) {
         try {
@@ -736,15 +733,12 @@ export default function BusquedaPage() {
         } catch { /* logo no disponible */ }
       }
 
-      // Render in a 1×1 clipped container: browser lays out & renders the card fully
-      // but the user never sees it (overflow:hidden clips it to 1px).
-      // We capture container.firstElementChild (the 1120×630 card) directly.
+      const enriched = playerToEnriched(selectedPlayer)
+
       const container = document.createElement('div')
       container.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;overflow:hidden;z-index:-1;pointer-events:none;'
       document.body.appendChild(container)
 
-      // Helper to always clean up the overlay, no matter what happens
-      // eslint-disable-next-line prefer-const
       let mountedRoot: { unmount: () => void } | null = null
       function cleanup() {
         try { mountedRoot?.unmount() } catch { /* ignore */ }
@@ -752,14 +746,13 @@ export default function BusquedaPage() {
       }
 
       try {
-        // Usar las métricas seleccionadas en el modal
         const canvaMetricKeys = opts.metricKeys
-
         const canvaBarData = canvaMetricKeys
           .map(key => {
-            const playerVal = getMetricValue(selectedPlayer, key)
-            const poolVals = pool.map(p => getMetricValue(p, key)).filter((v): v is number => v !== null)
-            const pool2Vals = pool2.map(p => getMetricValue(p, key)).filter((v): v is number => v !== null)
+            const meta = METRIC_BY_KEY.get(key as ApiMetricKey)
+            const playerVal = getPlayerMetricValue(selectedPlayer, key as ApiMetricKey)
+            const poolVals = pool.map(p => getPlayerMetricValue(p, key as ApiMetricKey)).filter((v): v is number => v !== null)
+            const pool2Vals = pool2.map(p => getPlayerMetricValue(p, key as ApiMetricKey)).filter((v): v is number => v !== null)
             const avg = poolVals.length ? poolVals.reduce((a, b) => a + b, 0) / poolVals.length : null
             const avg2 = pool2Vals.length ? pool2Vals.reduce((a, b) => a + b, 0) / pool2Vals.length : null
             const allVals = [...poolVals, ...pool2Vals, ...(playerVal !== null ? [playerVal] : [])]
@@ -767,35 +760,41 @@ export default function BusquedaPage() {
             const maxV = allVals.length ? Math.max(...allVals) : 1
             const range = maxV - minV || 1
             const norm = (v: number | null) => v === null ? 0 : Math.max(0, Math.min(100, ((v - minV) / range) * 100))
-            const label = METRIC_ABBREVIATIONS[key] ?? findMetric(key)?.label ?? key
+            const poolLabelStr = leagueIdFilter != null
+              ? (allLeagues.find(l => l.id === leagueIdFilter)?.name ?? 'Pool general')
+              : 'Pool general'
             return {
-              name: label,
+              name: meta?.label ?? key,
               jugador: norm(playerVal),
               promedio: avg !== null ? norm(avg) : 0,
-              ...(compareLeague2 && avg2 !== null ? { promedio2: norm(avg2) } : {}),
+              ...(compareLeagueId2 != null && avg2 !== null ? { promedio2: norm(avg2) } : {}),
               jugadorRaw: playerVal !== null ? parseFloat(playerVal.toFixed(2)) : null,
               promedioRaw: avg !== null ? parseFloat(avg.toFixed(2)) : null,
               promedio2Raw: avg2 !== null ? parseFloat(avg2.toFixed(2)) : null,
+              _poolLabel: poolLabelStr,
             }
           })
           .filter(d => d.jugadorRaw !== null)
 
+        const poolLabelStr = leagueIdFilter != null
+          ? (allLeagues.find(l => l.id === leagueIdFilter)?.name ?? 'Pool general')
+          : 'Pool general'
+
         const root = createRoot(container)
         mountedRoot = root
         root.render(createElement(CanvaCard, {
-          player: selectedPlayer,
+          player: enriched,
           barData: canvaBarData,
-          poolLabel: ligaFilter || 'Pool general',
-          pool2Label: compareLeague2 || undefined,
+          poolLabel: poolLabelStr,
+          pool2Label: pool2Label || undefined,
           leagueContext: leagueScoreContext,
           videoUrl: opts.videoUrl || undefined,
           logoDataUrl,
         }))
 
-        // Wait for React 18 to fully paint + player image to load
         await new Promise(r => setTimeout(r, 800))
 
-        const baseName = `Informe_Canva_${selectedPlayer.Jugador.replace(/[^a-zA-ZáéíóúñÁÉÍÓÚÑ\s]/g, '').replace(/\s+/g, '_')}`
+        const baseName = `Informe_Canva_${selectedPlayer.name.replace(/[^a-zA-ZáéíóúñÁÉÍÓÚÑ\s]/g, '').replace(/\s+/g, '_')}`
 
         const cardEl = (container.firstElementChild as HTMLElement) ?? container
         const dataUrl = await toPng(cardEl, {
@@ -804,9 +803,6 @@ export default function BusquedaPage() {
           pixelRatio: 2,
           backgroundColor: '#0f0f11',
           skipFonts: true,
-          // Skip external images to avoid CORS failures crashing the export.
-          // Transfermarkt blocks cross-origin fetches; images already fail to load
-          // in the browser (shown as initials), so excluding them doesn't change the output.
           filter: (node) => {
             if (node instanceof HTMLImageElement) {
               const src = node.getAttribute('src') || ''
@@ -818,15 +814,13 @@ export default function BusquedaPage() {
 
         cleanup()
 
-        // Download PDF with the card image embedded
         const { jsPDF } = await import('jspdf')
-        const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [1120, 630], hotfixes: ['px_scaling'] })
-        pdf.addImage(dataUrl, 'PNG', 0, 0, 1120, 630)
+        const pdfDoc = new jsPDF({ orientation: 'landscape', unit: 'px', format: [1120, 630], hotfixes: ['px_scaling'] })
+        pdfDoc.addImage(dataUrl, 'PNG', 0, 0, 1120, 630)
         if (opts.videoUrl) {
-          pdf.link(958, 520, 142, 30, { url: opts.videoUrl })
+          pdfDoc.link(958, 520, 142, 30, { url: opts.videoUrl })
         }
-        pdf.save(`${baseName}.pdf`)
-
+        pdfDoc.save(`${baseName}.pdf`)
         setExportingCanva(false)
       } catch (e) {
         console.error('Canva export error:', e)
@@ -839,7 +833,7 @@ export default function BusquedaPage() {
     }
   }
 
-  // ─── Click outside ────────────────────────────────────────────────────────────
+  // ─── Click outside ────────────────────────────────────────────────────────
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -852,7 +846,14 @@ export default function BusquedaPage() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // ─── Loading ──────────────────────────────────────────────────────────────────
+  const currentLeagueName = useMemo(() =>
+    leagueIdFilter != null
+      ? (allLeagues.find(l => l.id === leagueIdFilter)?.name ?? '')
+      : '',
+    [leagueIdFilter, allLeagues]
+  )
+
+  // ─── Loading ──────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -865,7 +866,7 @@ export default function BusquedaPage() {
     )
   }
 
-  // ─── Render ───────────────────────────────────────────────────────────────────
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
@@ -890,7 +891,7 @@ export default function BusquedaPage() {
         </div>
         {selectedPlayer && (
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Canva card export — abre modal de configuración */}
+            {/* Canva card export */}
             <button
               onClick={openCanvaModal}
               disabled={exportingCanva}
@@ -929,20 +930,20 @@ export default function BusquedaPage() {
       <div className="bg-white dark:bg-apple-gray-800 rounded-2xl border border-apple-gray-200 dark:border-apple-gray-700 p-4 shadow-sm space-y-3">
         <div className="flex flex-wrap gap-2">
           <select
-            value={searchLigaFilter}
-            onChange={e => { setSearchLigaFilter(e.target.value); setSearchEquipoFilter(''); setSearchPositionFilter(''); setShowDropdown(true) }}
+            value={searchLeagueFilter}
+            onChange={e => { setSearchLeagueFilter(e.target.value); setSearchTeamFilter(''); setSearchPositionFilter(''); setShowDropdown(true) }}
             className="px-3 py-2 rounded-xl text-sm border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-700 text-apple-gray-700 dark:text-apple-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green"
           >
             <option value="">Todas las ligas</option>
-            {allLeagues.map(l => <option key={l} value={l}>{l}</option>)}
+            {allLeagues.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}
           </select>
           <select
-            value={searchEquipoFilter}
-            onChange={e => { setSearchEquipoFilter(e.target.value); setSearchPositionFilter(''); setShowDropdown(true) }}
+            value={searchTeamFilter}
+            onChange={e => { setSearchTeamFilter(e.target.value); setSearchPositionFilter(''); setShowDropdown(true) }}
             className="px-3 py-2 rounded-xl text-sm border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-700 text-apple-gray-700 dark:text-apple-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green"
           >
             <option value="">Todos los equipos</option>
-            {equiposByLiga.map(e => <option key={e} value={e}>{e}</option>)}
+            {teamsByLeague.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
           </select>
           <select
             value={searchPositionFilter}
@@ -952,8 +953,8 @@ export default function BusquedaPage() {
             <option value="">Todas las posiciones</option>
             {positionsByFilters.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
-          {(searchLigaFilter || searchEquipoFilter || searchPositionFilter) && (
-            <button onClick={() => { setSearchLigaFilter(''); setSearchEquipoFilter(''); setSearchPositionFilter('') }} className="px-3 py-2 rounded-xl text-sm text-apple-gray-500 hover:text-apple-gray-700 dark:hover:text-white transition-colors">
+          {(searchLeagueFilter || searchTeamFilter || searchPositionFilter) && (
+            <button onClick={() => { setSearchLeagueFilter(''); setSearchTeamFilter(''); setSearchPositionFilter('') }} className="px-3 py-2 rounded-xl text-sm text-apple-gray-500 hover:text-apple-gray-700 dark:hover:text-white transition-colors">
               Limpiar
             </button>
           )}
@@ -965,7 +966,7 @@ export default function BusquedaPage() {
           <input
             ref={inputRef}
             type="text"
-            placeholder={searchEquipoFilter ? `Buscar en ${searchEquipoFilter}...` : searchLigaFilter ? `Buscar en ${searchLigaFilter}...` : 'Buscar jugador por nombre...'}
+            placeholder={searchTeamFilter ? `Buscar en ${searchTeamFilter}...` : searchLeagueFilter ? `Buscar en ${searchLeagueFilter}...` : 'Buscar jugador por nombre...'}
             value={query}
             onChange={e => { setQuery(e.target.value); setShowDropdown(true); if (!e.target.value) setSelectedPlayer(null) }}
             onFocus={() => setShowDropdown(true)}
@@ -980,19 +981,24 @@ export default function BusquedaPage() {
             <div ref={dropdownRef} className="absolute z-50 left-0 right-0 top-full mt-1 bg-white dark:bg-apple-gray-800 border border-apple-gray-200 dark:border-apple-gray-700 rounded-xl shadow-xl overflow-hidden max-h-72 overflow-y-auto">
               {filteredCandidates.map((c, i) => (
                 <button key={i} onMouseDown={() => selectCandidate(c)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/60 transition-colors text-left border-b border-apple-gray-100 dark:border-apple-gray-700/50 last:border-0">
-                  <div className="w-8 h-8 rounded-full bg-apple-gray-100 dark:bg-apple-gray-700 flex items-center justify-center flex-shrink-0">
-                    <span className="text-xs font-semibold text-apple-gray-600 dark:text-apple-gray-300">{getInitials(c.name)}</span>
+                  <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 bg-apple-gray-100 dark:bg-apple-gray-700">
+                    {c.player.photo
+                      ? <img src={c.player.photo} alt={c.name} className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                      : <div className="w-full h-full flex items-center justify-center">
+                          <span className="text-xs font-semibold text-apple-gray-600 dark:text-apple-gray-300">{getInitials(c.name)}</span>
+                        </div>
+                    }
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-apple-gray-900 dark:text-white truncate">{c.name}</p>
                     <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400 truncate">{c.club} · {c.position}</p>
                   </div>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-500 flex-shrink-0">{c.liga}</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-500 flex-shrink-0">{c.league}</span>
                 </button>
               ))}
             </div>
           )}
-          {showDropdown && (query.trim().length > 1 || searchLigaFilter || searchEquipoFilter || searchPositionFilter) && filteredCandidates.length === 0 && (
+          {showDropdown && (query.trim().length > 1 || searchLeagueFilter || searchTeamFilter || searchPositionFilter) && filteredCandidates.length === 0 && (
             <div ref={dropdownRef} className="absolute z-50 left-0 right-0 top-full mt-1 bg-white dark:bg-apple-gray-800 border border-apple-gray-200 dark:border-apple-gray-700 rounded-xl shadow-xl px-4 py-3">
               <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400">Sin resultados</p>
             </div>
@@ -1008,44 +1014,38 @@ export default function BusquedaPage() {
             <div className="bg-white dark:bg-apple-gray-800 rounded-2xl border border-apple-gray-200 dark:border-apple-gray-700 p-6 shadow-sm">
               <div className="flex items-start gap-4">
                 <div className="w-16 h-16 rounded-2xl overflow-hidden flex-shrink-0 bg-apple-gray-100 dark:bg-apple-gray-700">
-                  {selectedPlayer.Imagen ? (
-                    <img src={selectedPlayer.Imagen} alt={selectedPlayer.Jugador} className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                  {selectedPlayer.photo ? (
+                    <img src={selectedPlayer.photo} alt={selectedPlayer.name} className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <span className="text-xl font-bold text-apple-gray-500 dark:text-apple-gray-300">{getInitials(selectedPlayer.Jugador)}</span>
+                      <span className="text-xl font-bold text-apple-gray-500 dark:text-apple-gray-300">{getInitials(selectedPlayer.name)}</span>
                     </div>
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <button onClick={() => navigate(`/jugador/${encodeURIComponent(selectedPlayer.Jugador)}?source=${selectedSource}`)} className="text-xl font-semibold text-apple-gray-900 dark:text-white hover:text-brand-green transition-colors">
-                      {selectedPlayer.Jugador}
+                    <button onClick={() => navigate(`/jugador-api/${selectedPlayer.id}`)} className="text-xl font-semibold text-apple-gray-900 dark:text-white hover:text-brand-green transition-colors">
+                      {selectedPlayer.name}
                     </button>
-                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300">
-                      {selectedSource === 'interno' ? 'Interno' : 'Externo'}
-                    </span>
                   </div>
                   <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
-                    {selectedPlayer.Equipo}{selectedPlayer.Liga ? ` · ${selectedPlayer.Liga}` : ''}{selectedPlayer['Posición'] ? ` · ${selectedPlayer['Posición']}` : ''}{selectedPlayer.Edad ? ` · ${selectedPlayer.Edad} años` : ''}
+                    {selectedPlayer.team?.name}{selectedPlayer.league?.name ? ` · ${selectedPlayer.league.name}` : ''}{selectedPlayer.primary_position ? ` · ${displayPosition(selectedPlayer.primary_position)}` : ''}{getAge(selectedPlayer.birth_date) ? ` · ${getAge(selectedPlayer.birth_date)} años` : ''}
                   </p>
                 </div>
-                {(() => {
-                  const ps = getPlayerScore(selectedPlayer)
-                  return ps != null ? (
-                    <div className={`flex-shrink-0 flex flex-col items-center justify-center w-16 h-16 rounded-2xl ${scoreBg(ps.score, ps.scale)}`}>
-                      <span className={`text-2xl font-bold ${scoreColor(ps.score, ps.scale)}`}>{ps.score.toFixed(1)}</span>
-                      <span className="text-xs text-apple-gray-500 dark:text-apple-gray-400">Score GG</span>
-                      {leagueScoreContext?.rank && (
-                        <span className="text-2xs text-apple-gray-400 dark:text-apple-gray-500 leading-none mt-0.5">
-                          {leagueScoreContext.rank}° / {leagueScoreContext.total}
-                        </span>
-                      )}
-                    </div>
-                  ) : null
-                })()}
+                {selectedPlayer.primary_score != null && (
+                  <div className={`flex-shrink-0 flex flex-col items-center justify-center w-16 h-16 rounded-2xl ${scoreBg(selectedPlayer.primary_score)}`}>
+                    <span className={`text-2xl font-bold ${scoreColor(selectedPlayer.primary_score)}`}>{selectedPlayer.primary_score.toFixed(1)}</span>
+                    <span className="text-xs text-apple-gray-500 dark:text-apple-gray-400">Score GG</span>
+                    {leagueScoreContext?.rank && (
+                      <span className="text-[10px] text-apple-gray-400 dark:text-apple-gray-500 leading-none mt-0.5">
+                        {leagueScoreContext.rank}° / {leagueScoreContext.total}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
-              {/* League score comparison — uses ggScore (0-100) for consistent cross-player ranking */}
-              {leagueScoreContext && selectedPlayer.ggScore != null && (
+              {/* League score comparison */}
+              {leagueScoreContext && selectedPlayer.primary_score != null && (
                 <div className="mt-3 pt-3 border-t border-apple-gray-100 dark:border-apple-gray-700/50 flex items-center gap-3 flex-wrap">
                   <span className="text-xs text-apple-gray-400 dark:text-apple-gray-500">Score en {leagueScoreContext.liga}:</span>
                   {leagueScoreContext.rank && (
@@ -1055,7 +1055,7 @@ export default function BusquedaPage() {
                   )}
                   <span className="text-xs text-apple-gray-400 dark:text-apple-gray-500">
                     · prom. liga: {leagueScoreContext.avg.toFixed(1)}
-                    · diferencia: {selectedPlayer.ggScore > leagueScoreContext.avg ? '+' : ''}{(selectedPlayer.ggScore - leagueScoreContext.avg).toFixed(1)}
+                    · diferencia: {selectedPlayer.primary_score > leagueScoreContext.avg ? '+' : ''}{(selectedPlayer.primary_score - leagueScoreContext.avg).toFixed(1)}
                   </span>
                 </div>
               )}
@@ -1066,38 +1066,32 @@ export default function BusquedaPage() {
               <h2 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-3">Contexto de análisis</h2>
               <div className="flex flex-wrap gap-4 items-end">
                 <div className="space-y-1">
-                  <label className="text-xs text-apple-gray-500 dark:text-apple-gray-400">Fuente</label>
-                  <div className="flex gap-1">
-                    {(['todos', 'externo', 'interno'] as const).map(s => (
-                      <button key={s} onClick={() => setSourceFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${sourceFilter === s ? 'bg-brand-green text-black' : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600'}`}>
-                        {s === 'todos' ? 'Todos' : s === 'externo' ? 'Externos' : 'Internos'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-1">
                   <label className="text-xs text-apple-gray-500 dark:text-apple-gray-400">Liga principal</label>
-                  <select value={ligaFilter} onChange={e => setLigaFilter(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs border border-apple-gray-200 dark:border-apple-gray-700 bg-white dark:bg-apple-gray-800 text-apple-gray-700 dark:text-apple-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green">
+                  <select
+                    value={leagueIdFilter ?? ''}
+                    onChange={e => setLeagueIdFilter(e.target.value ? Number(e.target.value) : null)}
+                    className="px-3 py-1.5 rounded-lg text-xs border border-apple-gray-200 dark:border-apple-gray-700 bg-white dark:bg-apple-gray-800 text-apple-gray-700 dark:text-apple-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green"
+                  >
                     <option value="">Todas las ligas</option>
-                    {availableLeagues.map(l => <option key={l} value={l}>{l}</option>)}
+                    {availableLeagues.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                   </select>
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs text-apple-gray-500 dark:text-apple-gray-400">
                     Comparar también vs
-                    <span className="ml-1 text-blue-400 dark:text-blue-400">(2ª liga)</span>
+                    <span className="ml-1 text-blue-400">(2ª liga)</span>
                   </label>
                   <div className="flex items-center gap-1.5">
                     <select
-                      value={compareLeague2}
-                      onChange={e => setCompareLeague2(e.target.value)}
+                      value={compareLeagueId2 ?? ''}
+                      onChange={e => setCompareLeagueId2(e.target.value ? Number(e.target.value) : null)}
                       className="px-3 py-1.5 rounded-lg text-xs border border-apple-gray-200 dark:border-apple-gray-700 bg-white dark:bg-apple-gray-800 text-apple-gray-700 dark:text-apple-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400/40 focus:border-blue-400"
                     >
                       <option value="">Sin comparación extra</option>
-                      {availableLeagues.filter(l => l !== ligaFilter).map(l => <option key={l} value={l}>{l}</option>)}
+                      {availableLeagues.filter(l => l.id !== leagueIdFilter).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                     </select>
-                    {compareLeague2 && (
-                      <button onClick={() => setCompareLeague2('')} className="text-apple-gray-400 hover:text-apple-gray-600 dark:hover:text-apple-gray-200 transition-colors p-1">
+                    {compareLeagueId2 != null && (
+                      <button onClick={() => setCompareLeagueId2(null)} className="text-apple-gray-400 hover:text-apple-gray-600 dark:hover:text-apple-gray-200 transition-colors p-1">
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                       </button>
                     )}
@@ -1108,8 +1102,8 @@ export default function BusquedaPage() {
                   <span className="text-xs text-apple-gray-700 dark:text-apple-gray-300">Solo misma posición</span>
                 </label>
                 <div className="ml-auto text-xs text-apple-gray-400 dark:text-apple-gray-500 text-right">
-                  <div>{pool.length} jugadores en pool{smartMinutes > 0 && <span className="ml-1 text-brand-green/70"> · mín. {smartMinutes}'</span>}</div>
-                  {compareLeague2 && <div className="text-blue-400 dark:text-blue-400 mt-0.5">{pool2.length} en {compareLeague2}</div>}
+                  <div>{pool.length} jugadores en pool</div>
+                  {compareLeagueId2 != null && pool2Label && <div className="text-blue-400 mt-0.5">{pool2.length} en {pool2Label}</div>}
                 </div>
               </div>
             </div>
@@ -1119,12 +1113,12 @@ export default function BusquedaPage() {
               <div className="flex items-start justify-between gap-2 mb-1">
                 <div className="flex items-baseline gap-2">
                   <h2 className="text-base font-semibold text-apple-gray-900 dark:text-white">Posicionamiento en el grupo</h2>
-                  <span className="text-xs text-apple-gray-400 dark:text-apple-gray-500">entre {rankingPool.length} jugadores</span>
+                  <span className="text-xs text-apple-gray-400 dark:text-apple-gray-500">entre {pool.length} jugadores</span>
                 </div>
-                <CopyBtn targetId="chart-rankings-section" filename={`rankings_${selectedPlayer.Jugador.replace(/\s+/g,'_')}`} />
+                <CopyBtn targetId="chart-rankings-section" filename={`rankings_${selectedPlayer.name.replace(/\s+/g,'_')}`} />
               </div>
               <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400 mb-5">
-                Métricas donde {selectedPlayer.Jugador} se ubica en los primeros puestos. Incluye su valor real y el promedio del grupo.
+                Métricas donde {selectedPlayer.name} se ubica en los primeros puestos. Incluye su valor real y el promedio del grupo.
               </p>
 
               {rankings.length > 0 ? (
@@ -1151,7 +1145,7 @@ export default function BusquedaPage() {
                           <p className={`text-sm font-bold mt-1 tabular-nums ${is1st ? 'text-brand-green' : 'text-apple-gray-600 dark:text-apple-gray-300'}`}>
                             {r.playerVal.toFixed(2)}
                           </p>
-                          <p className="text-2xs text-apple-gray-400 dark:text-apple-gray-500">
+                          <p className="text-[10px] text-apple-gray-400 dark:text-apple-gray-500">
                             prom: {r.avg.toFixed(2)}
                           </p>
                         </div>
@@ -1161,8 +1155,8 @@ export default function BusquedaPage() {
                   <div className="mt-4 pt-4 border-t border-apple-gray-100 dark:border-apple-gray-700/50">
                     <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 leading-relaxed">
                       {rankings.filter(r => r.rank === 1).length > 0
-                        ? `${selectedPlayer.Jugador} lidera el grupo en ${rankings.filter(r => r.rank === 1).map(r => r.label).join(' y ')}${rankings.filter(r => r.rank === 1).length === 1 ? ` con ${rankings.find(r => r.rank === 1)!.playerVal.toFixed(2)} (prom. ${rankings.find(r => r.rank === 1)!.avg.toFixed(2)})` : ''}.`
-                        : `${selectedPlayer.Jugador} aparece en el top 8 en ${rankings.length} métricas dentro del grupo.`
+                        ? `${selectedPlayer.name} lidera el grupo en ${rankings.filter(r => r.rank === 1).map(r => r.label).join(' y ')}${rankings.filter(r => r.rank === 1).length === 1 ? ` con ${rankings.find(r => r.rank === 1)!.playerVal.toFixed(2)} (prom. ${rankings.find(r => r.rank === 1)!.avg.toFixed(2)})` : ''}.`
+                        : `${selectedPlayer.name} aparece en el top 8 en ${rankings.length} métricas dentro del grupo.`
                       }
                       {rankings.length > 1 && ` Figura en el top 8 en ${rankings.length} métricas en total.`}
                     </p>
@@ -1184,10 +1178,10 @@ export default function BusquedaPage() {
               {activeMetrics.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-4">
                   {activeMetrics.map(key => {
-                    const m = findMetric(key)
+                    const meta = METRIC_BY_KEY.get(key)
                     return (
                       <span key={key} className="inline-flex items-center gap-1.5 pl-3 pr-2 py-1 rounded-full bg-brand-green/10 border border-brand-green/25 text-xs font-medium text-brand-green dark:text-green-400">
-                        {m?.label ?? key}
+                        {meta?.label ?? key}
                         <button onClick={() => removeMetric(key)} className="text-brand-green/50 hover:text-red-500 transition-colors ml-0.5">
                           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
@@ -1201,19 +1195,22 @@ export default function BusquedaPage() {
               )}
 
               {/* Category dropdowns */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-5">
-                {ALL_METRIC_GROUPS.map(group => {
-                  const available = group.keys.filter(m => !activeMetrics.includes(m.key) && getMetricValue(selectedPlayer, m.key) !== null)
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-5">
+                {METRIC_GROUPS.map(group => {
+                  const available = group.keys.filter(k => !activeMetrics.includes(k) && getPlayerMetricValue(selectedPlayer, k) !== null)
                   return (
                     <select
                       key={group.label}
                       value=""
-                      onChange={e => { if (e.target.value) addMetric(e.target.value) }}
+                      onChange={e => { if (e.target.value) addMetric(e.target.value as ApiMetricKey) }}
                       disabled={activeMetrics.length >= MAX_METRICS || available.length === 0}
                       className="w-full px-3 py-2 rounded-xl text-xs border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-700/60 text-apple-gray-600 dark:text-apple-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green font-medium disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <option value="">+ {group.label}</option>
-                      {available.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+                      {available.map(k => {
+                        const m = METRIC_BY_KEY.get(k)
+                        return <option key={k} value={k}>{m?.label ?? k}</option>
+                      })}
                     </select>
                   )
                 })}
@@ -1230,17 +1227,17 @@ export default function BusquedaPage() {
                     <div className="mb-10" id="chart-radar-section">
                       <div className="flex items-center justify-between mb-1">
                         <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-200">Radar vs promedio</h3>
-                        <CopyBtn targetId="chart-radar-section" filename={`radar_${selectedPlayer.Jugador.replace(/\s+/g,'_')}`} />
+                        <CopyBtn targetId="chart-radar-section" filename={`radar_${selectedPlayer.name.replace(/\s+/g,'_')}`} />
                       </div>
                       <div className="flex items-center gap-5 mb-4">
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full bg-brand-green" />
-                          <span className="text-sm font-medium text-apple-gray-700 dark:text-apple-gray-200">{selectedPlayer.Jugador}</span>
+                          <span className="text-sm font-medium text-apple-gray-700 dark:text-apple-gray-200">{selectedPlayer.name}</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <svg width="24" height="8"><line x1="0" y1="4" x2="24" y2="4" stroke="#94A3B8" strokeWidth="2.5" strokeDasharray="5 4" /></svg>
                           <span className="text-sm text-apple-gray-500 dark:text-apple-gray-400">
-                            Promedio {ligaFilter || 'del grupo'}
+                            Promedio {currentLeagueName || 'del grupo'}
                           </span>
                         </div>
                       </div>
@@ -1250,13 +1247,13 @@ export default function BusquedaPage() {
                             <PolarGrid stroke="rgba(156,163,175,0.2)" />
                             <PolarAngleAxis dataKey="subject" tick={{ fontSize: 11, fill: 'currentColor', fontWeight: 500 }} />
                             <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
-                            <Radar name={selectedPlayer.Jugador} dataKey="jugador" stroke="#22C55E" strokeWidth={2.5} fill="#22C55E" fillOpacity={0.22} />
+                            <Radar name={selectedPlayer.name} dataKey="jugador" stroke="#22C55E" strokeWidth={2.5} fill="#22C55E" fillOpacity={0.22} />
                             <Radar name="Promedio" dataKey="promedio" stroke="#94A3B8" strokeWidth={3} strokeDasharray="6 4" fill="#94A3B8" fillOpacity={0.06} />
                           </RadarChart>
                         </ResponsiveContainer>
                       </div>
                       <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mt-2 text-center">
-                        Cada eje normalizado 0-100. Verde = jugador · Punteado gris = promedio {ligaFilter || 'del grupo'}.
+                        Cada eje normalizado 0-100. Verde = jugador · Punteado gris = promedio {currentLeagueName || 'del grupo'}.
                       </p>
                     </div>
                   )}
@@ -1265,25 +1262,25 @@ export default function BusquedaPage() {
                   <div id="chart-bars-section">
                     <div className="flex items-center justify-between mb-1">
                       <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-200">Barras comparativas</h3>
-                      <CopyBtn targetId="chart-bars-section" filename={`barras_${selectedPlayer.Jugador.replace(/\s+/g,'_')}`} />
+                      <CopyBtn targetId="chart-bars-section" filename={`barras_${selectedPlayer.name.replace(/\s+/g,'_')}`} />
                     </div>
                     <div className="flex items-center gap-4 mb-4 flex-wrap">
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded bg-brand-green" />
-                        <span className="text-sm text-apple-gray-600 dark:text-apple-gray-300">{selectedPlayer.Jugador}</span>
+                        <span className="text-sm text-apple-gray-600 dark:text-apple-gray-300">{selectedPlayer.name}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded bg-apple-gray-400/50" />
-                        <span className="text-sm text-apple-gray-500 dark:text-apple-gray-400">{ligaFilter || 'Pool general'}</span>
+                        <span className="text-sm text-apple-gray-500 dark:text-apple-gray-400">{currentLeagueName || 'Pool general'}</span>
                       </div>
-                      {compareLeague2 && (
+                      {compareLeagueId2 != null && pool2Label && (
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded bg-blue-400/60" />
-                          <span className="text-sm text-blue-500 dark:text-blue-400">{compareLeague2}</span>
+                          <span className="text-sm text-blue-500 dark:text-blue-400">{pool2Label}</span>
                         </div>
                       )}
                     </div>
-                    <div style={{ height: Math.max(240, activeMetrics.length * (compareLeague2 ? 65 : 50)) }}>
+                    <div style={{ height: Math.max(240, activeMetrics.length * (compareLeagueId2 != null ? 65 : 50)) }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={barData} layout="vertical" margin={{ top: 4, right: 90, left: 10, bottom: 4 }}>
                           <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(156,163,175,0.1)" />
@@ -1297,23 +1294,23 @@ export default function BusquedaPage() {
                               return (
                                 <div className="bg-white dark:bg-apple-gray-800 border border-apple-gray-200 dark:border-apple-gray-700 rounded-lg px-3 py-2.5 shadow-lg text-sm">
                                   <p className="font-semibold text-apple-gray-700 dark:text-apple-gray-200 mb-1.5">{d.name}</p>
-                                  <p className="text-brand-green font-medium">{selectedPlayer.Jugador}: <strong>{d.jugadorRaw?.toFixed(2) ?? '—'}</strong></p>
-                                  <p className="text-apple-gray-500 dark:text-apple-gray-400">{ligaFilter || 'Pool'}: <strong>{d.promedioRaw?.toFixed(2) ?? '—'}</strong></p>
-                                  {compareLeague2 && d.promedio2Raw != null && (
-                                    <p className="text-blue-500 dark:text-blue-400">{compareLeague2}: <strong>{d.promedio2Raw.toFixed(2)}</strong></p>
+                                  <p className="text-brand-green font-medium">{selectedPlayer.name}: <strong>{d.jugadorRaw?.toFixed(2) ?? '—'}</strong></p>
+                                  <p className="text-apple-gray-500 dark:text-apple-gray-400">{currentLeagueName || 'Pool'}: <strong>{d.promedioRaw?.toFixed(2) ?? '—'}</strong></p>
+                                  {compareLeagueId2 != null && d.promedio2Raw != null && (
+                                    <p className="text-blue-500 dark:text-blue-400">{pool2Label}: <strong>{d.promedio2Raw.toFixed(2)}</strong></p>
                                   )}
                                 </div>
                               )
                             }}
                           />
-                          <Bar dataKey="jugador" name={selectedPlayer.Jugador} fill="#22C55E" radius={[0, 5, 5, 0]} barSize={9}>
+                          <Bar dataKey="jugador" name={selectedPlayer.name} fill="#22C55E" radius={[0, 5, 5, 0]} barSize={9}>
                             <LabelList dataKey="jugadorRaw" position="right" formatter={(v: number | null) => v?.toFixed(2) ?? ''} style={{ fontSize: 11, fill: '#22C55E', fontWeight: 700 }} />
                           </Bar>
-                          <Bar dataKey="promedio" name={ligaFilter || 'Promedio'} fill="rgba(156,163,175,0.4)" radius={[0, 5, 5, 0]} barSize={9}>
+                          <Bar dataKey="promedio" name={currentLeagueName || 'Promedio'} fill="rgba(156,163,175,0.4)" radius={[0, 5, 5, 0]} barSize={9}>
                             <LabelList dataKey="promedioRaw" position="right" formatter={(v: number | null) => v?.toFixed(2) ?? ''} style={{ fontSize: 10, fill: '#9CA3AF' }} />
                           </Bar>
-                          {compareLeague2 && (
-                            <Bar dataKey="promedio2" name={compareLeague2} fill="rgba(59,130,246,0.45)" radius={[0, 5, 5, 0]} barSize={9}>
+                          {compareLeagueId2 != null && (
+                            <Bar dataKey="promedio2" name={pool2Label} fill="rgba(59,130,246,0.45)" radius={[0, 5, 5, 0]} barSize={9}>
                               <LabelList dataKey="promedio2Raw" position="right" formatter={(v: number | null) => v?.toFixed(2) ?? ''} style={{ fontSize: 10, fill: '#60A5FA' }} />
                             </Bar>
                           )}
@@ -1347,12 +1344,12 @@ export default function BusquedaPage() {
             <div className="mt-6 bg-white dark:bg-apple-gray-800 rounded-2xl border border-apple-gray-200 dark:border-apple-gray-700 p-6 shadow-sm">
               <h2 className="text-base font-semibold text-apple-gray-900 dark:text-white mb-1">Dispersión en el contexto</h2>
               <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mb-4">
-                Cada punto es un jugador del pool. El verde es siempre {selectedPlayer.Jugador}, aunque esté en otra liga. Agregá varios gráficos para distintas métricas.
+                Cada punto es un jugador del pool. El verde es siempre {selectedPlayer.name}, aunque esté en otra liga. Agregá varios gráficos para distintas métricas.
               </p>
               <div className="flex items-center gap-5 mb-4">
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 rounded-full bg-brand-green border-2 border-white dark:border-apple-gray-800 shadow" />
-                  <span className="text-sm font-medium text-apple-gray-700 dark:text-apple-gray-200">{selectedPlayer.Jugador}</span>
+                  <span className="text-sm font-medium text-apple-gray-700 dark:text-apple-gray-200">{selectedPlayer.name}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-3.5 h-3.5 rounded-full bg-slate-300 dark:bg-slate-500" />
@@ -1368,7 +1365,7 @@ export default function BusquedaPage() {
 
               <div className="space-y-5">
                 {scatterMetrics.map((metricKey, idx) => {
-                  const metricMeta = findMetric(metricKey)
+                  const metricMeta = METRIC_BY_KEY.get(metricKey)
                   const { poolPoints, playerPoint } = buildScatterData(metricKey)
                   const allX = [...poolPoints.map(p => p.x), ...(playerPoint ? [playerPoint.x] : [])]
                   const avgX = allX.length ? allX.reduce((a, b) => a + b, 0) / allX.length : 0
@@ -1379,12 +1376,15 @@ export default function BusquedaPage() {
                       <div className="flex items-center gap-2 mb-3">
                         <select
                           value={metricKey}
-                          onChange={e => updateScatterMetric(idx, e.target.value)}
+                          onChange={e => updateScatterMetric(idx, e.target.value as ApiMetricKey)}
                           className="flex-1 px-3 py-1.5 rounded-lg text-sm border border-apple-gray-200 dark:border-apple-gray-700 bg-white dark:bg-apple-gray-800 text-apple-gray-700 dark:text-apple-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green"
                         >
-                          {ALL_METRIC_GROUPS.map(group => (
+                          {METRIC_GROUPS.map(group => (
                             <optgroup key={group.label} label={group.label}>
-                              {group.keys.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+                              {group.keys.map(k => {
+                                const m = METRIC_BY_KEY.get(k)
+                                return <option key={k} value={k}>{m?.label ?? k}</option>
+                              })}
                             </optgroup>
                           ))}
                         </select>
@@ -1408,15 +1408,13 @@ export default function BusquedaPage() {
                                 {allX.length > 1 && (
                                   <ReferenceLine x={avgX} stroke="rgba(156,163,175,0.5)" strokeDasharray="4 4" label={{ value: `prom: ${avgX.toFixed(2)}`, position: 'top', fontSize: 10, fill: '#9CA3AF' }} />
                                 )}
-                                {/* Pool — gray dots */}
                                 {poolPoints.length > 0 && (
                                   <Scatter name="Pool" data={poolPoints} shape={(props: { cx?: number; cy?: number }) => (
                                     <circle cx={props.cx} cy={props.cy} r={4.5} fill="rgba(148,163,184,0.55)" />
                                   )} />
                                 )}
-                                {/* Analyzed player — always green, always on top */}
                                 {playerPoint && (
-                                  <Scatter name={selectedPlayer.Jugador} data={[playerPoint]} shape={(props: { cx?: number; cy?: number }) => (
+                                  <Scatter name={selectedPlayer.name} data={[playerPoint]} shape={(props: { cx?: number; cy?: number }) => (
                                     <circle cx={props.cx} cy={props.cy} r={9} fill="#22C55E" stroke="white" strokeWidth={2.5} />
                                   )} />
                                 )}
@@ -1425,7 +1423,7 @@ export default function BusquedaPage() {
                           </div>
                           <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mt-1">
                             {playerPoint
-                              ? `${selectedPlayer.Jugador} registra ${playerPoint.x.toFixed(2)} en ${metricMeta?.label ?? metricKey}${allX.length > 1 ? `, ${playerPoint.x > avgX ? 'por encima' : 'por debajo'} del promedio (${avgX.toFixed(2)})` : ''}.`
+                              ? `${selectedPlayer.name} registra ${playerPoint.x.toFixed(2)} en ${metricMeta?.label ?? metricKey}${allX.length > 1 ? `, ${playerPoint.x > avgX ? 'por encima' : 'por debajo'} del promedio (${avgX.toFixed(2)})` : ''}.`
                               : `No hay dato para esta métrica.`
                             }
                             {poolPoints.length === 0 && playerPoint && ' No hay otros jugadores en el pool para comparar.'}
@@ -1439,7 +1437,7 @@ export default function BusquedaPage() {
 
               <button
                 onClick={addScatterMetric}
-                disabled={scatterMetrics.length >= ALL_METRIC_GROUPS.flatMap(g => g.keys).length}
+                disabled={scatterMetrics.length >= API_METRICS.length}
                 className="mt-4 w-full py-2.5 rounded-xl text-sm font-medium border-2 border-dashed border-apple-gray-300 dark:border-apple-gray-600 text-apple-gray-500 dark:text-apple-gray-400 hover:border-brand-green hover:text-brand-green transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 + Agregar gráfico
@@ -1457,30 +1455,25 @@ export default function BusquedaPage() {
                 )}
                 <div className="space-y-3">
                   {/* Score */}
-                  {conclusions.playerScore != null && conclusions.avgScore != null && selectedPlayer && (() => {
-                    const ps = getPlayerScore(selectedPlayer)
-                    const displayScore = ps?.score ?? conclusions.playerScore
-                    const displayScale = ps?.scale ?? '100'
-                    return (
-                      <div className="flex items-start gap-3 p-4 rounded-xl bg-apple-gray-50 dark:bg-apple-gray-700/40">
-                        <div className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg ${scoreBg(displayScore, displayScale)} ${scoreColor(displayScore, displayScale)}`}>
-                          {displayScore.toFixed(1)}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-apple-gray-800 dark:text-white">Score GG</p>
-                          <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
-                            {conclusions.scorePct != null ? `Percentil ${conclusions.scorePct} del grupo (${conclusions.scoreRank}° de ${conclusions.poolSize}).` : `Promedio del grupo: ${conclusions.avgScore.toFixed(1)}.`}
-                            {' '}{Math.abs(conclusions.playerScore - conclusions.avgScore) > 0.3
-                              ? conclusions.playerScore > conclusions.avgScore
-                                ? `Supera el promedio por ${(conclusions.playerScore - conclusions.avgScore).toFixed(1)} puntos.`
-                                : `Está ${Math.abs(conclusions.playerScore - conclusions.avgScore).toFixed(1)} puntos por debajo.`
-                              : 'En línea con el promedio del grupo.'
-                            }
-                          </p>
-                        </div>
+                  {conclusions.playerScore != null && conclusions.avgScore != null && (
+                    <div className="flex items-start gap-3 p-4 rounded-xl bg-apple-gray-50 dark:bg-apple-gray-700/40">
+                      <div className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg ${scoreBg(conclusions.playerScore)} ${scoreColor(conclusions.playerScore)}`}>
+                        {conclusions.playerScore.toFixed(1)}
                       </div>
-                    )
-                  })()}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-apple-gray-800 dark:text-white">Score GG</p>
+                        <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
+                          {conclusions.scorePct != null ? `Percentil ${conclusions.scorePct} del grupo (${conclusions.scoreRank}° de ${conclusions.poolSize}).` : `Promedio del grupo: ${conclusions.avgScore.toFixed(1)}.`}
+                          {' '}{Math.abs(conclusions.playerScore - conclusions.avgScore) > 0.3
+                            ? conclusions.playerScore > conclusions.avgScore
+                              ? `Supera el promedio por ${(conclusions.playerScore - conclusions.avgScore).toFixed(1)} puntos.`
+                              : `Está ${Math.abs(conclusions.playerScore - conclusions.avgScore).toFixed(1)} puntos por debajo.`
+                            : 'En línea con el promedio del grupo.'
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Top rankings */}
                   {conclusions.top1.length > 0 && (
