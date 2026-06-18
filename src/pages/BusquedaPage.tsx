@@ -161,10 +161,13 @@ function getPlayerMetricValue(player: PlayerWithScore, key: ApiMetricKey): numbe
   return apiGetMetricValue(player.season_scores[0], key)
 }
 
-/** Get avg value from PositionMetricAverages for a given key */
+/** Get avg value from PositionMetricAverages for a given key.
+ * Note: the catalog uses `avg_rating` but PositionMetricAverages exposes it as `rating_avg`. */
 function getAvgMetricValue(avg: PositionMetricAverages | null, key: ApiMetricKey): number | null {
   if (!avg) return null
-  const v = (avg as unknown as Record<string, number | null>)[key]
+  // Map catalog key → field name in PositionMetricAverages where they differ
+  const fieldKey = key === 'avg_rating' ? 'rating_avg' : key
+  const v = (avg as unknown as Record<string, number | null>)[fieldKey]
   return v ?? null
 }
 
@@ -431,7 +434,12 @@ export default function BusquedaPage() {
       const minV = allVals.length ? Math.min(...allVals) : 0
       const maxV = allVals.length ? Math.max(...allVals) : 1
       const range = maxV - minV || 1
-      const norm = (v: number | null) => v === null ? 0 : Math.max(0, Math.min(100, ((v - minV) / range) * 100))
+      const higherIsBetter = meta?.higherIsBetter !== false
+      const norm = (v: number | null) => {
+        if (v === null) return 0
+        const raw = Math.max(0, Math.min(100, ((v - minV) / range) * 100))
+        return higherIsBetter ? raw : 100 - raw
+      }
       return {
         name: meta?.label ?? key,
         jugador: norm(playerVal),
@@ -472,9 +480,11 @@ export default function BusquedaPage() {
       const minV = Math.min(...allVals)
       const maxV = Math.max(...allVals)
       const range = maxV - minV
+      const radarHigherIsBetter = meta?.higherIsBetter !== false
       const normalize = (v: number | null) => {
         if (v === null) return 0
-        return range === 0 ? 50 : Math.max(0, Math.min(100, ((v - minV) / range) * 100))
+        const raw = range === 0 ? 50 : Math.max(0, Math.min(100, ((v - minV) / range) * 100))
+        return radarHigherIsBetter ? raw : 100 - raw
       }
 
       return {

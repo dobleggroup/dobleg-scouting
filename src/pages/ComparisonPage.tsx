@@ -265,18 +265,27 @@ function ComparisonContent({ players }: { players: PlayerWithScore[] }) {
   const radarData = useMemo(() => {
     return activeMetrics.map(key => {
       const meta = METRIC_BY_KEY.get(key)
-      const rawVals = players.map(p => getPlayerMetricValue(p, key) ?? 0)
-      const minV = Math.min(...rawVals)
-      const maxV = Math.max(...rawVals)
+      // Exclude nulls from min/max so missing data doesn't distort the scale
+      const rawVals = players
+        .map(p => getPlayerMetricValue(p, key))
+        .filter((v): v is number => v !== null)
+      const minV = rawVals.length ? Math.min(...rawVals) : 0
+      const maxV = rawVals.length ? Math.max(...rawVals) : 1
       const range = maxV - minV || 1
-      const norm = (v: number) => Math.max(0, Math.min(100, ((v - minV) / range) * 100))
+      const higherIsBetter = meta?.higherIsBetter !== false
+      const norm = (v: number) => {
+        const raw = Math.max(0, Math.min(100, ((v - minV) / range) * 100))
+        return higherIsBetter ? raw : 100 - raw
+      }
 
       const point: Record<string, unknown> = {
         subject: meta?.short ?? key,
         fullMark: 100,
       }
       players.forEach((p, i) => {
-        point[`p${i}`] = Math.round(norm(getPlayerMetricValue(p, key) ?? 0))
+        const v = getPlayerMetricValue(p, key)
+        // Leave the point undefined (no value) rather than plotting null as 0
+        point[`p${i}`] = v !== null ? Math.round(norm(v)) : undefined
       })
       return point
     })
@@ -288,9 +297,13 @@ function ComparisonContent({ players }: { players: PlayerWithScore[] }) {
     return players.map((_, pi) =>
       activeMetrics.filter(key => {
         const meta = METRIC_BY_KEY.get(key)
-        const vals = players.map(p => getPlayerMetricValue(p, key) ?? 0)
-        const best = meta?.higherIsBetter !== false ? Math.max(...vals) : Math.min(...vals)
-        return vals[pi] === best && vals.filter(v => v === best).length === 1
+        // Only consider players that actually have data for this metric
+        const vals = players.map(p => getPlayerMetricValue(p, key))
+        const myVal = vals[pi]
+        if (myVal === null) return false
+        const presentVals = vals.filter((v): v is number => v !== null)
+        const best = meta?.higherIsBetter !== false ? Math.max(...presentVals) : Math.min(...presentVals)
+        return myVal === best && presentVals.filter(v => v === best).length === 1
       }).length
     )
   }, [players, activeMetrics])
@@ -481,9 +494,13 @@ function ComparisonContent({ players }: { players: PlayerWithScore[] }) {
         <div className="divide-y divide-apple-gray-100 dark:divide-apple-gray-700/50">
           {activeMetrics.map(key => {
             const meta = METRIC_BY_KEY.get(key)
-            const rawVals = players.map(p => getPlayerMetricValue(p, key) ?? 0)
-            const best = meta?.higherIsBetter !== false ? Math.max(...rawVals) : Math.min(...rawVals)
-            const maxAbs = Math.max(...rawVals.map(Math.abs)) || 1
+            const rawVals = players.map(p => getPlayerMetricValue(p, key))
+            // Only non-null values participate in best/maxAbs computation
+            const presentVals = rawVals.filter((v): v is number => v !== null)
+            const best = presentVals.length
+              ? (meta?.higherIsBetter !== false ? Math.max(...presentVals) : Math.min(...presentVals))
+              : null
+            const maxAbs = presentVals.length ? Math.max(...presentVals.map(Math.abs)) || 1 : 1
 
             return (
               <div key={key} className="px-5 py-3 flex items-center gap-4 hover:bg-apple-gray-50/50 dark:hover:bg-apple-gray-800/30 transition-colors">
@@ -494,8 +511,8 @@ function ComparisonContent({ players }: { players: PlayerWithScore[] }) {
                 </div>
                 <div className={`flex-1 grid gap-4 ${players.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
                   {rawVals.map((v, i) => {
-                    const isWinner = v === best && rawVals.filter(x => x === best).length === 1
-                    const barWidth = (v / maxAbs) * 100
+                    const isWinner = v !== null && v === best && presentVals.filter(x => x === best).length === 1
+                    const barWidth = v !== null ? (v / maxAbs) * 100 : 0
                     return (
                       <div key={i} className="flex items-center gap-3">
                         <div className="flex-1 h-1.5 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-full overflow-hidden">
@@ -513,7 +530,7 @@ function ComparisonContent({ players }: { players: PlayerWithScore[] }) {
                           }`}
                           style={isWinner ? { color: PLAYER_COLORS[i] } : {}}
                         >
-                          {v % 1 === 0 ? v.toFixed(0) : v.toFixed(2)}
+                          {v === null ? '—' : v % 1 === 0 ? v.toFixed(0) : v.toFixed(2)}
                         </span>
                       </div>
                     )
