@@ -1043,7 +1043,7 @@ export default function PlayerDetailPage() {
                       >
                         <path strokeLinecap="round" strokeLinejoin="round" d={tab.icon} />
                       </svg>
-                      <span className="text-xs font-medium hidden xl:block whitespace-nowrap">{tab.label}</span>
+                      <span className="text-xs font-medium hidden xl:inline whitespace-nowrap">{tab.label}</span>
                       <span className="text-2xs font-medium md:hidden whitespace-nowrap">{tab.label}</span>
                       {/* Tooltip for medium screens without labels */}
                       <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">
@@ -1054,6 +1054,63 @@ export default function PlayerDetailPage() {
                 )
               })}
             </nav>
+            {/* Acciones al pie del rail */}
+            <div className="bg-white dark:bg-apple-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark p-1.5 xl:p-2 flex md:flex-col gap-1 mt-auto">
+              {player.Transfermkt && (
+                <a
+                  href={player.Transfermkt}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="relative w-full flex items-center gap-2.5 px-2.5 xl:px-3 py-2 xl:py-2.5 rounded-lg text-left transition-all duration-200 group text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/50 hover:text-apple-gray-700 dark:hover:text-apple-gray-200"
+                >
+                  <svg className="w-4 h-4 shrink-0 transition-colors text-apple-gray-400 group-hover:text-brand-green" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  <span className="hidden xl:inline text-xs font-medium whitespace-nowrap">Transfermarkt</span>
+                  <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">
+                    Transfermarkt
+                  </span>
+                </a>
+              )}
+              {monitoringPlayer?.WyscoutVideo && (
+                <a
+                  href={monitoringPlayer.WyscoutVideo}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="relative w-full flex items-center gap-2.5 px-2.5 xl:px-3 py-2 xl:py-2.5 rounded-lg text-left transition-all duration-200 group text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                >
+                  <svg className="w-4 h-4 shrink-0 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="hidden xl:inline text-xs font-medium whitespace-nowrap">Video Wyscout</span>
+                  <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">
+                    Video Wyscout
+                  </span>
+                </a>
+              )}
+              <AddToReportButton
+                type="player-card"
+                title={`Ficha: ${player.Jugador}`}
+                description={`${player.Equipo} - ${player['Posición'] || player['Posicion']} - ${player.ageNum} años`}
+                captureId="player-detail-container"
+                source={source === 'interno' ? 'Scout Interno' : 'Scout Externo'}
+                variant="menu-item"
+                players={[player.Jugador]}
+              />
+              <button
+                onClick={() => setShowExportModal(true)}
+                className="relative w-full flex items-center gap-2.5 px-2.5 xl:px-3 py-2 xl:py-2.5 rounded-lg text-left transition-all duration-200 group text-brand-green hover:bg-brand-green/10"
+              >
+                <svg className="w-4 h-4 shrink-0 text-brand-green" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className="hidden xl:inline text-xs font-medium whitespace-nowrap">Exportar PDF</span>
+                <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">
+                  Exportar PDF
+                </span>
+              </button>
+            </div>
           </div>
         </aside>
 
@@ -2697,7 +2754,7 @@ export default function PlayerDetailPage() {
             {/* Score Scout Timeline */}
             <ScoreScoutTimeline playerId={player.id || player.Jugador} playerName={player.Jugador} />
 
-            {/* Quick links & actions */}
+            {/* Quick links & actions (DobleGWidget + TrackingWidget stay here until Task 3) */}
             <div className="card-apple p-4 space-y-2">
               <DobleGWidget
                 player={player}
@@ -2711,53 +2768,6 @@ export default function PlayerDetailPage() {
                   playerPosition={player['Posición'] || undefined}
                 />
               )}
-              {player.Transfermkt && (
-                <a
-                  href={player.Transfermkt}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-apple-gray-50 dark:bg-apple-gray-800/50 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700/50 transition-colors group"
-                >
-                  <span className="text-sm text-apple-gray-700 dark:text-apple-gray-300">Transfermarkt</span>
-                  <svg className="w-4 h-4 text-apple-gray-400 group-hover:text-brand-green transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                  </svg>
-                </a>
-              )}
-              {monitoringPlayer?.WyscoutVideo && (
-                <a
-                  href={monitoringPlayer.WyscoutVideo}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors group"
-                >
-                  <span className="text-sm text-red-600 dark:text-red-400">Video Wyscout</span>
-                  <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </a>
-              )}
-              <AddToReportButton
-                type="player-card"
-                title={`Ficha: ${player.Jugador}`}
-                description={`${player.Equipo} - ${player['Posición'] || player['Posicion']} - ${player.ageNum} años`}
-                captureId="player-detail-container"
-                source={source === 'interno' ? 'Scout Interno' : 'Scout Externo'}
-                variant="menu-item"
-                players={[player.Jugador]}
-              />
-              <button
-                onClick={() => setShowExportModal(true)}
-                className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-brand-green/10 hover:bg-brand-green/20 transition-colors"
-              >
-                <span className="text-sm text-brand-green font-medium">
-                  Exportar PDF
-                </span>
-                <svg className="w-4 h-4 text-brand-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </button>
             </div>
 
             {needsManualFixtures && <ManualFixturesEditor playerName={player.Jugador} />}
