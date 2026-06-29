@@ -1126,6 +1126,17 @@ export default function PlayerDetailPage() {
                 <span className="text-2xs font-medium md:hidden whitespace-nowrap">Comentarios</span>
                 <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">Comentarios</span>
               </button>
+              <div className="hidden xl:block w-full pt-1 mt-1 border-t border-apple-gray-100 dark:border-apple-gray-700">
+                <DobleGWidget player={player} apiPlayerId={apiIdParam ? Number(apiIdParam) : null} />
+                {source !== 'interno' && (
+                  <TrackingWidget
+                    playerName={player.Jugador}
+                    playerDbId={player.id || null}
+                    playerClub={player.Equipo || undefined}
+                    playerPosition={player['Posición'] || undefined}
+                  />
+                )}
+              </div>
             </div>
           </div>
         </aside>
@@ -1133,10 +1144,8 @@ export default function PlayerDetailPage() {
         {/* COLUMNA DERECHA */}
         <div className="flex-1 min-w-0 space-y-4 lg:space-y-6 order-first md:order-last">
           {/* HERO: perfil + Score GG */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4 lg:gap-6 items-start">
-          {/* Player card + Doble G / Tracking widget stacked in left column */}
-          <div className="space-y-4 lg:space-y-6">
-          <div className="card-apple" id="player-header-card">
+          <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4 lg:gap-6 items-stretch">
+          <div className="card-apple flex flex-col" id="player-header-card">
             {/* Header with gradient, pattern and logo */}
             <div className="relative h-28 overflow-hidden rounded-t-apple-xl">
               {/* Base gradient */}
@@ -1190,7 +1199,7 @@ export default function PlayerDetailPage() {
             </div>
 
             {/* Player info */}
-            <div className="p-5 pt-3">
+            <div className="p-5 pt-3 flex flex-col flex-1">
               <div className="flex items-start justify-between gap-2">
                 <div className="relative" ref={playerSelectorRef}>
                   <button
@@ -1318,7 +1327,7 @@ export default function PlayerDetailPage() {
                 )}
               </div>
 
-              <div className="mt-4 pt-4 border-t border-apple-gray-100 dark:border-apple-gray-700/50">
+              <div className="mt-auto pt-4 border-t border-apple-gray-100 dark:border-apple-gray-700/50">
                 <div className="grid grid-cols-3 gap-3 text-center">
                   <div>
                     <p className="text-lg font-bold text-apple-gray-800 dark:text-white">{player.Edad}</p>
@@ -1340,18 +1349,6 @@ export default function PlayerDetailPage() {
                 </div>
               </div>
             </div>
-          </div>
-          <div className="card-apple p-4 space-y-2">
-            <DobleGWidget player={player} apiPlayerId={apiIdParam ? Number(apiIdParam) : null} />
-            {source !== 'interno' && (
-              <TrackingWidget
-                playerName={player.Jugador}
-                playerDbId={player.id || null}
-                playerClub={player.Equipo || undefined}
-                playerPosition={player['Posición'] || undefined}
-              />
-            )}
-          </div>
           </div>
 
           {/* Score — uses Supabase when available, falls back to GG */}
@@ -1959,6 +1956,17 @@ export default function PlayerDetailPage() {
                     </div>
                   </div>
                 )}
+                <div className="xl:hidden card-apple p-4 space-y-2">
+                  <DobleGWidget player={player} apiPlayerId={apiIdParam ? Number(apiIdParam) : null} />
+                  {source !== 'interno' && (
+                    <TrackingWidget
+                      playerName={player.Jugador}
+                      playerDbId={player.id || null}
+                      playerClub={player.Equipo || undefined}
+                      playerPosition={player['Posición'] || undefined}
+                    />
+                  )}
+                </div>
               </div>
             )}
 
