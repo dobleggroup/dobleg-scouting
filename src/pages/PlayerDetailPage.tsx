@@ -1012,7 +1012,7 @@ export default function PlayerDetailPage() {
       {/* Main content layout: rail izquierdo + columna derecha */}
       <div className="flex flex-col md:flex-row gap-4 lg:gap-6">
         {/* RAIL - navegación de tabs (full-height) */}
-        <aside className="shrink-0 md:w-14 xl:w-52">
+        <aside className="shrink-0 md:w-14 xl:w-52 order-last md:order-first">
           <div className="md:sticky md:top-4 flex flex-col gap-3">
             <nav className="bg-white dark:bg-apple-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark p-1.5 xl:p-2 flex md:flex-col gap-0.5 overflow-x-auto md:overflow-visible">
               {tabs.map((tab, index) => {
@@ -1048,7 +1048,7 @@ export default function PlayerDetailPage() {
                       <span className="text-2xs font-medium md:hidden whitespace-nowrap">{tab.label}</span>
                       {/* Tooltip for medium screens without labels */}
                       <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">
-                        {tab.id}
+                        {tab.label}
                       </span>
                     </button>
                   </div>
@@ -1056,7 +1056,7 @@ export default function PlayerDetailPage() {
               })}
             </nav>
             {/* Acciones al pie del rail */}
-            <div className="bg-white dark:bg-apple-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark p-1.5 xl:p-2 flex md:flex-col gap-1 mt-auto">
+            <div className="bg-white dark:bg-apple-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark p-1.5 xl:p-2 flex md:flex-col gap-1 mt-auto overflow-x-auto">
               {player.Transfermkt && (
                 <a
                   href={player.Transfermkt}
@@ -1116,14 +1116,14 @@ export default function PlayerDetailPage() {
               </button>
               <button
                 onClick={() => setShowComments(true)}
-                className="relative flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-apple-gray-50 dark:bg-apple-gray-800/50 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700/50 transition-colors group"
+                className="relative w-full flex items-center gap-2.5 px-2.5 xl:px-3 py-2 xl:py-2.5 rounded-lg text-left transition-all duration-200 group text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/50 hover:text-apple-gray-700 dark:hover:text-apple-gray-200"
                 aria-label="Comentarios"
               >
-                <span className="hidden xl:inline text-sm text-apple-gray-700 dark:text-apple-gray-300">Comentarios</span>
-                <span className="text-2xs font-medium md:hidden whitespace-nowrap">Comentarios</span>
-                <svg className="w-4 h-4 text-apple-gray-400 group-hover:text-brand-green transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                <svg className="w-4 h-4 shrink-0 text-apple-gray-400 group-hover:text-brand-green transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
+                <span className="hidden xl:inline text-xs font-medium whitespace-nowrap">Comentarios</span>
+                <span className="text-2xs font-medium md:hidden whitespace-nowrap">Comentarios</span>
                 <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">Comentarios</span>
               </button>
             </div>
@@ -1131,7 +1131,7 @@ export default function PlayerDetailPage() {
         </aside>
 
         {/* COLUMNA DERECHA */}
-        <div className="flex-1 min-w-0 space-y-4 lg:space-y-6">
+        <div className="flex-1 min-w-0 space-y-4 lg:space-y-6 order-first md:order-last">
           {/* HERO: perfil + Score GG */}
           <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4 lg:gap-6 items-start">
           {/* Player card */}
