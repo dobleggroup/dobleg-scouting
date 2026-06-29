@@ -179,7 +179,7 @@ export default function InternalScoutingPage() {
       {/* Mobile filter button + panel */}
       <MobileFilterButton onClick={() => setShowMobileFilters(true)} activeCount={activeFiltersCount} />
       <MobileFilterPanel isOpen={showMobileFilters} onClose={() => setShowMobileFilters(false)} activeCount={activeFiltersCount}>
-        <FilterSidebar players={internal} filters={filters} onChange={setFilters} onReset={handleReset} />
+        <FilterSidebar players={internal} filters={filters} onChange={setFilters} onReset={handleReset} showVideoFreshness />
       </MobileFilterPanel>
     </div>
   )
