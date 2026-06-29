@@ -1344,6 +1344,15 @@ export default function PlayerDetailPage() {
               comparisonScore={supabaseAvgScore != null ? supabasePosAverage : positionAverageScore}
               comparisonLabel={`Promedio ${formatPosition(supabaseDetail?.player?.primary_position) || posKey || 'posición'}`}
             />
+            {supabaseDetail?.player?.position_distribution && Object.keys(supabaseDetail.player.position_distribution).length > 0 && (
+              <div className="mt-4 pt-4 border-t border-apple-gray-100 dark:border-apple-gray-700">
+                <PositionBar
+                  distribution={supabaseDetail.player.position_distribution}
+                  selectedPosition={selectedPosition ?? supabaseDetail.player.primary_position}
+                  onSelectPosition={setSelectedPosition}
+                />
+              </div>
+            )}
             {subjectiveGroups.length > 0 && (
               <div className="mt-6 pt-5 border-t border-apple-gray-100 dark:border-apple-gray-700/50">
                 <h3 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-4 text-center">
@@ -1414,6 +1423,18 @@ export default function PlayerDetailPage() {
             {/* GENERAL TAB */}
             {activeTab === 'General' && (
               <div className="space-y-6 animate-fade-in" id="tab-content-general">
+                <ScoreScoutTimeline playerId={player.id || player.Jugador} playerName={player.Jugador} />
+                <div className="card-apple p-4 space-y-2">
+                  <DobleGWidget player={player} apiPlayerId={apiIdParam ? Number(apiIdParam) : null} />
+                  {source !== 'interno' && (
+                    <TrackingWidget
+                      playerName={player.Jugador}
+                      playerDbId={player.id || null}
+                      playerClub={player.Equipo || undefined}
+                      playerPosition={player['Posición'] || undefined}
+                    />
+                  )}
+                </div>
                 {/* Key info cards — use Supabase match stats when available */}
                 {(() => {
                   const activeSeasonScore = supabaseDetail?.allSeasonScores.find(s => s.position === (selectedPosition ?? supabaseDetail?.player?.primary_position))
@@ -1926,6 +1947,7 @@ export default function PlayerDetailPage() {
             {/* FÍSICO / GPS TAB */}
             {activeTab === 'Físico' && source === 'interno' && (
               <div className="animate-fade-in" id="tab-content-gps">
+                {needsManualFixtures && <ManualFixturesEditor playerName={player.Jugador} />}
                 <GPSTab
                   gpsEntries={playerGpsData}
                   playerName={player.Jugador}
@@ -2740,38 +2762,6 @@ export default function PlayerDetailPage() {
           </div>
 
           <div className="space-y-4">
-            {/* Position Distribution — relocated temporarily, moved to final home in Task 2+ */}
-            {supabaseDetail?.player?.position_distribution && Object.keys(supabaseDetail.player.position_distribution).length > 0 && (
-              <div className="card-apple p-4">
-                <PositionBar
-                  distribution={supabaseDetail.player.position_distribution}
-                  selectedPosition={selectedPosition ?? supabaseDetail.player.primary_position}
-                  onSelectPosition={setSelectedPosition}
-                />
-              </div>
-            )}
-
-            {/* Score Scout Timeline */}
-            <ScoreScoutTimeline playerId={player.id || player.Jugador} playerName={player.Jugador} />
-
-            {/* Quick links & actions (DobleGWidget + TrackingWidget stay here until Task 3) */}
-            <div className="card-apple p-4 space-y-2">
-              <DobleGWidget
-                player={player}
-                apiPlayerId={apiIdParam ? Number(apiIdParam) : null}
-              />
-              {source !== 'interno' && (
-                <TrackingWidget
-                  playerName={player.Jugador}
-                  playerDbId={player.id || null}
-                  playerClub={player.Equipo || undefined}
-                  playerPosition={player['Posición'] || undefined}
-                />
-              )}
-            </div>
-
-            {needsManualFixtures && <ManualFixturesEditor playerName={player.Jugador} />}
-
             {/* Comments */}
             <div className="card-apple p-5">
               <PlayerComments player={player} />
