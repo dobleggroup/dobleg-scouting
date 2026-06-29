@@ -1237,8 +1237,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return out
   }, [data.playerVideos])
 
+  const contextValue = useMemo(
+    () => ({ ...data, videoFreshnessByKey }),
+    [data, videoFreshnessByKey]
+  )
+
   return (
-    <DataContext.Provider value={{ ...data, videoFreshnessByKey }}>
+    <DataContext.Provider value={contextValue}>
       {children}
     </DataContext.Provider>
   )
