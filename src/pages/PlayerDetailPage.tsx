@@ -1068,6 +1068,7 @@ export default function PlayerDetailPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>
                   <span className="hidden xl:inline text-xs font-medium whitespace-nowrap">Transfermarkt</span>
+                  <span className="text-2xs font-medium md:hidden whitespace-nowrap">Transfermarkt</span>
                   <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">
                     Transfermarkt
                   </span>
@@ -1085,6 +1086,7 @@ export default function PlayerDetailPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <span className="hidden xl:inline text-xs font-medium whitespace-nowrap">Video Wyscout</span>
+                  <span className="text-2xs font-medium md:hidden whitespace-nowrap">Video Wyscout</span>
                   <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">
                     Video Wyscout
                   </span>
@@ -1107,19 +1109,22 @@ export default function PlayerDetailPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 <span className="hidden xl:inline text-xs font-medium whitespace-nowrap">Exportar PDF</span>
+                <span className="text-2xs font-medium md:hidden whitespace-nowrap">Exportar PDF</span>
                 <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">
                   Exportar PDF
                 </span>
               </button>
               <button
                 onClick={() => setShowComments(true)}
-                className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-apple-gray-50 dark:bg-apple-gray-800/50 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700/50 transition-colors group"
+                className="relative flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-apple-gray-50 dark:bg-apple-gray-800/50 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700/50 transition-colors group"
                 aria-label="Comentarios"
               >
                 <span className="hidden xl:inline text-sm text-apple-gray-700 dark:text-apple-gray-300">Comentarios</span>
+                <span className="text-2xs font-medium md:hidden whitespace-nowrap">Comentarios</span>
                 <svg className="w-4 h-4 text-apple-gray-400 group-hover:text-brand-green transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
+                <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">Comentarios</span>
               </button>
             </div>
           </div>
