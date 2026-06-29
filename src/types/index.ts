@@ -224,6 +224,7 @@ export interface FilterState {
   minHeight: number  // cm
   maxHeight: number  // cm
   selectedMetrics: string[]  // Metrics to show as columns
+  videoFreshness: import('@/types/videos').VideoFreshness[]  // Filter by video freshness (internal only)
 }
 
 // ─── SORT STATE ──────────────────────────────────────────────────────────────

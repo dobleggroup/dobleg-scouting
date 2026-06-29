@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import type { FilterState, EnrichedPlayer } from '@/types'
+import type { VideoFreshness } from '@/types/videos'
 import { FILTER_POSITION_MAP, sortLeaguesByPriority } from '@/constants/scoring'
 import { displayPosition } from '@/types/scoring'
 import { fuzzyMatch } from '@/lib/search'
@@ -25,11 +26,19 @@ export const SELECTABLE_METRICS = [
   { key: 'Jugadas claves/90', label: 'Jugadas clave/90', short: 'JgCl' },
 ]
 
+const VIDEO_FRESHNESS_OPTIONS: { value: VideoFreshness; label: string; dot: string }[] = [
+  { value: 'green', label: 'Actualizado (<4m)', dot: 'bg-green-500' },
+  { value: 'amber', label: 'Necesita atención (4–7m)', dot: 'bg-amber-500' },
+  { value: 'red', label: 'Desactualizado (>7m)', dot: 'bg-red-500' },
+  { value: 'none', label: 'Sin video', dot: 'bg-apple-gray-300' },
+]
+
 interface FilterSidebarProps {
   players: EnrichedPlayer[]
   filters: FilterState
   onChange: (filters: FilterState) => void
   onReset: () => void
+  showVideoFreshness?: boolean
 }
 
 function Section({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
@@ -97,7 +106,7 @@ function formatMV(v: number): string {
   return v === 0 ? 'Todos' : `€${v}`
 }
 
-export default function FilterSidebar({ players, filters, onChange, onReset }: FilterSidebarProps) {
+export default function FilterSidebar({ players, filters, onChange, onReset, showVideoFreshness = false }: FilterSidebarProps) {
   const update = <K extends keyof FilterState>(key: K, value: FilterState[K]) => {
     onChange({ ...filters, [key]: value })
   }
@@ -119,6 +128,14 @@ export default function FilterSidebar({ players, filters, onChange, onReset }: F
       ? current.filter(x => x !== metricKey)
       : [...current, metricKey]
     onChange({ ...filters, selectedMetrics: next })
+  }
+
+  const toggleVideoFreshness = (value: VideoFreshness) => {
+    const current = filters.videoFreshness || []
+    const next = current.includes(value)
+      ? current.filter(x => x !== value)
+      : [...current, value]
+    onChange({ ...filters, videoFreshness: next })
   }
 
   // Derive available options from data
@@ -201,6 +218,7 @@ export default function FilterSidebar({ players, filters, onChange, onReset }: F
     filters.pie,
     filters.minHeight > 0 && filters.minHeight > minHeight,
     filters.maxHeight > 0 && filters.maxHeight < maxHeight,
+    (filters.videoFreshness || []).length > 0,
   ].filter(Boolean).length
 
   const selectedMetricsCount = (filters.selectedMetrics || []).length
@@ -247,6 +265,28 @@ export default function FilterSidebar({ players, filters, onChange, onReset }: F
               ))}
             </div>
           </Section>
+
+          {/* Frescura de video (internal only) */}
+          {showVideoFreshness && (
+            <Section title="Frescura de video" defaultOpen={false}>
+              <div className="space-y-2">
+                {VIDEO_FRESHNESS_OPTIONS.map(opt => (
+                  <label key={opt.value} className="flex items-center gap-2.5 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={(filters.videoFreshness || []).includes(opt.value)}
+                      onChange={() => toggleVideoFreshness(opt.value)}
+                      className="w-4 h-4 rounded border-apple-gray-300 dark:border-apple-gray-600 text-brand-green focus:ring-brand-green"
+                    />
+                    <span className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${opt.dot}`} />
+                    <span className="text-sm text-apple-gray-700 dark:text-apple-gray-300 truncate group-hover:text-apple-gray-900 dark:group-hover:text-white transition-colors">
+                      {opt.label}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </Section>
+          )}
 
           {/* Liga */}
           {leagues.length > 0 && (
