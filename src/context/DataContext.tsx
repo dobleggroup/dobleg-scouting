@@ -1,9 +1,11 @@
-import { createContext, useContext, useEffect, useRef, useCallback, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useCallback, useMemo, useState, type ReactNode } from 'react'
 import { loadAllData, type MasDatosEntry, type SeguimientoMetricsPlayer } from '@/services/csvService'
 import { computeGGScores, normalizeName, parseMarketValue, formatMarketValue, parseContractDate, monthsBetween, getNumericValue } from '@/utils/scoring'
 import { POSITION_MAP, SCORING_CONFIG, FILTER_POSITION_MAP } from '@/constants/scoring'
 import { loadAgencyPlayers } from '@/services/agencyPlayersService'
 import { getAgencyPlayersList, type AgencyPlayer } from '@/constants/agencyPlayers'
+import { fetchAllPlayerVideos, computePlayerFreshness } from '@/services/playerVideosService'
+import type { PlayerVideo, VideoFreshness } from '@/types/videos'
 import { nameKey } from '@/utils/nameUtils'
 import type { AppData, EnrichedPlayer, EvolutionEntry, TransfermarktData, MonitoringPlayer, MarketValueHistoryEntry, GPSEntry } from '@/types'
 
@@ -1077,6 +1079,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     positionAverages: {},
     agencyPlayers: [],
     refreshAgencyPlayers: async () => {},
+    playerVideos: [],
+    refreshPlayerVideos: async () => {},
+    videoFreshnessByKey: new Map(),
     loading: true,
     error: null,
     lastUpdated: null,
@@ -1096,6 +1101,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }))
   }, [])
 
+  const refreshPlayerVideos = useCallback(async () => {
+    const videos = await fetchAllPlayerVideos()
+    setData(prev => ({ ...prev, playerVideos: videos }))
+  }, [])
+
   useEffect(() => {
     let cancelled = false
 
@@ -1105,6 +1115,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
         // Cargar overlay Doble G (altas/bajas) antes de derivar internal
         await loadAgencyPlayers()
+        if (cancelled) return
+
+        // Cargar videos de jugadores
+        const playerVideos = await fetchAllPlayerVideos()
         if (cancelled) return
 
         // Build lookup maps
@@ -1190,6 +1204,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
           positionAverages,
           agencyPlayers,
           refreshAgencyPlayers,
+          playerVideos,
+          refreshPlayerVideos,
+          videoFreshnessByKey: new Map(),
           loading: false,
           error: null,
           lastUpdated: new Date(),
@@ -1208,8 +1225,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true }
   }, [])
 
+  const videoFreshnessByKey = useMemo(() => {
+    const byKey = new Map<string, PlayerVideo[]>()
+    for (const v of data.playerVideos) {
+      const arr = byKey.get(v.player_key) ?? []
+      arr.push(v)
+      byKey.set(v.player_key, arr)
+    }
+    const out = new Map<string, VideoFreshness>()
+    for (const [key, vids] of byKey) out.set(key, computePlayerFreshness(vids))
+    return out
+  }, [data.playerVideos])
+
   return (
-    <DataContext.Provider value={data}>
+    <DataContext.Provider value={{ ...data, videoFreshnessByKey }}>
       {children}
     </DataContext.Provider>
   )

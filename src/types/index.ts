@@ -247,6 +247,9 @@ export interface AppData {
   positionAverages: Record<string, number>
   agencyPlayers: import('@/constants/agencyPlayers').AgencyPlayer[]
   refreshAgencyPlayers: () => Promise<void>
+  playerVideos: import('@/types/videos').PlayerVideo[]
+  refreshPlayerVideos: () => Promise<void>
+  videoFreshnessByKey: Map<string, import('@/types/videos').VideoFreshness>
   loading: boolean
   error: string | null
   lastUpdated: Date | null
