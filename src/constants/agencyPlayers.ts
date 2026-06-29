@@ -49,6 +49,22 @@ export const BASE_AGENCY_PLAYERS: AgencyPlayer[] = [
   { shortName: 'T. Valdecantos Valle', fullName: 'Tomás Valdecantos', image: 'https://encrypted-tbn1.gstatic.com/images?q=tbn:ANd9GcR40YiqK6AdAQ-O3cU6kajD5P8SZGbDdGbF7kU1f7KuCUzxOw', contractEnd: null, marketValue: null, team: 'Al Ain', apiTeamId: 2865, isReserve: true },
 ]
 
+// ─── Correcciones puntuales (override sobre el CSV "interno") ───────────────────
+// Cuando un jugador Doble G está en el Google Sheet "interno" con un dato viejo
+// (p. ej. un traspaso reciente), el CSV gana sobre la lista de agencia. Estas
+// correcciones pisan ese dato por código, solo para los jugadores listados.
+// Se aplican por clave inicial:apellido (tolerante al formato del nombre).
+export interface AgencyOverride {
+  name: string          // cualquier formato; se matchea por inicial:apellido
+  team?: string
+  contractEnd?: string  // 'DD/MM/YYYY'
+}
+
+export const AGENCY_OVERRIDES: AgencyOverride[] = [
+  { name: 'Juan Farías', team: 'Unión Magdalena' },
+  { name: 'Alexis Steimbach', contractEnd: '31/12/2028' },
+]
+
 // ─── Runtime list (base + overlay de Supabase) ─────────────────────────────────
 // El cache lo setea agencyPlayersService.loadAgencyPlayers() tras fusionar.
 let _runtime: AgencyPlayer[] = BASE_AGENCY_PLAYERS

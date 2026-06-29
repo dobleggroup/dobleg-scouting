@@ -3,7 +3,7 @@ import { loadAllData, type MasDatosEntry, type SeguimientoMetricsPlayer } from '
 import { computeGGScores, normalizeName, parseMarketValue, formatMarketValue, parseContractDate, monthsBetween, getNumericValue } from '@/utils/scoring'
 import { POSITION_MAP, SCORING_CONFIG, FILTER_POSITION_MAP } from '@/constants/scoring'
 import { loadAgencyPlayers } from '@/services/agencyPlayersService'
-import { getAgencyPlayersList, type AgencyPlayer } from '@/constants/agencyPlayers'
+import { getAgencyPlayersList, AGENCY_OVERRIDES, type AgencyPlayer } from '@/constants/agencyPlayers'
 import { fetchAllPlayerVideos, computePlayerFreshness } from '@/services/playerVideosService'
 import type { PlayerVideo, VideoFreshness } from '@/types/videos'
 import { nameKey } from '@/utils/nameUtils'
@@ -82,7 +82,29 @@ export function mergeAgencyIntoInternal(
     present.add(exact)
     present.add(keyFull)
   }
-  return [...baseInternal, ...additions]
+  return applyAgencyOverrides([...baseInternal, ...additions])
+}
+
+/** Aplica AGENCY_OVERRIDES (correcciones puntuales) pisando el dato del CSV. */
+function applyAgencyOverrides(players: EnrichedPlayer[]): EnrichedPlayer[] {
+  if (AGENCY_OVERRIDES.length === 0) return players
+  const byKey = new Map(AGENCY_OVERRIDES.map(o => [identityKey(o.name), o]))
+  return players.map(p => {
+    const o = byKey.get(identityKey(p.Jugador))
+    if (!o) return p
+    const patched = { ...p }
+    if (o.team) patched.Equipo = o.team
+    if (o.contractEnd) {
+      patched['Vencimiento contrato'] = o.contractEnd
+      const d = parseContractDate(o.contractEnd)
+      if (d) {
+        const mr = monthsBetween(new Date(), d)
+        patched.monthsRemaining = mr
+        patched.contractStatus = mr < 7 ? 'critical' : mr < 13 ? 'warning' : 'ok'
+      }
+    }
+    return patched
+  })
 }
 
 function buildTransfermarktMap(tmData: TransfermarktData[]): Map<string, TransfermarktData> {
