@@ -1134,7 +1134,8 @@ export default function PlayerDetailPage() {
         <div className="flex-1 min-w-0 space-y-4 lg:space-y-6 order-first md:order-last">
           {/* HERO: perfil + Score GG */}
           <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4 lg:gap-6 items-start">
-          {/* Player card */}
+          {/* Player card + Doble G / Tracking widget stacked in left column */}
+          <div className="space-y-4 lg:space-y-6">
           <div className="card-apple" id="player-header-card">
             {/* Header with gradient, pattern and logo */}
             <div className="relative h-28 overflow-hidden rounded-t-apple-xl">
@@ -1340,6 +1341,18 @@ export default function PlayerDetailPage() {
               </div>
             </div>
           </div>
+          <div className="card-apple p-4 space-y-2">
+            <DobleGWidget player={player} apiPlayerId={apiIdParam ? Number(apiIdParam) : null} />
+            {source !== 'interno' && (
+              <TrackingWidget
+                playerName={player.Jugador}
+                playerDbId={player.id || null}
+                playerClub={player.Equipo || undefined}
+                playerPosition={player['Posición'] || undefined}
+              />
+            )}
+          </div>
+          </div>
 
           {/* Score — uses Supabase when available, falls back to GG */}
           <div className="card-apple p-6" id="player-score-card">
@@ -1440,17 +1453,6 @@ export default function PlayerDetailPage() {
             {activeTab === 'General' && (
               <div className="space-y-6 animate-fade-in" id="tab-content-general">
                 <ScoreScoutTimeline playerId={player.id || player.Jugador} playerName={player.Jugador} />
-                <div className="card-apple p-4 space-y-2">
-                  <DobleGWidget player={player} apiPlayerId={apiIdParam ? Number(apiIdParam) : null} />
-                  {source !== 'interno' && (
-                    <TrackingWidget
-                      playerName={player.Jugador}
-                      playerDbId={player.id || null}
-                      playerClub={player.Equipo || undefined}
-                      playerPosition={player['Posición'] || undefined}
-                    />
-                  )}
-                </div>
                 {/* Key info cards — use Supabase match stats when available */}
                 {(() => {
                   const activeSeasonScore = supabaseDetail?.allSeasonScores.find(s => s.position === (selectedPosition ?? supabaseDetail?.player?.primary_position))
