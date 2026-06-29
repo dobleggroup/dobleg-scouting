@@ -1144,8 +1144,9 @@ export default function PlayerDetailPage() {
         {/* COLUMNA DERECHA */}
         <div className="flex-1 min-w-0 space-y-4 lg:space-y-6 order-first md:order-last">
           {/* HERO: perfil + Score GG */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4 lg:gap-6 items-stretch">
-          <div className="card-apple flex flex-col" id="player-header-card">
+          <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4 lg:gap-6 items-start">
+          <div className="space-y-4 lg:space-y-6">
+          <div className="card-apple" id="player-header-card">
             {/* Header with gradient, pattern and logo */}
             <div className="relative h-28 overflow-hidden rounded-t-apple-xl">
               {/* Base gradient */}
@@ -1199,7 +1200,7 @@ export default function PlayerDetailPage() {
             </div>
 
             {/* Player info */}
-            <div className="p-5 pt-3 flex flex-col flex-1">
+            <div className="p-5 pt-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="relative" ref={playerSelectorRef}>
                   <button
@@ -1327,7 +1328,7 @@ export default function PlayerDetailPage() {
                 )}
               </div>
 
-              <div className="mt-auto pt-4 border-t border-apple-gray-100 dark:border-apple-gray-700/50">
+              <div className="mt-4 pt-4 border-t border-apple-gray-100 dark:border-apple-gray-700/50">
                 <div className="grid grid-cols-3 gap-3 text-center">
                   <div>
                     <p className="text-lg font-bold text-apple-gray-800 dark:text-white">{player.Edad}</p>
@@ -1350,6 +1351,16 @@ export default function PlayerDetailPage() {
               </div>
             </div>
           </div>
+          {supabaseDetail?.player?.position_distribution && Object.keys(supabaseDetail.player.position_distribution).length > 0 && (
+            <div className="card-apple p-4">
+              <PositionBar
+                distribution={supabaseDetail.player.position_distribution}
+                selectedPosition={selectedPosition ?? supabaseDetail.player.primary_position}
+                onSelectPosition={setSelectedPosition}
+              />
+            </div>
+          )}
+          </div>{/* end left column wrapper */}
 
           {/* Score — uses Supabase when available, falls back to GG */}
           <div className="card-apple p-6" id="player-score-card">
@@ -1370,15 +1381,53 @@ export default function PlayerDetailPage() {
               comparisonScore={supabaseAvgScore != null ? supabasePosAverage : positionAverageScore}
               comparisonLabel={`Promedio ${formatPosition(supabaseDetail?.player?.primary_position) || posKey || 'posición'}`}
             />
-            {supabaseDetail?.player?.position_distribution && Object.keys(supabaseDetail.player.position_distribution).length > 0 && (
-              <div className="mt-4 pt-4 border-t border-apple-gray-100 dark:border-apple-gray-700">
-                <PositionBar
-                  distribution={supabaseDetail.player.position_distribution}
-                  selectedPosition={selectedPosition ?? supabaseDetail.player.primary_position}
-                  onSelectPosition={setSelectedPosition}
-                />
-              </div>
-            )}
+            {(() => {
+              const activePos = selectedPosition ?? supabaseDetail?.player?.primary_position
+              const activeSeasonScore = supabaseDetail?.allSeasonScores?.find(s => s.position === activePos)
+              if (!supabaseDetail || !activeSeasonScore) return null
+              const scores = (supabaseDetail.allSeasonScores ?? [])
+                .filter(s => s.avg_score != null)
+                .sort((a, b) => b.matches_played - a.matches_played)
+              return (
+                <div className="mt-4 pt-4 border-t border-apple-gray-100 dark:border-apple-gray-700 space-y-3">
+                  <h3 className="text-2xs font-semibold text-apple-gray-400 dark:text-apple-gray-500 uppercase tracking-wider">Sobre el Score GG</h3>
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    <div>
+                      <p className="text-sm font-bold text-apple-gray-800 dark:text-white">{activeSeasonScore.avg_rating != null ? activeSeasonScore.avg_rating.toFixed(2) : '—'}</p>
+                      <p className="text-2xs text-apple-gray-400">Rating</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-apple-gray-800 dark:text-white">{activeSeasonScore.matches_played}</p>
+                      <p className="text-2xs text-apple-gray-400">PJ</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-apple-gray-800 dark:text-white">{activeSeasonScore.total_goals}</p>
+                      <p className="text-2xs text-apple-gray-400">Goles</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-apple-gray-800 dark:text-white">{activeSeasonScore.total_assists}</p>
+                      <p className="text-2xs text-apple-gray-400">Asist</p>
+                    </div>
+                  </div>
+                  {activeSeasonScore.percentile != null && (
+                    <p className="text-2xs text-center text-apple-gray-500 dark:text-apple-gray-400">
+                      Top {Math.round(100 - activeSeasonScore.percentile)}% en su posición
+                    </p>
+                  )}
+                  {scores.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-2xs font-medium text-apple-gray-400 uppercase tracking-wider">Score por posición</p>
+                      {scores.map(s => (
+                        <div key={s.position} className={`flex items-center justify-between text-xs px-2.5 py-1.5 rounded-lg ${s.position === activePos ? 'bg-brand-green/10 dark:bg-brand-green/15' : 'bg-apple-gray-50 dark:bg-apple-gray-800/50'}`}>
+                          <span className="font-semibold text-apple-gray-700 dark:text-apple-gray-300">{s.position}</span>
+                          <span className="text-apple-gray-500 dark:text-apple-gray-400">{s.avg_score != null ? s.avg_score.toFixed(1) : '—'} · {s.matches_played} PJ</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
             {subjectiveGroups.length > 0 && (
               <div className="mt-6 pt-5 border-t border-apple-gray-100 dark:border-apple-gray-700/50">
                 <h3 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-4 text-center">
