@@ -1008,10 +1008,59 @@ export default function PlayerDetailPage() {
         <span className="text-apple-gray-800 dark:text-white font-medium">{player.Jugador}</span>
       </nav>
 
-      {/* Main content grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left sidebar - Player info & Score */}
-        <div className="lg:col-span-4 space-y-5">
+      {/* Main content layout: rail izquierdo + columna derecha */}
+      <div className="flex flex-col md:flex-row gap-4 lg:gap-6">
+        {/* RAIL - navegación de tabs (full-height) */}
+        <aside className="shrink-0 md:w-14 xl:w-52">
+          <div className="md:sticky md:top-4 flex flex-col gap-3">
+            <nav className="bg-white dark:bg-apple-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark p-1.5 xl:p-2 flex md:flex-col gap-0.5 overflow-x-auto md:overflow-visible">
+              {tabs.map((tab, index) => {
+                const isActive = activeTab === tab.id
+                const showSeparator = tab.id === 'Salud'
+
+                return (
+                  <div key={tab.id} className="flex-shrink-0">
+                    {showSeparator && (
+                      <div className="hidden md:block my-2 mx-2 border-t border-apple-gray-100 dark:border-apple-gray-700" />
+                    )}
+                    <button
+                      data-tab={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`relative w-full flex items-center gap-2.5 px-2.5 xl:px-3 py-2 xl:py-2.5 rounded-lg text-left transition-all duration-200 group ${
+                        isActive
+                          ? 'bg-brand-green text-white shadow-sm'
+                          : 'text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/50 hover:text-apple-gray-700 dark:hover:text-apple-gray-200'
+                      }`}
+                    >
+                      <svg
+                        className={`w-4 h-4 shrink-0 transition-colors ${
+                          isActive ? 'text-white' : 'text-apple-gray-400 group-hover:text-apple-gray-600 dark:group-hover:text-apple-gray-300'
+                        }`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={1.5}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d={tab.icon} />
+                      </svg>
+                      <span className="text-xs font-medium hidden xl:block whitespace-nowrap">{tab.label}</span>
+                      <span className="text-2xs font-medium md:hidden whitespace-nowrap">{tab.label}</span>
+                      {/* Tooltip for medium screens without labels */}
+                      <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">
+                        {tab.id}
+                      </span>
+                    </button>
+                  </div>
+                )
+              })}
+            </nav>
+          </div>
+        </aside>
+
+        {/* COLUMNA DERECHA */}
+        <div className="flex-1 min-w-0 space-y-4 lg:space-y-6">
+          {/* HERO: perfil + Score GG */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4 lg:gap-6 items-start">
           {/* Player card */}
           <div className="card-apple" id="player-header-card">
             {/* Header with gradient, pattern and logo */}
@@ -1301,144 +1350,9 @@ export default function PlayerDetailPage() {
               </div>
             )}
           </div>
+          </div>{/* end hero grid */}
 
-          {/* Position Distribution */}
-          {supabaseDetail?.player?.position_distribution && Object.keys(supabaseDetail.player.position_distribution).length > 0 && (
-            <div className="card-apple p-4">
-              <PositionBar
-                distribution={supabaseDetail.player.position_distribution}
-                selectedPosition={selectedPosition ?? supabaseDetail.player.primary_position}
-                onSelectPosition={setSelectedPosition}
-              />
-            </div>
-          )}
-
-          {/* Score Scout Timeline - self-contained, renders its own card if evaluations exist */}
-          <ScoreScoutTimeline playerId={player.id || player.Jugador} playerName={player.Jugador} />
-
-          {/* Quick links & actions */}
-          <div className="card-apple p-4 space-y-2">
-            <DobleGWidget
-              player={player}
-              apiPlayerId={apiIdParam ? Number(apiIdParam) : null}
-            />
-            {source !== 'interno' && (
-              <TrackingWidget
-                playerName={player.Jugador}
-                playerDbId={player.id || null}
-                playerClub={player.Equipo || undefined}
-                playerPosition={player['Posición'] || undefined}
-              />
-            )}
-            {player.Transfermkt && (
-              <a
-                href={player.Transfermkt}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-apple-gray-50 dark:bg-apple-gray-800/50 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700/50 transition-colors group"
-              >
-                <span className="text-sm text-apple-gray-700 dark:text-apple-gray-300">Transfermarkt</span>
-                <svg className="w-4 h-4 text-apple-gray-400 group-hover:text-brand-green transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-              </a>
-            )}
-            {monitoringPlayer?.WyscoutVideo && (
-              <a
-                href={monitoringPlayer.WyscoutVideo}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors group"
-              >
-                <span className="text-sm text-red-600 dark:text-red-400">Video Wyscout</span>
-                <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </a>
-            )}
-            <AddToReportButton
-              type="player-card"
-              title={`Ficha: ${player.Jugador}`}
-              description={`${player.Equipo} - ${player['Posición'] || player['Posicion']} - ${player.ageNum} años`}
-              captureId="player-detail-container"
-              source={source === 'interno' ? 'Scout Interno' : 'Scout Externo'}
-              variant="menu-item"
-              players={[player.Jugador]}
-            />
-            <button
-              onClick={() => setShowExportModal(true)}
-              className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-brand-green/10 hover:bg-brand-green/20 transition-colors"
-            >
-              <span className="text-sm text-brand-green font-medium">
-                Exportar PDF
-              </span>
-              <svg className="w-4 h-4 text-brand-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </button>
-          </div>
-
-          {needsManualFixtures && <ManualFixturesEditor playerName={player.Jugador} />}
-
-          {/* Comments - on sidebar */}
-          <div className="card-apple p-5">
-            <PlayerComments player={player} />
-          </div>
-        </div>
-
-        {/* Main content area */}
-        <div className="lg:col-span-8">
-          <div className="flex flex-col md:flex-row gap-4">
-            {/* Horizontal tab bar on mobile, vertical sidebar on md+ */}
-            <div className="shrink-0 md:w-12 xl:w-auto">
-              <div className="md:sticky md:top-4 bg-white dark:bg-apple-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark p-1.5 xl:p-2 overflow-x-auto">
-                <nav className="flex md:flex-col gap-0.5 md:space-y-0.5">
-                  {tabs.map((tab, index) => {
-                    const isActive = activeTab === tab.id
-                    const showSeparator = tab.id === 'Salud'
-
-                    return (
-                      <div key={tab.id} className="flex-shrink-0">
-                        {showSeparator && (
-                          <div className="hidden md:block my-2 mx-2 border-t border-apple-gray-100 dark:border-apple-gray-700" />
-                        )}
-                        <button
-                          data-tab={tab.id}
-                          onClick={() => setActiveTab(tab.id)}
-                          className={`relative w-full flex items-center gap-2.5 px-2.5 xl:px-3 py-2 xl:py-2.5 rounded-lg text-left transition-all duration-200 group ${
-                            isActive
-                              ? 'bg-brand-green text-white shadow-sm'
-                              : 'text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/50 hover:text-apple-gray-700 dark:hover:text-apple-gray-200'
-                          }`}
-                        >
-                          <svg
-                            className={`w-4 h-4 shrink-0 transition-colors ${
-                              isActive ? 'text-white' : 'text-apple-gray-400 group-hover:text-apple-gray-600 dark:group-hover:text-apple-gray-300'
-                            }`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={1.5}
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" d={tab.icon} />
-                          </svg>
-                          <span className="text-xs font-medium hidden xl:block whitespace-nowrap">{tab.label}</span>
-                          <span className="text-2xs font-medium md:hidden whitespace-nowrap">{tab.label}</span>
-                          {/* Tooltip for medium screens without labels */}
-                          <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">
-                            {tab.id}
-                          </span>
-                        </button>
-                      </div>
-                    )
-                  })}
-                </nav>
-              </div>
-            </div>
-
-            {/* Tab content */}
-            <div className="flex-1 card-apple p-6 min-w-0" id="player-tab-content">
+          <div className="flex-1 card-apple p-6 min-w-0" id="player-tab-content">
 
             {/* GENERAL TAB */}
             {activeTab === 'General' && (
@@ -2766,10 +2680,95 @@ export default function PlayerDetailPage() {
                 </div>
               </div>
             )}
+          </div>
+
+          <div className="space-y-4">
+            {/* Position Distribution — relocated temporarily, moved to final home in Task 2+ */}
+            {supabaseDetail?.player?.position_distribution && Object.keys(supabaseDetail.player.position_distribution).length > 0 && (
+              <div className="card-apple p-4">
+                <PositionBar
+                  distribution={supabaseDetail.player.position_distribution}
+                  selectedPosition={selectedPosition ?? supabaseDetail.player.primary_position}
+                  onSelectPosition={setSelectedPosition}
+                />
+              </div>
+            )}
+
+            {/* Score Scout Timeline */}
+            <ScoreScoutTimeline playerId={player.id || player.Jugador} playerName={player.Jugador} />
+
+            {/* Quick links & actions */}
+            <div className="card-apple p-4 space-y-2">
+              <DobleGWidget
+                player={player}
+                apiPlayerId={apiIdParam ? Number(apiIdParam) : null}
+              />
+              {source !== 'interno' && (
+                <TrackingWidget
+                  playerName={player.Jugador}
+                  playerDbId={player.id || null}
+                  playerClub={player.Equipo || undefined}
+                  playerPosition={player['Posición'] || undefined}
+                />
+              )}
+              {player.Transfermkt && (
+                <a
+                  href={player.Transfermkt}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-apple-gray-50 dark:bg-apple-gray-800/50 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700/50 transition-colors group"
+                >
+                  <span className="text-sm text-apple-gray-700 dark:text-apple-gray-300">Transfermarkt</span>
+                  <svg className="w-4 h-4 text-apple-gray-400 group-hover:text-brand-green transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              )}
+              {monitoringPlayer?.WyscoutVideo && (
+                <a
+                  href={monitoringPlayer.WyscoutVideo}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors group"
+                >
+                  <span className="text-sm text-red-600 dark:text-red-400">Video Wyscout</span>
+                  <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </a>
+              )}
+              <AddToReportButton
+                type="player-card"
+                title={`Ficha: ${player.Jugador}`}
+                description={`${player.Equipo} - ${player['Posición'] || player['Posicion']} - ${player.ageNum} años`}
+                captureId="player-detail-container"
+                source={source === 'interno' ? 'Scout Interno' : 'Scout Externo'}
+                variant="menu-item"
+                players={[player.Jugador]}
+              />
+              <button
+                onClick={() => setShowExportModal(true)}
+                className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-brand-green/10 hover:bg-brand-green/20 transition-colors"
+              >
+                <span className="text-sm text-brand-green font-medium">
+                  Exportar PDF
+                </span>
+                <svg className="w-4 h-4 text-brand-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </button>
+            </div>
+
+            {needsManualFixtures && <ManualFixturesEditor playerName={player.Jugador} />}
+
+            {/* Comments */}
+            <div className="card-apple p-5">
+              <PlayerComments player={player} />
             </div>
           </div>
-        </div>
-      </div>
+        </div>{/* end right column */}
+      </div>{/* end outer flex */}
 
       {/* Export PDF Modal */}
       <ExportPDFModal
