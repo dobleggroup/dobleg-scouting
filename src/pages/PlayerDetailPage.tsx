@@ -596,6 +596,7 @@ export default function PlayerDetailPage() {
   const [customRadarMetrics, setCustomRadarMetrics] = useState<string[]>([])
   const [showMetricSelector, setShowMetricSelector] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
+  const [showComments, setShowComments] = useState(false)
   const [showPlayerSelector, setShowPlayerSelector] = useState(false)
   const [playerSearchQuery, setPlayerSearchQuery] = useState('')
   const contentRef = useRef<HTMLDivElement>(null)
@@ -1109,6 +1110,16 @@ export default function PlayerDetailPage() {
                 <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">
                   Exportar PDF
                 </span>
+              </button>
+              <button
+                onClick={() => setShowComments(true)}
+                className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-apple-gray-50 dark:bg-apple-gray-800/50 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700/50 transition-colors group"
+                aria-label="Comentarios"
+              >
+                <span className="hidden xl:inline text-sm text-apple-gray-700 dark:text-apple-gray-300">Comentarios</span>
+                <svg className="w-4 h-4 text-apple-gray-400 group-hover:text-brand-green transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
               </button>
             </div>
           </div>
@@ -2761,12 +2772,6 @@ export default function PlayerDetailPage() {
             )}
           </div>
 
-          <div className="space-y-4">
-            {/* Comments */}
-            <div className="card-apple p-5">
-              <PlayerComments player={player} />
-            </div>
-          </div>
         </div>{/* end right column */}
       </div>{/* end outer flex */}
 
@@ -2780,6 +2785,24 @@ export default function PlayerDetailPage() {
         availableEvolutionCharts={[]}
         selectedEvolutionCharts={[]}
       />
+
+      {/* Comments slide-over */}
+      {showComments && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowComments(false)} />
+          <div className="relative w-full max-w-md h-full bg-white dark:bg-apple-gray-900 shadow-2xl overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-apple-gray-100 dark:border-apple-gray-700">
+              <h3 className="font-semibold text-apple-gray-800 dark:text-white">Comentarios</h3>
+              <button onClick={() => setShowComments(false)} className="p-1.5 rounded-lg hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700" aria-label="Cerrar">
+                <svg className="w-5 h-5 text-apple-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-5">
+              <PlayerComments player={player} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
