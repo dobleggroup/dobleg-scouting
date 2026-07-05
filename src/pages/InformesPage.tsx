@@ -1,33 +1,9 @@
 import { useState, useMemo } from 'react'
 import Stepper from '@/features/informes/components/Stepper'
+import Step1Archivo from '@/features/informes/components/Step1Archivo'
 import type { ParsedFile, Informe, MetricStat } from '@/features/informes/types'
 import { buildColumnMap } from '@/features/informes/metricRegistry'
 import { buildMatrix, computeStats } from '@/features/informes/computeStats'
-
-const EMPTY_INFORME: Informe = {
-  id: '',
-  createdAt: '',
-  updatedAt: '',
-  contextoComparacion: '',
-  fotoDataUrl: null,
-  protagonistIndex: 0,
-  content: {
-    nombre: '', club: '', posicion: '', rol: '',
-    edad: '', nacionalidad: '', liga: '', contrato: '', valorMercado: '',
-    hideMainStats: false,
-    rating: '', pj: '', minutos: '', goles: '', asistencias: '',
-    lecturaAutor: '', lecturaTexto: '',
-    videoUrl: '', transfermarktUrl: '', representante: '',
-    ultimos5: [],
-    hideComparables: false,
-    comparables: [],
-    comparaciones: '',
-  },
-  charts: { radar: [], bar: [], numbers: [], scatters: [] },
-  headers: [],
-  rows: [],
-  columnMap: {},
-}
 
 export default function InformesPage() {
   const [step, setStep] = useState(0)
@@ -60,7 +36,15 @@ export default function InformesPage() {
       </div>
       <Stepper step={step} setStep={setStep} />
       {/* Pasos: se completan en Tasks 8-11 */}
-      {step === 0 && <div>Paso 1 (Task 8)</div>}
+      {step === 0 && (
+        <Step1Archivo
+          parsed={parsed}
+          informe={informe}
+          onParsed={(p, i) => { setParsed(p); setInforme(i) }}
+          onChange={setInforme}
+          onNext={() => setStep(1)}
+        />
+      )}
       {step === 1 && <div>Paso 2 (Task 9)</div>}
       {step === 2 && <div>Paso 3 (Task 10)</div>}
       {step === 3 && <div>Paso 4 (Task 11)</div>}
