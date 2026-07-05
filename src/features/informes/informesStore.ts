@@ -6,7 +6,14 @@ function readAll(): Record<string, Informe> {
   try { return JSON.parse(localStorage.getItem(KEY) || '{}') } catch { return {} }
 }
 function writeAll(all: Record<string, Informe>): void {
-  localStorage.setItem(KEY, JSON.stringify(all))
+  try {
+    localStorage.setItem(KEY, JSON.stringify(all))
+  } catch (e) {
+    if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+      throw new Error('No se pudo guardar: almacenamiento lleno (probá con una foto más liviana).')
+    }
+    throw e
+  }
 }
 
 export function saveInforme(informe: Informe): void {
