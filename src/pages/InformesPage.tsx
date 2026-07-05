@@ -3,6 +3,7 @@ import Stepper from '@/features/informes/components/Stepper'
 import Step1Archivo from '@/features/informes/components/Step1Archivo'
 import Step2Metricas from '@/features/informes/components/Step2Metricas'
 import Step3Contenido from '@/features/informes/components/Step3Contenido'
+import Step4Preview from '@/features/informes/components/Step4Preview'
 import type { ParsedFile, Informe, MetricStat } from '@/features/informes/types'
 import { buildColumnMap } from '@/features/informes/metricRegistry'
 import { buildMatrix, computeStats } from '@/features/informes/computeStats'
@@ -27,6 +28,9 @@ export default function InformesPage() {
     if (!parsed || !derived || !informe) return []
     return computeStats(derived.defs, derived.matrix, informe.protagonistIndex)
   }, [parsed, derived, informe])
+
+  const handleSave = () => { console.log('save', informe) }
+  const handleExport = () => { console.log('export') }
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
@@ -64,7 +68,17 @@ export default function InformesPage() {
           onNext={() => setStep(3)}
         />
       )}
-      {step === 3 && <div>Paso 4 (Task 11)</div>}
+      {step === 3 && informe && derived && (
+        <Step4Preview
+          informe={informe}
+          stats={stats}
+          matrix={derived.matrix}
+          defs={derived.defs}
+          onBack={() => setStep(2)}
+          onSave={handleSave}
+          onExport={handleExport}
+        />
+      )}
     </div>
   )
 }
