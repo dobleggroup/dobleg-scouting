@@ -30,7 +30,7 @@ export interface MetricStat {
 }
 
 // Asignaciones de métricas a gráficos
-export interface ScatterAssignment { xKey: string; yKey: string; caption: string }
+export interface ScatterAssignment { xKey: string; yKey: string; caption: string; xMin?: number; yMin?: number }
 export interface ChartAssignments {
   radar: string[]                     // metric keys
   bar: string[]
@@ -62,6 +62,7 @@ export interface Informe {
   contextoComparacion: string
   fotoDataUrl: string | null
   protagonistIndex: number            // índice de la fila protagonista en rows
+  comparePlayerIndices?: number[]     // índices de jugadores a comparar en el radar (máx 2)
   content: InformeContent
   charts: ChartAssignments
   headers: string[]

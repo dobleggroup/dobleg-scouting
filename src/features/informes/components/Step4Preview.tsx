@@ -229,7 +229,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
         <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mb-4">
           {informe.contextoComparacion || 'Sin contexto de comparación definido'}
         </p>
-        <InformeRadar stats={stats} keys={informe.charts.radar} />
+        <InformeRadar informe={informe} stats={stats} matrix={matrix} defs={defs} />
         {informe.charts.numbers.length > 0 && (
           <div className="mt-6">
             <h4 className="text-xs font-bold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400 mb-3">
@@ -253,7 +253,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
         <h3 className="text-xs font-bold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400 mb-4">
           Barras comparativas
         </h3>
-        <InformeBars stats={stats} keys={informe.charts.bar} contexto={informe.contextoComparacion} />
+        <InformeBars stats={stats} keys={informe.charts.bar} />
       </div>
     )
   }
