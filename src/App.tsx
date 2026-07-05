@@ -24,6 +24,7 @@ const EvaluationsAdminPage = lazy(() => import('@/pages/EvaluationsAdminPage'))
 const RadarAnalysisPage = lazy(() => import('@/pages/RadarAnalysisPage'))
 const ScoutTrackingGGPage = lazy(() => import('@/pages/ScoutTrackingGGPage'))
 const BusquedaPage = lazy(() => import('@/pages/BusquedaPage'))
+const InformesPage = lazy(() => import('@/pages/InformesPage'))
 
 export default function App() {
   return (
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="/trabajos-scouting" element={<ScoutingWorksPage />} />
             <Route path="/seguimiento-gg" element={<ScoutTrackingGGPage />} />
             <Route path="/analisis-completo" element={<BusquedaPage />} />
+            <Route path="/informes" element={<InformesPage />} />
           </Route>
         </Routes>
         <Suspense fallback={null}>

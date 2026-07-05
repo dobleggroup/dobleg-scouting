@@ -50,6 +50,7 @@ const talentGroup: NavGroup = {
   label: 'Búsqueda de Talento',
   icon: 'search',
   items: [
+    { to: '/informes', label: 'Informes', icon: 'clipboard' },
     { to: '/analisis-completo', label: 'Análisis Completo', icon: 'search' },
     { to: '/oportunidades', label: 'Oportunidades', icon: 'star' },
     { to: '/similares', label: 'Similares', icon: 'search' },
