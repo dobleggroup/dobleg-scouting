@@ -34,4 +34,33 @@ describe('buildColumnMap', () => {
     expect(rawDef?.higherIsBetter).toBe(true)
     expect(rawDef?.label).toBe('Metrica Nueva')
   })
+
+  it('dedupe: dos headers al mismo metric key -> un solo def', () => {
+    const { columnMap, defs } = buildColumnMap(['Goles', 'Goals'], [{ Goles: 2, Goals: 3 }])
+    expect(columnMap['Goles']).toBe('goals')
+    expect(columnMap['Goals']).toBe('goals')
+    expect(defs.filter(d => d.key === 'goals')).toHaveLength(1)
+  })
+
+  it('excluye columnas de texto cuando hay filas', () => {
+    const { columnMap, defs } = buildColumnMap(
+      ['Comentarios'],
+      [{ Comentarios: 'buen partido' }, { Comentarios: 'flojo' }],
+    )
+    expect(columnMap['Comentarios']).toBeUndefined()
+    expect(defs.some(d => d.sourceHeader === 'Comentarios')).toBe(false)
+  })
+
+  it('desambigua raw keys que colisionan al normalizar', () => {
+    const { columnMap, defs } = buildColumnMap(
+      ['Metrica X', 'Metrica-X'],
+      [{ 'Metrica X': 1, 'Metrica-X': 2 }],
+    )
+    const k1 = columnMap['Metrica X']
+    const k2 = columnMap['Metrica-X']
+    expect(k1).toBeDefined()
+    expect(k2).toBeDefined()
+    expect(k1).not.toBe(k2)
+    expect(defs.filter(d => d.key === k1 || d.key === k2)).toHaveLength(2)
+  })
 })

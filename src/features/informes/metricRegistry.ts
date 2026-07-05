@@ -1,5 +1,5 @@
 import { normalizeForSearch } from '@/lib/search'
-import type { MetricDef } from './types'
+import type { MetricDef, Row } from './types'
 
 export function normalizeHeader(h: string): string {
   return normalizeForSearch(h)
@@ -45,20 +45,47 @@ function rawKey(header: string): string {
 // Headers que nunca son métricas numéricas (identidad del jugador)
 const NON_METRIC = new Set(['jugador', 'player', 'nombre', 'name', 'equipo', 'team', 'club', 'posicion', 'position', 'pie', 'foot', 'nacionalidad', 'pais', 'id'])
 
-export function buildColumnMap(headers: string[]): { columnMap: Record<string, string>; defs: MetricDef[] } {
+export function buildColumnMap(
+  headers: string[],
+  rows: Row[] = [],
+): { columnMap: Record<string, string>; defs: MetricDef[] } {
   const columnMap: Record<string, string> = {}
   const defs: MetricDef[] = []
+  const usedKeys = new Set<string>()
+
+  // Una columna cuenta como métrica si la mayoría de sus celdas no vacías son números.
+  // Sin filas (llamada solo-headers) no podemos descartar: se asume numérica.
+  const isNumericColumn = (header: string): boolean => {
+    if (!rows.length) return true
+    let numeric = 0
+    let nonEmpty = 0
+    for (const r of rows) {
+      const v = r[header]
+      if (v === '' || v == null) continue
+      nonEmpty++
+      if (typeof v === 'number' && !Number.isNaN(v)) numeric++
+    }
+    return nonEmpty > 0 && numeric >= nonEmpty / 2
+  }
+
   for (const h of headers) {
     if (NON_METRIC.has(normalizeHeader(h))) continue
     const matched = matchHeaderToMetric(h)
     if (matched) {
       columnMap[h] = matched.key
-      defs.push({ ...matched, sourceHeader: h })
-    } else {
-      const key = rawKey(h)
-      columnMap[h] = key
-      defs.push({ key, label: h, short: h.slice(0, 8), unit: '', higherIsBetter: true, sourceHeader: h })
+      if (!usedKeys.has(matched.key)) {
+        usedKeys.add(matched.key)
+        defs.push({ ...matched, sourceHeader: h })
+      }
+      continue
     }
+    if (!isNumericColumn(h)) continue // columna de texto -> no es métrica
+    let key = rawKey(h)
+    let n = 2
+    while (usedKeys.has(key)) key = `${rawKey(h)}_${n++}`
+    usedKeys.add(key)
+    columnMap[h] = key
+    defs.push({ key, label: h, short: h.slice(0, 8), unit: '', higherIsBetter: true, sourceHeader: h })
   }
   return { columnMap, defs }
 }
