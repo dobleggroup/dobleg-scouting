@@ -679,11 +679,11 @@ export function buildMatrix(
 
 export function percentile(values: (number | null)[], value: number, higherIsBetter: boolean): number {
   const nums = values.filter((v): v is number => v != null && !Number.isNaN(v))
-  if (!nums.length) return 50
-  const below = nums.filter(v => (higherIsBetter ? v < value : v > value)).length
-  const equal = nums.filter(v => v === value).length
-  // percentil medio para empates
-  return Math.round(((below + equal / 2) / nums.length) * 100)
+  if (nums.length <= 1) return 50
+  // Percentil-rank del jugador vs el resto del pool (el propio jugador está en `nums`,
+  // por eso el denominador es n-1 = los demás). Extremo mejor => 100, peor => 0.
+  const worse = nums.filter(v => (higherIsBetter ? v < value : v > value)).length
+  return Math.min(100, Math.round((worse / (nums.length - 1)) * 100))
 }
 
 function colorFrom(pct: number): MetricStat['color'] {
@@ -1226,9 +1226,11 @@ export async function exportInformePDF(opts: {
 ```
 Nota: si una sola sección es más alta que la página, se coloca en su propia página escalando al ancho (queda entera; aceptable). El logo se carga en `handleExport` (Task) desde `/brand/logo-white.png` (dark) o `/brand/logo-black.png` (claro) como data URL (mismo patrón que `exportInformeCanva` en `BusquedaPage`).
 
-- [ ] **Step 2: Cablear `handleExport` en `InformesPage.tsx`**
+- [ ] **Step 2: Contenedor oculto con TODAS las secciones + cablear `handleExport`**
 
-`handleExport` toma el `ref` del contenedor del preview, detecta tema (`document.documentElement.classList.contains('dark')`), carga el logo apropiado a data URL y llama `exportInformePDF`.
+El preview (Task 11) monta las tabs condicionalmente: solo la tab activa está en el DOM, así que escanear el preview visible solo capturaría una sección. Para el PDF se necesita un contenedor **oculto** que renderice **todas** las secciones apiladas (Radar, Barras, cada Scatter, Opinión, Carrera, Comparaciones), cada una envuelta en `<div data-informe-section>`.
+
+Implementación: en `Step4Preview.tsx`, refactorizar cada panel a una función/JSX reutilizable y renderizar, además de la vista con tabs, un contenedor oculto `<div ref={printRef} aria-hidden className="fixed left-[-99999px] top-0 w-[794px]">` (794px ≈ ancho A4 a 96dpi) que apila todas las secciones. `handleExport` usa `printRef.current` como `rootEl`: detecta tema (`document.documentElement.classList.contains('dark')`), carga el logo apropiado (`/brand/logo-white.png` dark, `/brand/logo-black.png` claro) a data URL (mismo patrón que `exportInformeCanva` en `BusquedaPage`) y llama `exportInformePDF({ rootEl: printRef.current, nombre, isDark, logoDataUrl })`. El header y cada panel deben quedar visibles/renderizados en el contenedor oculto (usar `left` negativo, no `display:none`, para que `html-to-image` los mida).
 
 - [ ] **Step 3: Verificar en el navegador**
 
