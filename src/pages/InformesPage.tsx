@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import Stepper from '@/features/informes/components/Stepper'
 import Step1Archivo from '@/features/informes/components/Step1Archivo'
 import Step2Metricas from '@/features/informes/components/Step2Metricas'
+import Step3Contenido from '@/features/informes/components/Step3Contenido'
 import type { ParsedFile, Informe, MetricStat } from '@/features/informes/types'
 import { buildColumnMap } from '@/features/informes/metricRegistry'
 import { buildMatrix, computeStats } from '@/features/informes/computeStats'
@@ -55,7 +56,14 @@ export default function InformesPage() {
           onNext={() => setStep(2)}
         />
       )}
-      {step === 2 && <div>Paso 3 (Task 10)</div>}
+      {step === 2 && informe && (
+        <Step3Contenido
+          content={informe.content}
+          onChange={(c) => setInforme({ ...informe, content: c })}
+          onBack={() => setStep(1)}
+          onNext={() => setStep(3)}
+        />
+      )}
       {step === 3 && <div>Paso 4 (Task 11)</div>}
     </div>
   )
