@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Informe, InformeContent, MetricStat, MetricDef, ScatterAssignment } from '@/features/informes/types'
 import { exportInformePDF } from '@/features/informes/exportInformePDF'
+import { exportInformeHTML } from '@/features/informes/exportInformeHTML'
 import InformeRadar from './charts/InformeRadar'
 import InformeBars from './charts/InformeBars'
 import InformeScatter from './charts/InformeScatter'
@@ -40,6 +41,21 @@ function renderInlineMarkdown(text: string): string {
   )
   const withBold = withLinks.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
   return withBold.replace(/\n/g, '<br/>')
+}
+
+async function loadLogoDataUrl(path: string): Promise<string | undefined> {
+  try {
+    const res = await fetch(path)
+    const blob = await res.blob()
+    return await new Promise<string>((resolve, reject) => {
+      const fr = new FileReader()
+      fr.onload = () => resolve(fr.result as string)
+      fr.onerror = () => reject(fr.error)
+      fr.readAsDataURL(blob)
+    })
+  } catch {
+    return undefined
+  }
 }
 
 function initials(name: string): string {
@@ -167,6 +183,7 @@ interface Step4PreviewProps {
 export default function Step4Preview({ informe, stats, matrix, defs, onBack, onSave }: Step4PreviewProps) {
   const [tab, setTab] = useState<TabId>('radar')
   const [exporting, setExporting] = useState(false)
+  const [exportingHtml, setExportingHtml] = useState(false)
   const [exportMsg, setExportMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const printRef = useRef<HTMLDivElement>(null)
   const exportMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -416,19 +433,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
     setExporting(true)
     try {
       const isDark = document.documentElement.classList.contains('dark')
-      let logoDataUrl: string | undefined
-      try {
-        const res = await fetch(isDark ? '/brand/logo-white.png' : '/brand/logo-black.png')
-        const blob = await res.blob()
-        logoDataUrl = await new Promise<string>((resolve, reject) => {
-          const fr = new FileReader()
-          fr.onload = () => resolve(fr.result as string)
-          fr.onerror = () => reject(fr.error)
-          fr.readAsDataURL(blob)
-        })
-      } catch {
-        /* logo no disponible, seguimos sin logo */
-      }
+      const logoDataUrl = await loadLogoDataUrl(isDark ? '/brand/logo-white.png' : '/brand/logo-black.png')
       await exportInformePDF({
         rootEl: printRef.current,
         nombre: content.nombre || 'informe',
@@ -441,6 +446,22 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
       showExportMsg({ ok: false, text: 'No se pudo generar el PDF. Probá de nuevo o revisá la consola.' })
     } finally {
       setExporting(false)
+    }
+  }
+
+  async function doExportHtml() {
+    if (exportingHtml) return
+    setExportingHtml(true)
+    try {
+      // El HTML exportado es siempre dark premium, independiente del tema de la app.
+      const logoDataUrl = await loadLogoDataUrl('/brand/logo-white.png')
+      exportInformeHTML({ informe, stats, matrix, defs, logoDataUrl })
+      showExportMsg({ ok: true, text: 'HTML generado ✓' })
+    } catch (e) {
+      console.error('Export HTML error:', e)
+      showExportMsg({ ok: false, text: 'No se pudo generar el HTML. Probá de nuevo o revisá la consola.' })
+    } finally {
+      setExportingHtml(false)
     }
   }
 
@@ -462,6 +483,14 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
           className="px-4 py-2.5 rounded-xl bg-apple-gray-100 dark:bg-apple-gray-800 text-apple-gray-700 dark:text-apple-gray-200 text-sm font-semibold hover:bg-apple-gray-200 dark:hover:bg-apple-gray-700 transition-colors"
         >
           Guardar
+        </button>
+        <button
+          type="button"
+          onClick={doExportHtml}
+          disabled={exportingHtml}
+          className="px-4 py-2.5 rounded-xl bg-apple-gray-100 dark:bg-apple-gray-800 text-apple-gray-700 dark:text-apple-gray-200 text-sm font-semibold hover:bg-apple-gray-200 dark:hover:bg-apple-gray-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {exportingHtml ? 'Generando…' : 'Exportar HTML'}
         </button>
         <button
           type="button"
