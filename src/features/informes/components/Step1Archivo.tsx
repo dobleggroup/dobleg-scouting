@@ -100,8 +100,12 @@ function buildInforme(parsed: ParsedFile): Informe {
 // ─── Resize de foto ───────────────────────────────────────────────────────
 
 async function resizePhoto(file: File, max = 400): Promise<string> {
-  const dataUrl = await new Promise<string>((res) => {
-    const fr = new FileReader(); fr.onload = () => res(fr.result as string); fr.readAsDataURL(file)
+  const dataUrl = await new Promise<string>((res, rej) => {
+    const fr = new FileReader()
+    fr.onload = () => res(fr.result as string)
+    fr.onerror = () => rej(fr.error ?? new Error('No se pudo leer la imagen'))
+    fr.onabort = () => rej(new Error('Lectura de imagen cancelada'))
+    fr.readAsDataURL(file)
   })
   const img = new Image(); img.src = dataUrl; await img.decode()
   const scale = Math.min(1, max / Math.max(img.width, img.height))
@@ -181,7 +185,7 @@ export default function Step1Archivo({ parsed, informe, onParsed, onChange, onNe
   }
 
   function selectProtagonist(idx: number) {
-    if (!informe || !cols) return
+    if (!informe || !cols || idx === informe.protagonistIndex) return
     onChange({
       ...informe,
       protagonistIndex: idx,
@@ -205,7 +209,7 @@ export default function Step1Archivo({ parsed, informe, onParsed, onChange, onNe
         ...informe.content,
         club: p.team?.name ?? informe.content.club,
         posicion: p.primary_position ? displayPosition(p.primary_position) : informe.content.posicion,
-        edad: age != null ? String(age) : informe.content.edad,
+        edad: Number.isFinite(age) ? String(age) : informe.content.edad,
         nacionalidad: p.nationality ?? informe.content.nacionalidad,
         liga: p.league?.name ?? informe.content.liga,
         contrato: p.contract_end_date ?? informe.content.contrato,
@@ -224,10 +228,13 @@ export default function Step1Archivo({ parsed, informe, onParsed, onChange, onNe
         <div className="rounded-2xl border border-apple-gray-200 dark:border-apple-gray-800 bg-white dark:bg-apple-gray-900 p-5">
           <h2 className="text-sm font-semibold text-apple-gray-900 dark:text-white mb-3">Archivo de métricas</h2>
           <div
+            role="button"
+            tabIndex={0}
             onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
             onDragLeave={() => setIsDragging(false)}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click() } }}
             className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
               isDragging
                 ? 'border-brand-red bg-brand-red/5 scale-[1.01]'
