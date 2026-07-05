@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import type { Informe, MetricStat, MetricDef } from '@/features/informes/types'
+import { useRef, useState } from 'react'
+import type { Informe, MetricStat, MetricDef, ScatterAssignment } from '@/features/informes/types'
+import { exportInformePDF } from '@/features/informes/exportInformePDF'
 import InformeRadar from './charts/InformeRadar'
 import InformeBars from './charts/InformeBars'
 import InformeScatter from './charts/InformeScatter'
@@ -123,11 +124,12 @@ interface Step4PreviewProps {
   defs: MetricDef[]
   onBack: () => void
   onSave: () => void
-  onExport: () => void
 }
 
-export default function Step4Preview({ informe, stats, matrix, defs, onBack, onSave, onExport }: Step4PreviewProps) {
+export default function Step4Preview({ informe, stats, matrix, defs, onBack, onSave }: Step4PreviewProps) {
   const [tab, setTab] = useState<TabId>('radar')
+  const [exporting, setExporting] = useState(false)
+  const printRef = useRef<HTMLDivElement>(null)
   const { content } = informe
   const youtubeId = parseYouTubeId(content.videoUrl || '')
 
@@ -138,6 +140,254 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
 
   const matches = content.ultimos5.filter(m => m.rival || m.resultado || m.rating || m.minutos)
   const comparables = content.comparables.filter(c => c.jugador || c.club || c.rating || c.delta)
+
+  // ── Renders compartidos entre las tabs visibles y el contenedor oculto de export ──
+
+  function renderHeader() {
+    return (
+      <div className="flex items-center gap-4 pb-4 border-b border-apple-gray-200 dark:border-apple-gray-800">
+        {informe.fotoDataUrl ? (
+          <img
+            src={informe.fotoDataUrl}
+            alt={content.nombre || 'Jugador'}
+            className="w-16 h-16 rounded-full object-cover border-2 border-apple-gray-100 dark:border-apple-gray-800"
+          />
+        ) : (
+          <div className="w-16 h-16 rounded-full bg-apple-gray-100 dark:bg-apple-gray-800 flex items-center justify-center text-lg font-black text-apple-gray-400 dark:text-apple-gray-500">
+            {initials(content.nombre || '?')}
+          </div>
+        )}
+        <div>
+          <h1 className="text-xl font-bold text-apple-gray-900 dark:text-white">{content.nombre || 'Sin nombre'}</h1>
+          <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400">
+            {[content.club, content.posicion, content.rol].filter(Boolean).join(' · ') || '—'}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  function renderRadar() {
+    return (
+      <div data-informe-section>
+        <h3 className="text-xs font-bold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400 mb-1">
+          Radar comparativo
+        </h3>
+        <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mb-4">
+          {informe.contextoComparacion || 'Sin contexto de comparación definido'}
+        </p>
+        <InformeRadar stats={stats} keys={informe.charts.radar} />
+        {informe.charts.numbers.length > 0 && (
+          <div className="mt-6">
+            <h4 className="text-xs font-bold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400 mb-3">
+              Números clave
+            </h4>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {informe.charts.numbers.map(key => {
+                const stat = stats.find(s => s.def.key === key)
+                return stat ? <InformeNumberCard key={key} stat={stat} /> : null
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  function renderBars() {
+    return (
+      <div data-informe-section>
+        <h3 className="text-xs font-bold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400 mb-4">
+          Barras comparativas
+        </h3>
+        <InformeBars stats={stats} keys={informe.charts.bar} contexto={informe.contextoComparacion} />
+      </div>
+    )
+  }
+
+  function renderScatterItem(sc: ScatterAssignment, idx: number) {
+    return (
+      <div
+        key={idx}
+        data-informe-section
+        className="border border-apple-gray-100 dark:border-apple-gray-800 rounded-xl p-4"
+      >
+        <InformeScatter scatter={sc} matrix={matrix} defs={defs} protagonistIndex={informe.protagonistIndex} />
+      </div>
+    )
+  }
+
+  function renderOpinion() {
+    return (
+      <div data-informe-section className="space-y-6">
+        <div>
+          <div className="flex items-baseline justify-between mb-2">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400">
+              Lectura táctica
+            </h3>
+            {content.lecturaAutor && (
+              <span className="text-xs text-apple-gray-400 dark:text-apple-gray-500">— {content.lecturaAutor}</span>
+            )}
+          </div>
+          {content.lecturaTexto ? (
+            <div
+              className="text-sm leading-relaxed text-apple-gray-700 dark:text-apple-gray-200 [&_a]:text-brand-red [&_a]:underline"
+              dangerouslySetInnerHTML={{ __html: renderInlineMarkdown(content.lecturaTexto) }}
+            />
+          ) : (
+            <p className="text-sm text-apple-gray-400 dark:text-apple-gray-500 italic">Sin análisis cargado.</p>
+          )}
+        </div>
+        <div>
+          <h4 className="text-xs font-bold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400 mb-2">
+            Fortalezas
+          </h4>
+          {strengths.length === 0 ? (
+            <p className="text-sm text-apple-gray-400 dark:text-apple-gray-500 italic">
+              Sin métricas destacadas (verdes) todavía.
+            </p>
+          ) : (
+            <ul className="space-y-1.5">
+              {strengths.map(s => (
+                <li key={s.def.key} className="flex items-center gap-2 text-sm text-apple-gray-700 dark:text-apple-gray-200">
+                  <span className="w-2 h-2 rounded-full bg-brand-green flex-shrink-0" />
+                  {s.def.label}
+                  <span className="text-xs text-apple-gray-400 dark:text-apple-gray-500">P{s.percentile}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  function renderCarrera() {
+    return (
+      <div data-informe-section className="space-y-5">
+        <div>
+          <h3 className="text-xs font-bold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400 mb-3">
+            Últimos 5 partidos
+          </h3>
+          {matches.length === 0 ? (
+            <p className="text-sm text-apple-gray-400 dark:text-apple-gray-500 italic">Sin partidos cargados.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide text-apple-gray-400 dark:text-apple-gray-500 border-b border-apple-gray-100 dark:border-apple-gray-800">
+                    <th className="py-2 font-medium">Rival</th>
+                    <th className="py-2 font-medium">Resultado</th>
+                    <th className="py-2 font-medium">Rating</th>
+                    <th className="py-2 font-medium">Minutos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {matches.map((m, idx) => (
+                    <tr key={idx} className="border-b border-apple-gray-50 dark:border-apple-gray-800/60 last:border-0">
+                      <td className="py-2 text-apple-gray-900 dark:text-white">{m.rival || '—'}</td>
+                      <td className="py-2 text-apple-gray-700 dark:text-apple-gray-200">{m.resultado || '—'}</td>
+                      <td className="py-2 text-apple-gray-700 dark:text-apple-gray-200">{m.rating || '—'}</td>
+                      <td className="py-2 text-apple-gray-700 dark:text-apple-gray-200">{m.minutos || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-xl bg-apple-gray-50 dark:bg-apple-gray-800/60 p-3">
+            <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mb-1">Contrato</p>
+            <p className="text-sm font-semibold text-apple-gray-900 dark:text-white">{content.contrato || '—'}</p>
+          </div>
+          <div className="rounded-xl bg-apple-gray-50 dark:bg-apple-gray-800/60 p-3">
+            <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mb-1">Valor de mercado</p>
+            <p className="text-sm font-semibold text-apple-gray-900 dark:text-white">{content.valorMercado || '—'}</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  function renderComparaciones() {
+    return (
+      <div data-informe-section className="space-y-5">
+        {!content.hideComparables && (
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400 mb-3">
+              Comparables
+            </h3>
+            {comparables.length === 0 ? (
+              <p className="text-sm text-apple-gray-400 dark:text-apple-gray-500 italic">Sin comparables cargados.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase tracking-wide text-apple-gray-400 dark:text-apple-gray-500 border-b border-apple-gray-100 dark:border-apple-gray-800">
+                      <th className="py-2 font-medium">Jugador</th>
+                      <th className="py-2 font-medium">Club</th>
+                      <th className="py-2 font-medium">Rating</th>
+                      <th className="py-2 font-medium">Delta</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {comparables.map((c, idx) => (
+                      <tr key={idx} className="border-b border-apple-gray-50 dark:border-apple-gray-800/60 last:border-0">
+                        <td className="py-2 text-apple-gray-900 dark:text-white">{c.jugador || '—'}</td>
+                        <td className="py-2 text-apple-gray-700 dark:text-apple-gray-200">{c.club || '—'}</td>
+                        <td className="py-2 text-apple-gray-700 dark:text-apple-gray-200">{c.rating || '—'}</td>
+                        <td className="py-2 text-apple-gray-700 dark:text-apple-gray-200">{c.delta || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+        {content.comparaciones && (
+          <div>
+            <h4 className="text-xs font-bold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400 mb-2">
+              Notas
+            </h4>
+            <p className="text-sm text-apple-gray-700 dark:text-apple-gray-200 whitespace-pre-line">{content.comparaciones}</p>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  async function doExport() {
+    if (!printRef.current || exporting) return
+    setExporting(true)
+    try {
+      const isDark = document.documentElement.classList.contains('dark')
+      let logoDataUrl: string | undefined
+      try {
+        const res = await fetch(isDark ? '/brand/logo-white.png' : '/brand/logo-black.png')
+        const blob = await res.blob()
+        logoDataUrl = await new Promise<string>((resolve, reject) => {
+          const fr = new FileReader()
+          fr.onload = () => resolve(fr.result as string)
+          fr.onerror = () => reject(fr.error)
+          fr.readAsDataURL(blob)
+        })
+      } catch {
+        /* logo no disponible, seguimos sin logo */
+      }
+      await exportInformePDF({
+        rootEl: printRef.current,
+        nombre: content.nombre || 'informe',
+        isDark,
+        logoDataUrl,
+      })
+    } catch (e) {
+      console.error('Export PDF error:', e)
+    } finally {
+      setExporting(false)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -160,10 +410,11 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
         </button>
         <button
           type="button"
-          onClick={onExport}
-          className="px-4 py-2.5 rounded-xl bg-brand-red text-white text-sm font-semibold hover:bg-brand-red/90 transition-colors"
+          onClick={doExport}
+          disabled={exporting}
+          className="px-4 py-2.5 rounded-xl bg-brand-red text-white text-sm font-semibold hover:bg-brand-red/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          Exportar PDF
+          {exporting ? 'Exportando…' : 'Exportar PDF'}
         </button>
       </div>
 
@@ -190,40 +441,10 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
           </div>
 
           {/* ── Radar ── */}
-          {tab === 'radar' && (
-            <div data-informe-section>
-              <h3 className="text-xs font-bold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400 mb-1">
-                Radar comparativo
-              </h3>
-              <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mb-4">
-                {informe.contextoComparacion || 'Sin contexto de comparación definido'}
-              </p>
-              <InformeRadar stats={stats} keys={informe.charts.radar} />
-              {informe.charts.numbers.length > 0 && (
-                <div className="mt-6">
-                  <h4 className="text-xs font-bold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400 mb-3">
-                    Números clave
-                  </h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {informe.charts.numbers.map(key => {
-                      const stat = stats.find(s => s.def.key === key)
-                      return stat ? <InformeNumberCard key={key} stat={stat} /> : null
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+          {tab === 'radar' && renderRadar()}
 
           {/* ── Barras ── */}
-          {tab === 'bars' && (
-            <div data-informe-section>
-              <h3 className="text-xs font-bold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400 mb-4">
-                Barras comparativas
-              </h3>
-              <InformeBars stats={stats} keys={informe.charts.bar} contexto={informe.contextoComparacion} />
-            </div>
-          )}
+          {tab === 'bars' && renderBars()}
 
           {/* ── Scatter ── */}
           {tab === 'scatter' && (
@@ -237,15 +458,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
                 </p>
               ) : (
                 <div className="space-y-6">
-                  {informe.charts.scatters.map((sc, idx) => (
-                    <div
-                      key={idx}
-                      data-informe-section
-                      className="border border-apple-gray-100 dark:border-apple-gray-800 rounded-xl p-4"
-                    >
-                      <InformeScatter scatter={sc} matrix={matrix} defs={defs} protagonistIndex={informe.protagonistIndex} />
-                    </div>
-                  ))}
+                  {informe.charts.scatters.map((sc, idx) => renderScatterItem(sc, idx))}
                 </div>
               )}
             </div>
@@ -276,143 +489,29 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
           )}
 
           {/* ── Opinión ── */}
-          {tab === 'opinion' && (
-            <div data-informe-section className="space-y-6">
-              <div>
-                <div className="flex items-baseline justify-between mb-2">
-                  <h3 className="text-xs font-bold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400">
-                    Lectura táctica
-                  </h3>
-                  {content.lecturaAutor && (
-                    <span className="text-xs text-apple-gray-400 dark:text-apple-gray-500">— {content.lecturaAutor}</span>
-                  )}
-                </div>
-                {content.lecturaTexto ? (
-                  <div
-                    className="text-sm leading-relaxed text-apple-gray-700 dark:text-apple-gray-200 [&_a]:text-brand-red [&_a]:underline"
-                    dangerouslySetInnerHTML={{ __html: renderInlineMarkdown(content.lecturaTexto) }}
-                  />
-                ) : (
-                  <p className="text-sm text-apple-gray-400 dark:text-apple-gray-500 italic">Sin análisis cargado.</p>
-                )}
-              </div>
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400 mb-2">
-                  Fortalezas
-                </h4>
-                {strengths.length === 0 ? (
-                  <p className="text-sm text-apple-gray-400 dark:text-apple-gray-500 italic">
-                    Sin métricas destacadas (verdes) todavía.
-                  </p>
-                ) : (
-                  <ul className="space-y-1.5">
-                    {strengths.map(s => (
-                      <li key={s.def.key} className="flex items-center gap-2 text-sm text-apple-gray-700 dark:text-apple-gray-200">
-                        <span className="w-2 h-2 rounded-full bg-brand-green flex-shrink-0" />
-                        {s.def.label}
-                        <span className="text-xs text-apple-gray-400 dark:text-apple-gray-500">P{s.percentile}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          )}
+          {tab === 'opinion' && renderOpinion()}
 
           {/* ── Carrera ── */}
-          {tab === 'carrera' && (
-            <div data-informe-section className="space-y-5">
-              <div>
-                <h3 className="text-xs font-bold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400 mb-3">
-                  Últimos 5 partidos
-                </h3>
-                {matches.length === 0 ? (
-                  <p className="text-sm text-apple-gray-400 dark:text-apple-gray-500 italic">Sin partidos cargados.</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-xs uppercase tracking-wide text-apple-gray-400 dark:text-apple-gray-500 border-b border-apple-gray-100 dark:border-apple-gray-800">
-                          <th className="py-2 font-medium">Rival</th>
-                          <th className="py-2 font-medium">Resultado</th>
-                          <th className="py-2 font-medium">Rating</th>
-                          <th className="py-2 font-medium">Minutos</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {matches.map((m, idx) => (
-                          <tr key={idx} className="border-b border-apple-gray-50 dark:border-apple-gray-800/60 last:border-0">
-                            <td className="py-2 text-apple-gray-900 dark:text-white">{m.rival || '—'}</td>
-                            <td className="py-2 text-apple-gray-700 dark:text-apple-gray-200">{m.resultado || '—'}</td>
-                            <td className="py-2 text-apple-gray-700 dark:text-apple-gray-200">{m.rating || '—'}</td>
-                            <td className="py-2 text-apple-gray-700 dark:text-apple-gray-200">{m.minutos || '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-apple-gray-50 dark:bg-apple-gray-800/60 p-3">
-                  <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mb-1">Contrato</p>
-                  <p className="text-sm font-semibold text-apple-gray-900 dark:text-white">{content.contrato || '—'}</p>
-                </div>
-                <div className="rounded-xl bg-apple-gray-50 dark:bg-apple-gray-800/60 p-3">
-                  <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mb-1">Valor de mercado</p>
-                  <p className="text-sm font-semibold text-apple-gray-900 dark:text-white">{content.valorMercado || '—'}</p>
-                </div>
-              </div>
-            </div>
-          )}
+          {tab === 'carrera' && renderCarrera()}
 
           {/* ── Comparaciones ── */}
-          {tab === 'comparaciones' && (
-            <div data-informe-section className="space-y-5">
-              {!content.hideComparables && (
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400 mb-3">
-                    Comparables
-                  </h3>
-                  {comparables.length === 0 ? (
-                    <p className="text-sm text-apple-gray-400 dark:text-apple-gray-500 italic">Sin comparables cargados.</p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-left text-xs uppercase tracking-wide text-apple-gray-400 dark:text-apple-gray-500 border-b border-apple-gray-100 dark:border-apple-gray-800">
-                            <th className="py-2 font-medium">Jugador</th>
-                            <th className="py-2 font-medium">Club</th>
-                            <th className="py-2 font-medium">Rating</th>
-                            <th className="py-2 font-medium">Delta</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {comparables.map((c, idx) => (
-                            <tr key={idx} className="border-b border-apple-gray-50 dark:border-apple-gray-800/60 last:border-0">
-                              <td className="py-2 text-apple-gray-900 dark:text-white">{c.jugador || '—'}</td>
-                              <td className="py-2 text-apple-gray-700 dark:text-apple-gray-200">{c.club || '—'}</td>
-                              <td className="py-2 text-apple-gray-700 dark:text-apple-gray-200">{c.rating || '—'}</td>
-                              <td className="py-2 text-apple-gray-700 dark:text-apple-gray-200">{c.delta || '—'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )}
-              {content.comparaciones && (
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400 mb-2">
-                    Notas
-                  </h4>
-                  <p className="text-sm text-apple-gray-700 dark:text-apple-gray-200 whitespace-pre-line">{content.comparaciones}</p>
-                </div>
-              )}
-            </div>
-          )}
+          {tab === 'comparaciones' && renderComparaciones()}
         </div>
+      </div>
+
+      {/* ── Contenedor oculto: apila TODAS las secciones para el export a PDF ── */}
+      <div
+        ref={printRef}
+        aria-hidden
+        className="fixed left-[-99999px] top-0 w-[794px] bg-white dark:bg-apple-gray-900 p-6 space-y-6"
+      >
+        <div data-informe-section>{renderHeader()}</div>
+        {renderRadar()}
+        {renderBars()}
+        {informe.charts.scatters.map((sc, idx) => renderScatterItem(sc, idx))}
+        {renderOpinion()}
+        {renderCarrera()}
+        {renderComparaciones()}
       </div>
     </div>
   )

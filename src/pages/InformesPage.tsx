@@ -30,7 +30,6 @@ export default function InformesPage() {
   }, [parsed, derived, informe])
 
   const handleSave = () => { console.log('save', informe) }
-  const handleExport = () => { console.log('export') }
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
@@ -76,7 +75,6 @@ export default function InformesPage() {
           defs={derived.defs}
           onBack={() => setStep(2)}
           onSave={handleSave}
-          onExport={handleExport}
         />
       )}
     </div>
