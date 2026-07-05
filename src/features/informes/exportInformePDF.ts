@@ -14,7 +14,7 @@ export async function exportInformePDF(opts: {
   const { toPng } = await import('html-to-image')
   const { jsPDF } = await import('jspdf')
 
-  const bg = opts.isDark ? '#0f0f11' : '#ffffff'
+  const bg = opts.isDark ? '#0F1114' : '#ffffff'
   const sections = Array.from(opts.rootEl.querySelectorAll<HTMLElement>('[data-informe-section]'))
   const targets = sections.length ? sections : [opts.rootEl]
 
@@ -23,13 +23,31 @@ export async function exportInformePDF(opts: {
   const pageH = pdf.internal.pageSize.getHeight()
   const margin = 24
   const usableW = pageW - margin * 2
-  const headerH = opts.logoDataUrl ? 40 : 0
+
+  // Calcular las dimensiones reales del logo una sola vez (respeta el aspect ratio).
+  let logoW = 0
+  let logoH = 0
+  if (opts.logoDataUrl) {
+    try {
+      const props = pdf.getImageProperties(opts.logoDataUrl)
+      if (props.width > 0 && props.height > 0) {
+        logoH = 22
+        logoW = logoH * (props.width / props.height)
+      }
+    } catch {
+      logoW = 0
+      logoH = 0
+    }
+  }
+  const headerH = logoH > 0 ? logoH + 14 : 0
   let cursorY = margin + headerH
 
   function addHeader() {
     pdf.setFillColor(bg)
     pdf.rect(0, 0, pageW, pageH, 'F')
-    if (opts.logoDataUrl) pdf.addImage(opts.logoDataUrl, 'PNG', margin, margin, 80, 24)
+    if (opts.logoDataUrl && logoW > 0 && logoH > 0) {
+      pdf.addImage(opts.logoDataUrl, 'PNG', margin, margin, logoW, logoH)
+    }
   }
   addHeader()
 
