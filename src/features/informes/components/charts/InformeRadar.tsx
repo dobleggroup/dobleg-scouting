@@ -33,9 +33,9 @@ function RadarTooltip({ active, payload }: { active?: boolean; payload?: Array<{
  * ya que el percentil del jugador ya está normalizado contra el resto del grupo.
  */
 export default function InformeRadar({ stats, keys }: InformeRadarProps) {
-  const rows = keys
-    .map(key => stats.find(s => s.def.key === key))
-    .filter((s): s is MetricStat => !!s)
+  const resolved = keys.map(key => stats.find(s => s.def.key === key))
+  const rows = resolved.filter((s): s is MetricStat => !!s && s.percentile != null)
+  const omitted = resolved.length - rows.length
 
   if (rows.length === 0) {
     return (
@@ -79,6 +79,9 @@ export default function InformeRadar({ stats, keys }: InformeRadarProps) {
       <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mt-2 text-center">
         Cada eje normalizado 0-100 (percentil). Verde = jugador · Punteado gris = promedio liga.
       </p>
+      {omitted > 0 && (
+        <p className="text-xs text-apple-gray-500 mt-2">{omitted} métrica(s) sin dato del jugador, omitida(s) del radar.</p>
+      )}
     </div>
   )
 }

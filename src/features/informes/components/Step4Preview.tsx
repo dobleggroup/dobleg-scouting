@@ -26,6 +26,8 @@ function escapeHtml(s: string): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
 /** Markdown mínimo y seguro: escapa HTML primero, después soporta **negrita** y [texto](url). */
