@@ -5,10 +5,16 @@ function coerce(v: unknown): string | number {
   if (v == null || v === '') return ''
   if (typeof v === 'number') return v
   const s = String(v).trim()
-  // número con coma o punto decimal
-  const normalized = s.replace(/\./g, '').includes(',') ? s.replace(/\./g, '').replace(',', '.') : s
-  const n = Number(normalized)
-  return normalized !== '' && !Number.isNaN(n) ? n : s
+  if (s === '') return ''
+  // Leading-zero identifiers (jersey numbers, codes) stay strings: '007' -> '007'
+  if (/^0\d+/.test(s)) return s
+  // Unambiguous English number: 1234, -12, 10.5, 10.500
+  if (/^-?\d+(\.\d+)?$/.test(s)) return Number(s)
+  // Comma-decimal only: '3,5' -> 3.5
+  if (/^-?\d+,\d+$/.test(s)) return Number(s.replace(',', '.'))
+  // Anything else (thousands-separated, ambiguous, or text) stays a string —
+  // we never guess a magnitude. Non-numeric metric cells become null downstream.
+  return s
 }
 
 export function parseCsv(text: string): ParsedFile {

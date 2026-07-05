@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest'
 import * as XLSX from 'xlsx'
-import { parseCsv, parseXml, parseXlsxBuffer } from './parseFile'
+import { parseCsv, parseXml, parseXlsxBuffer, parseInformeFile } from './parseFile'
 
 describe('parseCsv', () => {
   it('devuelve headers y filas tipadas', () => {
@@ -42,5 +42,34 @@ describe('parseXlsxBuffer', () => {
     expect(out.headers).toEqual(['Jugador', 'Goles'])
     expect(out.rows).toHaveLength(2)
     expect(out.rows[0].Goles).toBe(2)
+  })
+})
+
+describe('coerce via parseCsv', () => {
+  it('mantiene identificadores con cero inicial como string', () => {
+    const out = parseCsv('Jugador,Dorsal\nX,007')
+    expect(out.rows[0].Dorsal).toBe('007')
+  })
+  it('parsea decimal con coma', () => {
+    const out = parseCsv('Jugador,Val\nX,"3,5"')
+    expect(out.rows[0].Val).toBe(3.5)
+  })
+  it('deja como string un numero con separador de miles (no corrompe magnitud)', () => {
+    const out = parseCsv('Jugador,Val\nX,1.500.000')
+    expect(out.rows[0].Val).toBe('1.500.000')
+  })
+  it('trata el punto como decimal (formato Wyscout ingles)', () => {
+    const out = parseCsv('Jugador,Val\nX,10.500')
+    expect(out.rows[0].Val).toBe(10.5)
+  })
+})
+
+describe('error paths', () => {
+  it('parseXml lanza con XML invalido', () => {
+    expect(() => parseXml('<data><a></b></data>')).toThrow()
+  })
+  it('parseInformeFile rechaza extension no soportada', async () => {
+    const file = new File(['x'], 'datos.txt', { type: 'text/plain' })
+    await expect(parseInformeFile(file)).rejects.toThrow()
   })
 })
