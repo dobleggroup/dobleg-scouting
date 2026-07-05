@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import type { Informe, MetricStat, MetricDef, ScatterAssignment } from '@/features/informes/types'
+import { useEffect, useRef, useState } from 'react'
+import type { Informe, InformeContent, MetricStat, MetricDef, ScatterAssignment } from '@/features/informes/types'
 import { exportInformePDF } from '@/features/informes/exportInformePDF'
 import InformeRadar from './charts/InformeRadar'
 import InformeBars from './charts/InformeBars'
@@ -69,6 +69,43 @@ function DataRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+function StatItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col items-center text-center gap-0.5">
+      <span className="text-xs uppercase tracking-wide text-apple-gray-500">{label}</span>
+      <span className="text-apple-gray-900 dark:text-white font-semibold">{value}</span>
+    </div>
+  )
+}
+
+/** Bloque de estadísticas principales cargadas en el paso 3 (Rating/PJ/Minutos/Goles/Asistencias). */
+function renderMainStats(content: InformeContent) {
+  if (content.hideMainStats) return null
+
+  const items = [
+    { label: 'Rating', value: content.rating },
+    { label: 'PJ', value: content.pj },
+    { label: 'Minutos', value: content.minutos },
+    { label: 'Goles', value: content.goles },
+    { label: 'Asistencias', value: content.asistencias },
+  ].filter(i => i.value !== '')
+
+  if (items.length === 0) return null
+
+  return (
+    <div>
+      <h4 className="text-xs font-bold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400 mb-2">
+        Estadísticas principales
+      </h4>
+      <div className="grid grid-cols-3 gap-3 text-sm">
+        {items.map(i => (
+          <StatItem key={i.label} label={i.label} value={i.value} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function PlayerRail({ informe }: { informe: Informe }) {
   const { content } = informe
   const rolYPosicion = [content.posicion, content.rol].filter(Boolean).join(' · ')
@@ -101,6 +138,7 @@ function PlayerRail({ informe }: { informe: Informe }) {
         <DataRow label="Contrato" value={content.contrato} />
         <DataRow label="Representante" value={content.representante} />
       </dl>
+      {renderMainStats(content)}
       {content.transfermarktUrl && (
         <a
           href={content.transfermarktUrl}
@@ -129,9 +167,24 @@ interface Step4PreviewProps {
 export default function Step4Preview({ informe, stats, matrix, defs, onBack, onSave }: Step4PreviewProps) {
   const [tab, setTab] = useState<TabId>('radar')
   const [exporting, setExporting] = useState(false)
+  const [exportMsg, setExportMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const printRef = useRef<HTMLDivElement>(null)
+  const exportMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { content } = informe
   const youtubeId = parseYouTubeId(content.videoUrl || '')
+  const mainStatsBlock = renderMainStats(content)
+
+  useEffect(() => {
+    return () => {
+      if (exportMsgTimer.current) clearTimeout(exportMsgTimer.current)
+    }
+  }, [])
+
+  function showExportMsg(msg: { ok: boolean; text: string }) {
+    if (exportMsgTimer.current) clearTimeout(exportMsgTimer.current)
+    setExportMsg(msg)
+    exportMsgTimer.current = setTimeout(() => setExportMsg(null), 3500)
+  }
 
   const strengths = stats
     .filter(s => s.color === 'green' && s.percentile != null)
@@ -382,8 +435,10 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
         isDark,
         logoDataUrl,
       })
+      showExportMsg({ ok: true, text: 'PDF generado ✓' })
     } catch (e) {
       console.error('Export PDF error:', e)
+      showExportMsg({ ok: false, text: 'No se pudo generar el PDF. Probá de nuevo o revisá la consola.' })
     } finally {
       setExporting(false)
     }
@@ -417,6 +472,12 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
           {exporting ? 'Exportando…' : 'Exportar PDF'}
         </button>
       </div>
+
+      {exportMsg && (
+        <p className={`text-sm font-medium ${exportMsg.ok ? 'text-brand-green' : 'text-brand-red'}`}>
+          {exportMsg.text}
+        </p>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
         <PlayerRail informe={informe} />
@@ -506,6 +567,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
         className="fixed left-[-99999px] top-0 w-[794px] bg-white dark:bg-apple-gray-900 p-6 space-y-6"
       >
         <div data-informe-section>{renderHeader()}</div>
+        {mainStatsBlock && <div data-informe-section>{mainStatsBlock}</div>}
         {renderRadar()}
         {renderBars()}
         {informe.charts.scatters.map((sc, idx) => renderScatterItem(sc, idx))}
