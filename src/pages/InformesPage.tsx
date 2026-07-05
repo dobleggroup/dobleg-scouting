@@ -9,6 +9,7 @@ import type { ParsedFile, Informe, MetricStat } from '@/features/informes/types'
 import { buildColumnMap } from '@/features/informes/metricRegistry'
 import { buildMatrix, computeStats } from '@/features/informes/computeStats'
 import { saveInforme, loadInforme } from '@/features/informes/informesStore'
+import { getRowName } from '@/features/informes/chartData'
 
 type View = 'list' | 'wizard'
 type SaveFeedback = { type: 'success' | 'error'; message: string }
@@ -31,6 +32,14 @@ export default function InformesPage() {
     if (!parsed || !derived || !informe) return []
     return computeStats(derived.defs, derived.matrix, informe.protagonistIndex)
   }, [parsed, derived, informe])
+
+  const comparePlayers = useMemo(() => {
+    if (!informe) return []
+    return informe.rows
+      .map((_, idx) => idx)
+      .filter(idx => idx !== informe.protagonistIndex)
+      .map(idx => ({ idx, name: getRowName(informe, idx) }))
+  }, [informe])
 
   // Confirmación/error transitorio de guardado: se limpia solo a los pocos segundos.
   useEffect(() => {
@@ -138,6 +147,9 @@ export default function InformesPage() {
               stats={stats}
               charts={informe.charts}
               onChangeCharts={c => setInforme({ ...informe, charts: c })}
+              players={comparePlayers}
+              compareIndices={informe.comparePlayerIndices ?? []}
+              onChangeCompare={idxs => setInforme({ ...informe, comparePlayerIndices: idxs })}
               onBack={() => setStep(0)}
               onNext={() => setStep(2)}
             />
