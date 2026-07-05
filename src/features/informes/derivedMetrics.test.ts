@@ -28,4 +28,11 @@ describe('applyDerived', () => {
     const out = applyDerived(defs, matrix)
     expect(out.matrix['goals_minus_xg']).toBeUndefined()
   })
+
+  it('no crea la derivada si un require esta en defs pero no en la matriz', () => {
+    const defs = [baseDef('goals'), baseDef('xg')]
+    const matrix = { goals: [2, 1] } // falta la columna 'xg'
+    const out = applyDerived(defs, matrix)
+    expect(out.matrix['goals_minus_xg']).toBeUndefined()
+  })
 })

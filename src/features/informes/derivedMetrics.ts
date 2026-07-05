@@ -40,11 +40,12 @@ export function applyDerived(
 ): { defs: MetricDef[]; matrix: Record<string, (number | null)[]> } {
   const defs = [...baseDefs]
   const outMatrix: Record<string, (number | null)[]> = { ...matrix }
-  const rowCount = Object.values(matrix)[0]?.length ?? 0
+  const columns = Object.values(matrix)
+  const rowCount = columns.length ? Math.max(...columns.map(c => c.length)) : 0
   const present = new Set(baseDefs.map(d => d.key))
 
   for (const rule of DERIVED_RULES) {
-    if (!rule.requires.every(k => present.has(k))) continue
+    if (!rule.requires.every(k => present.has(k) && k in matrix)) continue
     const col: (number | null)[] = []
     for (let i = 0; i < rowCount; i++) {
       const inputs: Record<string, number> = {}

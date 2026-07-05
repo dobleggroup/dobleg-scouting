@@ -932,7 +932,7 @@ export default function InformesPage() {
 
   const derived = useMemo(() => {
     if (!parsed) return null
-    const { columnMap, defs } = buildColumnMap(parsed.headers)
+    const { columnMap, defs } = buildColumnMap(parsed.headers, parsed.rows)
     const { defs: allDefs, matrix } = buildMatrix(parsed, columnMap, defs)
     return { columnMap, defs: allDefs, matrix }
   }, [parsed])
