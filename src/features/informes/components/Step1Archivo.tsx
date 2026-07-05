@@ -89,6 +89,7 @@ function buildInforme(parsed: ParsedFile): Informe {
     contextoComparacion: '',
     fotoDataUrl: null,
     protagonistIndex: 0,
+    comparePlayerIndices: [],
     headers: parsed.headers,
     rows: parsed.rows,
     columnMap: {},

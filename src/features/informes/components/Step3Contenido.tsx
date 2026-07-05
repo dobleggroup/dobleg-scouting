@@ -138,23 +138,6 @@ export default function Step3Contenido({ content, onChange, onBack, onNext }: St
         {/* ── Derecha ── */}
         <div className="space-y-4">
           <div className={cardClass}>
-            <h2 className="text-sm font-semibold text-apple-gray-900 dark:text-white mb-3">Lectura táctica</h2>
-            <div className="space-y-3">
-              <Field label="Autor" value={content.lecturaAutor} onChange={v => set('lecturaAutor', v)} />
-              <div>
-                <label className={labelClass}>Análisis (soporta markdown: **negrita** y [texto](url))</label>
-                <textarea
-                  value={content.lecturaTexto}
-                  onChange={e => set('lecturaTexto', e.target.value)}
-                  rows={5}
-                  placeholder="Escribí el análisis táctico..."
-                  className={`${inputClass} resize-y`}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className={cardClass}>
             <h2 className="text-sm font-semibold text-apple-gray-900 dark:text-white mb-3">Últimos 5 partidos</h2>
             <div className="space-y-2">
               <div className="grid grid-cols-4 gap-2 px-1">
