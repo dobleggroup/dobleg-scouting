@@ -25,6 +25,7 @@ export default function InformeRadar({ informe, stats, matrix, defs }: InformeRa
   }
 
   const svg = radarSvg({ axes, series })
+  const [protagonist, ...compared] = series
 
   return (
     <div>
@@ -33,10 +34,17 @@ export default function InformeRadar({ informe, stats, matrix, defs }: InformeRa
         {series.map(s => (
           <div key={s.name || s.color} className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
-            <span className="text-sm text-apple-gray-300">{s.name || 'Sin nombre'}</span>
+            <span className="text-sm font-medium text-apple-gray-300">{s.name || 'Sin nombre'}</span>
           </div>
         ))}
       </div>
+      {compared.length > 0 && (
+        <p className="text-xs text-apple-gray-400 mt-2 text-center">
+          Comparando: <span className="font-medium">{protagonist?.name || 'Protagonista'}</span>
+          {' vs '}
+          <span className="font-medium">{compared.map(s => s.name || 'Sin nombre').join(', ')}</span>
+        </p>
+      )}
       <p className="text-xs text-apple-gray-500 mt-2 text-center">
         Cada eje normalizado 0-100 (percentil vs. el pool).
       </p>

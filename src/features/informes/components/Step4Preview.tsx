@@ -6,6 +6,7 @@ import InformeRadar from './charts/InformeRadar'
 import InformeBars from './charts/InformeBars'
 import InformeScatter from './charts/InformeScatter'
 import InformeNumberCard from './charts/InformeNumberCard'
+import { comparisonTable } from '@/features/informes/chartData'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -150,9 +151,6 @@ function PlayerRail({ informe }: { informe: Informe }) {
   const rolYPosicion = [content.posicion, content.rol].filter(Boolean).join(' · ')
   return (
     <div className="rounded-[18px] border p-5 space-y-4 h-fit" style={{ borderColor: DG.border, backgroundColor: DG.card }}>
-      <div className="flex justify-center">
-        <BrandLogo height={20} />
-      </div>
       <div className="flex flex-col items-center text-center gap-3">
         {informe.fotoDataUrl ? (
           <img
@@ -244,7 +242,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
   function renderHeader() {
     return (
       <div className="flex items-center gap-4 pb-4 border-b" style={{ borderColor: DG.border }}>
-        <BrandLogo height={26} />
+        <BrandLogo height={34} />
         {informe.fotoDataUrl ? (
           <img
             src={informe.fotoDataUrl}
@@ -363,9 +361,54 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
     )
   }
 
+  function renderPlayerComparisonTable() {
+    if ((informe.comparePlayerIndices?.length ?? 0) === 0) return null
+    const table = comparisonTable(informe, matrix, defs)
+    if (table.rows.length === 0) return null
+    return (
+      <div>
+        <SectionTitle>Comparación de jugadores</SectionTitle>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wide border-b" style={{ color: DG.muted, borderColor: DG.border }}>
+                <th className="py-2 font-medium">Métrica</th>
+                {table.players.map(p => (
+                  <th key={p.idx} className="py-2 font-medium">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full inline-block flex-shrink-0" style={{ backgroundColor: p.color }} />
+                      <span style={{ color: DG.text }}>{p.name || 'Sin nombre'}</span>
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {table.rows.map((row, idx) => (
+                <tr key={idx} className="border-b last:border-0" style={{ borderColor: DG.hairline }}>
+                  <td className="py-2" style={{ color: DG.muted }}>{row.label}</td>
+                  {row.cells.map((cell, ci) => (
+                    <td
+                      key={ci}
+                      className="py-2 tabular-nums"
+                      style={{ color: cell.best ? DG.green : DG.text, fontWeight: cell.best ? 700 : 400 }}
+                    >
+                      {cell.value}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+  }
+
   function renderComparaciones() {
     return (
       <div data-informe-section className="space-y-5">
+        {renderPlayerComparisonTable()}
         {!content.hideComparables && (
           <div>
             <SectionTitle>Comparables</SectionTitle>
@@ -519,6 +562,14 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
             {exportMsg.text}
           </p>
         )}
+
+        {/* ── Banda de marca ── */}
+        <div className="flex items-center gap-3 pb-4 border-b" style={{ borderColor: DG.border }}>
+          <BrandLogo height={38} />
+          <span className="text-sm truncate" style={{ color: DG.muted }}>
+            {informe.contextoComparacion || 'Informe de jugador'}
+          </span>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
           <PlayerRail informe={informe} />

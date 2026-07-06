@@ -76,6 +76,69 @@ export function radarData(
 }
 
 // ---------------------------------------------------------------------------
+// comparisonTable
+// ---------------------------------------------------------------------------
+
+export interface ComparisonTablePlayer { name: string; color: string; idx: number }
+export interface ComparisonTableCell { value: string; best: boolean }
+export interface ComparisonTableRow { label: string; cells: ComparisonTableCell[] }
+export interface ComparisonTableResult {
+  players: ComparisonTablePlayer[]
+  rows: ComparisonTableRow[]
+}
+
+const PROTAGONIST_COLOR = '#22C55E'
+
+function formatComparisonValue(value: number | null | undefined, def: MetricDef): string {
+  if (value == null || Number.isNaN(value)) return '—'
+  return def.unit === '%' ? `${value.toFixed(0)}%` : value.toFixed(2)
+}
+
+/**
+ * Arma una tabla protagonista + comparados (hasta 2) por cada métrica del radar
+ * (o de las barras si el radar está vacío), con el mejor valor de cada fila
+ * marcado (`best: true`) respetando `def.higherIsBetter`. Reutilizada por la
+ * tab "Comparaciones" del preview y, potencialmente, por el export a HTML.
+ */
+export function comparisonTable(
+  informe: Informe,
+  matrix: Record<string, (number | null)[]>,
+  defs: MetricDef[],
+): ComparisonTableResult {
+  const compareIdxs = (informe.comparePlayerIndices ?? []).slice(0, 2)
+  const players: ComparisonTablePlayer[] = [
+    {
+      name: getRowName(informe, informe.protagonistIndex) || informe.content?.nombre || '',
+      color: PROTAGONIST_COLOR,
+      idx: informe.protagonistIndex,
+    },
+    ...compareIdxs.map((idx, i) => ({ name: getRowName(informe, idx), color: COMPARE_COLORS[i], idx })),
+  ]
+
+  const sourceKeys = informe.charts.radar.length > 0 ? informe.charts.radar : informe.charts.bar
+  const keys = sourceKeys.filter(key => defs.some(d => d.key === key))
+
+  const rows: ComparisonTableRow[] = keys.map(key => {
+    const def = defs.find(d => d.key === key)!
+    const col = matrix[key] ?? []
+    const raw = players.map(p => col[p.idx] ?? null)
+
+    let bestIdx: number | null = null
+    raw.forEach((v, i) => {
+      if (v == null || Number.isNaN(v)) return
+      if (bestIdx == null) { bestIdx = i; return }
+      const bestVal = raw[bestIdx]!
+      if (def.higherIsBetter ? v > bestVal : v < bestVal) bestIdx = i
+    })
+
+    const cells = raw.map((v, i) => ({ value: formatComparisonValue(v, def), best: i === bestIdx }))
+    return { label: def.label, cells }
+  })
+
+  return { players, rows }
+}
+
+// ---------------------------------------------------------------------------
 // barsData
 // ---------------------------------------------------------------------------
 

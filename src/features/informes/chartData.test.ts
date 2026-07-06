@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getRowName, radarData, barsData, scatterData, suggestAxisFloor } from './chartData'
+import { getRowName, radarData, barsData, scatterData, suggestAxisFloor, comparisonTable } from './chartData'
 import type { Informe, MetricDef, MetricStat, ScatterAssignment } from './types'
 
 function makeDef(over: Partial<MetricDef>): MetricDef {
@@ -159,6 +159,82 @@ describe('scatterData', () => {
     const result = scatterData(scatter, matrix, defs, 0)
     expect(result.xLabel).toBe('x')
     expect(result.yLabel).toBe('y')
+  })
+})
+
+describe('comparisonTable', () => {
+  it('arma jugadores (protagonista + comparados) con colores y filas desde el radar', () => {
+    const defs = [
+      makeDef({ key: 'goals', label: 'Goles', unit: '', higherIsBetter: true }),
+      makeDef({ key: 'pct', label: 'Duelos ganados', unit: '%', higherIsBetter: true }),
+    ]
+    const matrix = {
+      goals: [10, 4],
+      pct: [55.4, 70.2],
+    }
+    const informe = makeInforme({
+      headers: ['Jugador'],
+      rows: [{ Jugador: 'A' }, { Jugador: 'B' }],
+      protagonistIndex: 0,
+      comparePlayerIndices: [1],
+      charts: { radar: ['goals', 'pct'], bar: [], numbers: [], scatters: [] },
+    })
+
+    const result = comparisonTable(informe, matrix, defs)
+
+    expect(result.players).toEqual([
+      { name: 'A', color: '#22C55E', idx: 0 },
+      { name: 'B', color: '#F5C451', idx: 1 },
+    ])
+    expect(result.rows).toEqual([
+      { label: 'Goles', cells: [{ value: '10.00', best: true }, { value: '4.00', best: false }] },
+      { label: 'Duelos ganados', cells: [{ value: '55%', best: false }, { value: '70%', best: true }] },
+    ])
+  })
+
+  it('respeta higherIsBetter: false al elegir el mejor valor', () => {
+    const defs = [makeDef({ key: 'fouls', label: 'Faltas', higherIsBetter: false })]
+    const matrix = { fouls: [8, 2] }
+    const informe = makeInforme({
+      protagonistIndex: 0,
+      comparePlayerIndices: [1],
+      charts: { radar: ['fouls'], bar: [], numbers: [], scatters: [] },
+    })
+    const result = comparisonTable(informe, matrix, defs)
+    expect(result.rows[0].cells).toEqual([{ value: '8.00', best: false }, { value: '2.00', best: true }])
+  })
+
+  it('usa las metricas de barras si el radar esta vacio', () => {
+    const defs = [makeDef({ key: 'assists', label: 'Asistencias' })]
+    const matrix = { assists: [1, 3] }
+    const informe = makeInforme({
+      protagonistIndex: 0,
+      comparePlayerIndices: [1],
+      charts: { radar: [], bar: ['assists'], numbers: [], scatters: [] },
+    })
+    const result = comparisonTable(informe, matrix, defs)
+    expect(result.rows).toHaveLength(1)
+    expect(result.rows[0].label).toBe('Asistencias')
+  })
+
+  it('marca "—" y ningun best cuando el valor falta', () => {
+    const defs = [makeDef({ key: 'goals', label: 'Goles' })]
+    const matrix = { goals: [null, 5] }
+    const informe = makeInforme({
+      protagonistIndex: 0,
+      comparePlayerIndices: [1],
+      charts: { radar: ['goals'], bar: [], numbers: [], scatters: [] },
+    })
+    const result = comparisonTable(informe, matrix, defs)
+    expect(result.rows[0].cells).toEqual([{ value: '—', best: false }, { value: '5.00', best: true }])
+  })
+
+  it('devuelve rows vacio cuando radar y bar estan vacios', () => {
+    const informe = makeInforme({
+      charts: { radar: [], bar: [], numbers: [], scatters: [] },
+    })
+    const result = comparisonTable(informe, {}, [])
+    expect(result.rows).toEqual([])
   })
 })
 
