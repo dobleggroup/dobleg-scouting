@@ -68,13 +68,31 @@ describe('scatterDomain', () => {
     { x: 10, y: 20, me: true },
   ]
 
-  it('sin floors, conserva todos los puntos y calcula min/max reales', () => {
+  it('sin floors, conserva todos los puntos y ajusta el dominio de forma ajustada a los datos (no fuerza 0)', () => {
     const d = scatterDomain(points)
     expect(d.kept.length).toBe(3)
-    expect(d.minX).toBe(1)
-    expect(d.maxX).toBe(10)
-    expect(d.minY).toBe(1)
-    expect(d.maxY).toBe(20)
+    // pad = 8% del rango; el piso queda cerca del minimo real, no en 0.
+    const padX = (10 - 1) * 0.08
+    const padY = (20 - 1) * 0.08
+    expect(d.minX).toBeCloseTo(1 - padX, 5)
+    expect(d.maxX).toBeCloseTo(10 + padX, 5)
+    expect(d.minY).toBeCloseTo(1 - padY, 5)
+    expect(d.maxY).toBeCloseTo(20 + padY, 5)
+    // el piso es ajustado (tight), no clampeado a 0.
+    expect(d.minX).toBeGreaterThan(0)
+    expect(d.minX).toBeLessThan(1)
+  })
+
+  it('sin floors y con todos los valores iguales, usa un pad pequeño en vez de un dominio degenerado', () => {
+    const flat = [
+      { x: 5, y: 5, me: false },
+      { x: 5, y: 5, me: true },
+    ]
+    const d = scatterDomain(flat)
+    expect(d.minX).toBeLessThan(5)
+    expect(d.maxX).toBeGreaterThan(5)
+    expect(d.minY).toBeLessThan(5)
+    expect(d.maxY).toBeGreaterThan(5)
   })
 
   it('descarta puntos por debajo de xMin y usa xMin como piso del dominio', () => {

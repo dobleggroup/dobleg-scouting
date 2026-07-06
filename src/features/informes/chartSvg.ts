@@ -93,10 +93,27 @@ export interface ScatterDomainResult<T extends ScatterPointBase> {
 }
 
 /**
+ * Padding de eje proporcional al rango de datos (8%), con un piso pequeño
+ * cuando el rango es 0 (todos los valores iguales o un solo punto) para que
+ * el dominio no quede degenerado.
+ */
+function axisPad(min: number, max: number): number {
+  const span = max - min
+  if (span > 0) return span * 0.08
+  return Math.max(Math.abs(max) * 0.08, 0.5)
+}
+
+/**
  * Calcula el dominio (min/max) de un scatter a partir de los puntos, con
  * pisos opcionales `xMin`/`yMin`. Los puntos con x<xMin o y<yMin se excluyen
- * (declutter/crop) y el piso del dominio queda fijado en xMin/yMin cuando se
- * proveen (en vez del minimo real de los puntos restantes).
+ * (declutter/crop).
+ *
+ * Cuando no se provee un piso, el dominio se ajusta de forma ajustada (tight)
+ * a los datos reales: `min = dataMin - pad`, `max = dataMax + pad`, con
+ * `pad` proporcional al rango de esa metrica (no se fuerza a arrancar en 0 —
+ * cada metrica tiene su propia escala, ej. un % 0-100 vs un por-90 0-5).
+ * Cuando se provee un piso (`xMin`/`yMin`), ese valor se usa tal cual como
+ * piso del dominio (sin padding adicional hacia abajo).
  */
 export function scatterDomain<T extends ScatterPointBase>(
   points: T[],
@@ -117,11 +134,17 @@ export function scatterDomain<T extends ScatterPointBase>(
   const realMinY = ys.length ? Math.min(...ys) : 0
   const realMaxY = ys.length ? Math.max(...ys) : 1
 
+  const padX = axisPad(realMinX, realMaxX)
+  const padY = axisPad(realMinY, realMaxY)
+
+  const minX = xMin !== undefined ? xMin : realMinX - padX
+  const minY = yMin !== undefined ? yMin : realMinY - padY
+
   return {
-    minX: xMin !== undefined ? xMin : realMinX,
-    maxX: Math.max(realMaxX, xMin !== undefined ? xMin : realMaxX),
-    minY: yMin !== undefined ? yMin : realMinY,
-    maxY: Math.max(realMaxY, yMin !== undefined ? yMin : realMaxY),
+    minX,
+    maxX: Math.max(realMaxX + padX, minX),
+    minY,
+    maxY: Math.max(realMaxY + padY, minY),
     kept,
   }
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getRowName, radarData, barsData, scatterData } from './chartData'
+import { getRowName, radarData, barsData, scatterData, suggestAxisFloor } from './chartData'
 import type { Informe, MetricDef, MetricStat, ScatterAssignment } from './types'
 
 function makeDef(over: Partial<MetricDef>): MetricDef {
@@ -159,5 +159,25 @@ describe('scatterData', () => {
     const result = scatterData(scatter, matrix, defs, 0)
     expect(result.xLabel).toBe('x')
     expect(result.yLabel).toBe('y')
+  })
+})
+
+describe('suggestAxisFloor', () => {
+  it('devuelve el minimo de la columna redondeado hacia abajo a 1 decimal', () => {
+    expect(suggestAxisFloor([12.37, 5.94, 8.1])).toBe(5.9)
+  })
+
+  it('ignora null/NaN', () => {
+    expect(suggestAxisFloor([null, NaN, 3.21, null])).toBe(3.2)
+  })
+
+  it('devuelve null si no hay valores validos', () => {
+    expect(suggestAxisFloor([null, NaN])).toBeNull()
+    expect(suggestAxisFloor([])).toBeNull()
+  })
+
+  it('funciona igual para metricas de rango muy distinto (% vs por-90)', () => {
+    expect(suggestAxisFloor([45.6, 60.2, 78.9])).toBe(45.6)
+    expect(suggestAxisFloor([0.12, 0.45, 1.03])).toBe(0.1)
   })
 })

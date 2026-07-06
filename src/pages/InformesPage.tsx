@@ -150,6 +150,7 @@ export default function InformesPage() {
               players={comparePlayers}
               compareIndices={informe.comparePlayerIndices ?? []}
               onChangeCompare={idxs => setInforme({ ...informe, comparePlayerIndices: idxs })}
+              matrix={derived?.matrix ?? {}}
               onBack={() => setStep(0)}
               onNext={() => setStep(2)}
             />

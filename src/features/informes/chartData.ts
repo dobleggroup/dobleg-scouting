@@ -133,3 +133,20 @@ export function scatterData(
 
   return { points, xLabel, yLabel, xMin: scatter.xMin, yMin: scatter.yMin }
 }
+
+// ---------------------------------------------------------------------------
+// suggestAxisFloor
+// ---------------------------------------------------------------------------
+
+/**
+ * Sugiere un piso ("mín") razonable para un eje de scatter a partir de sus
+ * valores reales: el mínimo de la columna, redondeado hacia abajo a 1
+ * decimal. Sirve solo como sugerencia visual (placeholder) en el input de
+ * "X mín"/"Y mín" — el usuario puede dejarlo en blanco para el ajuste
+ * automático (ver `scatterDomain`). Devuelve `null` si no hay datos.
+ */
+export function suggestAxisFloor(col: (number | null)[]): number | null {
+  const values = col.filter((v): v is number => v != null && !Number.isNaN(v))
+  if (values.length === 0) return null
+  return Math.floor(Math.min(...values) * 10) / 10
+}

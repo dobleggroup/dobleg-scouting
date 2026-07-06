@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { MetricStat, ChartAssignments, ScatterAssignment } from '@/features/informes/types'
 import { normalizeForSearch } from '@/lib/search'
+import { suggestAxisFloor } from '@/features/informes/chartData'
 
 // Colores de comparación del radar (deben coincidir con COMPARE_COLORS en chartData.ts)
 const COMPARE_COLORS = ['#F5C451', '#38BDF8']
@@ -168,9 +169,16 @@ interface ScatterSectionProps {
   stats: MetricStat[]
   scatters: ScatterAssignment[]
   onChange: (scatters: ScatterAssignment[]) => void
+  matrix: Record<string, (number | null)[]>
 }
 
-function ScatterSection({ stats, scatters, onChange }: ScatterSectionProps) {
+/** Placeholder del input de "mín": sugiere el piso real de los datos de esa metrica. */
+function suggestedMinPlaceholder(matrix: Record<string, (number | null)[]>, key: string): string {
+  const suggested = suggestAxisFloor(matrix[key] ?? [])
+  return suggested == null ? 'auto' : `auto (${suggested})`
+}
+
+function ScatterSection({ stats, scatters, onChange, matrix }: ScatterSectionProps) {
   function update(idx: number, patch: Partial<ScatterAssignment>) {
     onChange(scatters.map((s, i) => (i === idx ? { ...s, ...patch } : s)))
   }
@@ -252,7 +260,7 @@ function ScatterSection({ stats, scatters, onChange }: ScatterSectionProps) {
                   type="number"
                   value={sc.xMin ?? ''}
                   onChange={e => updateMin(idx, 'xMin', e.target.value)}
-                  placeholder="auto"
+                  placeholder={suggestedMinPlaceholder(matrix, sc.xKey)}
                   className="w-full px-2 py-1.5 rounded-lg text-xs border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-700 dark:text-apple-gray-200 placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green"
                 />
               </div>
@@ -262,7 +270,7 @@ function ScatterSection({ stats, scatters, onChange }: ScatterSectionProps) {
                   type="number"
                   value={sc.yMin ?? ''}
                   onChange={e => updateMin(idx, 'yMin', e.target.value)}
-                  placeholder="auto"
+                  placeholder={suggestedMinPlaceholder(matrix, sc.yKey)}
                   className="w-full px-2 py-1.5 rounded-lg text-xs border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-700 dark:text-apple-gray-200 placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green"
                 />
               </div>
@@ -301,6 +309,7 @@ interface Step2MetricasProps {
   players: ComparePlayerOption[]
   compareIndices: number[]
   onChangeCompare: (idxs: number[]) => void
+  matrix: Record<string, (number | null)[]>
   onBack: () => void
   onNext: () => void
 }
@@ -312,6 +321,7 @@ export default function Step2Metricas({
   players,
   compareIndices,
   onChangeCompare,
+  matrix,
   onBack,
   onNext,
 }: Step2MetricasProps) {
@@ -396,6 +406,7 @@ export default function Step2Metricas({
           stats={stats}
           scatters={charts.scatters}
           onChange={scatters => onChangeCharts({ ...charts, scatters })}
+          matrix={matrix}
         />
         <ChipGroup
           title="Solo número + ranking"
