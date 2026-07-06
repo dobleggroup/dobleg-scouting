@@ -19,7 +19,7 @@ function dotClass(color: MetricStat['color']): string {
   switch (color) {
     case 'green': return 'bg-brand-green'
     case 'amber': return 'bg-amber-400'
-    case 'red': return 'bg-brand-red'
+    case 'red': return 'bg-red-500'
     default: return 'bg-apple-gray-400'
   }
 }
@@ -61,13 +61,13 @@ function ChipGroup({ title, hint, stats, selected, onChange, children }: ChipGro
           {selected.map(key => (
             <span
               key={key}
-              className="inline-flex items-center gap-1.5 pl-3 pr-2 py-1 rounded-full bg-brand-red/10 border border-brand-red/25 text-xs font-medium text-brand-red"
+              className="inline-flex items-center gap-1.5 pl-3 pr-2 py-1 rounded-full bg-brand-green/10 border border-brand-green/25 text-xs font-medium text-brand-green"
             >
               {labelFor(stats, key)}
               <button
                 type="button"
                 onClick={() => remove(key)}
-                className="text-brand-red/50 hover:text-brand-red transition-colors ml-0.5"
+                className="text-brand-green/50 hover:text-brand-green transition-colors ml-0.5"
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
@@ -81,7 +81,7 @@ function ChipGroup({ title, hint, stats, selected, onChange, children }: ChipGro
         value=""
         onChange={e => add(e.target.value)}
         disabled={available.length === 0}
-        className="w-full px-3 py-2 rounded-xl text-xs border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-600 dark:text-apple-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-red/40 focus:border-brand-red font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+        className="w-full px-3 py-2 rounded-xl text-xs border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-600 dark:text-apple-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green font-medium disabled:opacity-40 disabled:cursor-not-allowed"
       >
         <option value="">+ Agregar</option>
         {available.map(s => (
@@ -211,7 +211,7 @@ function ScatterSection({ stats, scatters, onChange }: ScatterSectionProps) {
               <button
                 type="button"
                 onClick={() => remove(idx)}
-                className="text-apple-gray-400 hover:text-brand-red transition-colors"
+                className="text-apple-gray-400 hover:text-brand-green transition-colors"
                 aria-label="Quitar scatter plot"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -225,7 +225,7 @@ function ScatterSection({ stats, scatters, onChange }: ScatterSectionProps) {
                 <select
                   value={sc.xKey}
                   onChange={e => update(idx, { xKey: e.target.value })}
-                  className="w-full px-2 py-1.5 rounded-lg text-xs border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-700 dark:text-apple-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-red/40 focus:border-brand-red"
+                  className="w-full px-2 py-1.5 rounded-lg text-xs border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-700 dark:text-apple-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green"
                 >
                   {stats.map(s => (
                     <option key={s.def.key} value={s.def.key}>{s.def.label}</option>
@@ -237,7 +237,7 @@ function ScatterSection({ stats, scatters, onChange }: ScatterSectionProps) {
                 <select
                   value={sc.yKey}
                   onChange={e => update(idx, { yKey: e.target.value })}
-                  className="w-full px-2 py-1.5 rounded-lg text-xs border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-700 dark:text-apple-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-red/40 focus:border-brand-red"
+                  className="w-full px-2 py-1.5 rounded-lg text-xs border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-700 dark:text-apple-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green"
                 >
                   {stats.map(s => (
                     <option key={s.def.key} value={s.def.key}>{s.def.label}</option>
@@ -274,7 +274,7 @@ function ScatterSection({ stats, scatters, onChange }: ScatterSectionProps) {
                 value={sc.caption}
                 onChange={e => update(idx, { caption: e.target.value })}
                 placeholder="Ej: Volumen vs precisión"
-                className="w-full px-2 py-1.5 rounded-lg text-xs border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-700 dark:text-apple-gray-200 placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-red/40 focus:border-brand-red"
+                className="w-full px-2 py-1.5 rounded-lg text-xs border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-700 dark:text-apple-gray-200 placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green"
               />
             </div>
           </div>
@@ -284,7 +284,7 @@ function ScatterSection({ stats, scatters, onChange }: ScatterSectionProps) {
         type="button"
         onClick={add}
         disabled={stats.length === 0}
-        className="mt-3 w-full py-2 rounded-xl text-xs font-medium border-2 border-dashed border-apple-gray-300 dark:border-apple-gray-600 text-apple-gray-500 dark:text-apple-gray-400 hover:border-brand-red hover:text-brand-red transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+        className="mt-3 w-full py-2 rounded-xl text-xs font-medium border-2 border-dashed border-apple-gray-300 dark:border-apple-gray-600 text-apple-gray-500 dark:text-apple-gray-400 hover:border-brand-green hover:text-brand-green transition-all disabled:opacity-40 disabled:cursor-not-allowed"
       >
         + Agregar scatter plot
       </button>
@@ -335,7 +335,7 @@ export default function Step2Metricas({
             onChange={e => setQuery(e.target.value)}
             placeholder="Buscar métrica..."
             disabled={stats.length === 0}
-            className="w-full px-3 py-2.5 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-900 dark:text-white placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-red/40 focus:border-brand-red text-sm disabled:opacity-50 mb-3"
+            className="w-full px-3 py-2.5 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-900 dark:text-white placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green text-sm disabled:opacity-50 mb-3"
           />
 
           {stats.length === 0 ? (
@@ -416,7 +416,7 @@ export default function Step2Metricas({
             type="button"
             disabled={stats.length === 0}
             onClick={onNext}
-            className="flex-1 px-4 py-3 rounded-xl bg-brand-red text-white text-sm font-semibold hover:bg-brand-red/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex-1 px-4 py-3 rounded-xl bg-brand-green text-white text-sm font-semibold hover:bg-brand-green/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Siguiente →
           </button>

@@ -21,8 +21,8 @@ function displayComparables(rows: Comparable[]): Comparable[] {
 
 const cardClass = 'rounded-2xl border border-apple-gray-200 dark:border-apple-gray-800 bg-white dark:bg-apple-gray-900 p-5'
 const labelClass = 'block text-xs uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400 mb-1'
-const inputClass = 'w-full px-3 py-2 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-900 dark:text-white placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-red/40 focus:border-brand-red text-sm'
-const smallInputClass = 'w-full px-2 py-1.5 rounded-lg border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-900 dark:text-white placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-red/40 focus:border-brand-red text-xs'
+const inputClass = 'w-full px-3 py-2 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-900 dark:text-white placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green text-sm'
+const smallInputClass = 'w-full px-2 py-1.5 rounded-lg border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-900 dark:text-white placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green text-xs'
 
 interface FieldProps {
   label: string
@@ -53,7 +53,7 @@ function CheckboxField({ label, checked, onChange }: { label: string; checked: b
         type="checkbox"
         checked={checked}
         onChange={e => onChange(e.target.checked)}
-        className="rounded border-apple-gray-300 dark:border-apple-gray-600 text-brand-red focus:ring-brand-red/40"
+        className="rounded border-apple-gray-300 dark:border-apple-gray-600 text-brand-green focus:ring-brand-green/40"
       />
       {label}
     </label>
@@ -180,7 +180,7 @@ export default function Step3Contenido({ content, onChange, onBack, onNext }: St
                     type="button"
                     onClick={() => removeComparable(idx)}
                     aria-label="Quitar comparable"
-                    className="text-apple-gray-400 hover:text-brand-red transition-colors p-1"
+                    className="text-apple-gray-400 hover:text-brand-green transition-colors p-1"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
@@ -192,7 +192,7 @@ export default function Step3Contenido({ content, onChange, onBack, onNext }: St
             <button
               type="button"
               onClick={addComparable}
-              className="mt-3 w-full py-2 rounded-xl text-xs font-medium border-2 border-dashed border-apple-gray-300 dark:border-apple-gray-600 text-apple-gray-500 dark:text-apple-gray-400 hover:border-brand-red hover:text-brand-red transition-all"
+              className="mt-3 w-full py-2 rounded-xl text-xs font-medium border-2 border-dashed border-apple-gray-300 dark:border-apple-gray-600 text-apple-gray-500 dark:text-apple-gray-400 hover:border-brand-green hover:text-brand-green transition-all"
             >
               + Agregar comparable
             </button>
@@ -222,7 +222,7 @@ export default function Step3Contenido({ content, onChange, onBack, onNext }: St
         <button
           type="button"
           onClick={onNext}
-          className="flex-1 px-4 py-3 rounded-xl bg-brand-red text-white text-sm font-semibold hover:bg-brand-red/90 transition-colors"
+          className="flex-1 px-4 py-3 rounded-xl bg-brand-green text-white text-sm font-semibold hover:bg-brand-green/90 transition-colors"
         >
           Preview del informe →
         </button>

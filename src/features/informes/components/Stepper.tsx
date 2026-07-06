@@ -6,7 +6,7 @@ export default function Stepper({ step, setStep }: { step: number; setStep: (n: 
       {STEPS.map((label, i) => (
         <button key={label} onClick={() => setStep(i)}
           className={`text-xs font-semibold uppercase tracking-wide transition-colors ${
-            i === step ? 'text-brand-red' : 'text-apple-gray-400 hover:text-apple-gray-600 dark:hover:text-apple-gray-300'}`}>
+            i === step ? 'text-brand-green' : 'text-apple-gray-400 hover:text-apple-gray-600 dark:hover:text-apple-gray-300'}`}>
           {label}
         </button>
       ))}

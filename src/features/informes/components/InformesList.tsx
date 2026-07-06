@@ -40,7 +40,7 @@ export default function InformesList({ onOpen, onNew }: InformesListProps) {
         <button
           type="button"
           onClick={onNew}
-          className="px-4 py-2.5 rounded-xl bg-brand-red text-white text-sm font-semibold hover:bg-brand-red/90 transition-colors flex-shrink-0"
+          className="px-4 py-2.5 rounded-xl bg-brand-green text-white text-sm font-semibold hover:bg-brand-green/90 transition-colors flex-shrink-0"
         >
           + Nuevo informe
         </button>
@@ -60,7 +60,7 @@ export default function InformesList({ onOpen, onNew }: InformesListProps) {
           {items.map(it => (
             <div
               key={it.id}
-              className="rounded-2xl border border-apple-gray-200 dark:border-apple-gray-800 bg-white dark:bg-apple-gray-900 p-5 flex flex-col gap-3 hover:border-brand-red/40 transition-colors"
+              className="rounded-2xl border border-apple-gray-200 dark:border-apple-gray-800 bg-white dark:bg-apple-gray-900 p-5 flex flex-col gap-3 hover:border-brand-green/40 transition-colors"
             >
               <div className="min-w-0">
                 <h3 className="text-sm font-semibold text-apple-gray-900 dark:text-white truncate">

@@ -238,8 +238,8 @@ export default function Step1Archivo({ parsed, informe, onParsed, onChange, onNe
             onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click() } }}
             className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
               isDragging
-                ? 'border-brand-red bg-brand-red/5 scale-[1.01]'
-                : 'border-apple-gray-300 dark:border-apple-gray-700 hover:border-brand-red/50 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-800/50'
+                ? 'border-brand-green bg-brand-green/5 scale-[1.01]'
+                : 'border-apple-gray-300 dark:border-apple-gray-700 hover:border-brand-green/50 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-800/50'
             }`}
           >
             <input ref={fileInputRef} type="file" accept=".xlsx,.csv,.xml" onChange={handleFileInput} className="hidden" />
@@ -247,14 +247,14 @@ export default function Step1Archivo({ parsed, informe, onParsed, onChange, onNe
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400">
-              Arrastrá el archivo o <span className="text-brand-red font-medium">hacé clic para seleccionar</span>
+              Arrastrá el archivo o <span className="text-brand-green font-medium">hacé clic para seleccionar</span>
             </p>
             <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mt-1">.xlsx, .csv, .xml</p>
           </div>
 
           {parsing && (
             <p className="mt-3 text-xs text-apple-gray-500 dark:text-apple-gray-400 flex items-center gap-2">
-              <span className="w-3 h-3 border-2 border-brand-red border-t-transparent rounded-full animate-spin" />
+              <span className="w-3 h-3 border-2 border-brand-green border-t-transparent rounded-full animate-spin" />
               Procesando archivo...
             </p>
           )}
@@ -276,7 +276,7 @@ export default function Step1Archivo({ parsed, informe, onParsed, onChange, onNe
             value={informe?.contextoComparacion ?? ''}
             onChange={e => informe && onChange({ ...informe, contextoComparacion: e.target.value })}
             placeholder="Ej: vs. líneas ofensivas de la misma liga"
-            className="w-full px-3 py-2.5 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-900 dark:text-white placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-red/40 focus:border-brand-red text-sm disabled:opacity-50"
+            className="w-full px-3 py-2.5 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-900 dark:text-white placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green text-sm disabled:opacity-50"
           />
         </div>
 
@@ -322,12 +322,12 @@ export default function Step1Archivo({ parsed, informe, onParsed, onChange, onNe
                   onClick={() => selectProtagonist(idx)}
                   className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors ${
                     idx === informe.protagonistIndex
-                      ? 'bg-brand-red/10'
+                      ? 'bg-brand-green/10'
                       : 'hover:bg-apple-gray-50 dark:hover:bg-apple-gray-800/60'
                   }`}
                 >
                   <div className="min-w-0">
-                    <p className={`text-sm font-medium truncate ${idx === informe.protagonistIndex ? 'text-brand-red' : 'text-apple-gray-900 dark:text-white'}`}>
+                    <p className={`text-sm font-medium truncate ${idx === informe.protagonistIndex ? 'text-brand-green' : 'text-apple-gray-900 dark:text-white'}`}>
                       {cellStr(row, cols?.nombre ?? null) || `Fila ${idx + 1}`}
                     </p>
                     <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400 truncate">
@@ -336,7 +336,7 @@ export default function Step1Archivo({ parsed, informe, onParsed, onChange, onNe
                     </p>
                   </div>
                   {idx === informe.protagonistIndex && (
-                    <svg className="w-4 h-4 text-brand-red flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-4 h-4 text-brand-green flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                     </svg>
                   )}
@@ -355,7 +355,7 @@ export default function Step1Archivo({ parsed, informe, onParsed, onChange, onNe
               value={dbQuery}
               onChange={e => setDbQuery(e.target.value)}
               placeholder="Autocompletar club, posición, edad..."
-              className="w-full px-3 py-2.5 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-900 dark:text-white placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-red/40 focus:border-brand-red text-sm disabled:opacity-50"
+              className="w-full px-3 py-2.5 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-900 dark:text-white placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green text-sm disabled:opacity-50"
             />
             {dbQuery.trim().length >= 2 && (
               <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-white dark:bg-apple-gray-800 border border-apple-gray-200 dark:border-apple-gray-700 rounded-xl shadow-xl overflow-hidden max-h-56 overflow-y-auto">
@@ -388,7 +388,7 @@ export default function Step1Archivo({ parsed, informe, onParsed, onChange, onNe
           type="button"
           disabled={!informe}
           onClick={onNext}
-          className="w-full px-4 py-3 rounded-xl bg-brand-red text-white text-sm font-semibold hover:bg-brand-red/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-full px-4 py-3 rounded-xl bg-brand-green text-white text-sm font-semibold hover:bg-brand-green/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Siguiente →
         </button>
