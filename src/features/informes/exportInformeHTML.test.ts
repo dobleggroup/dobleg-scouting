@@ -136,4 +136,25 @@ describe('buildInformeHtml', () => {
     })
     expect(html).toContain('Goles')
   })
+
+  it('incluye la tabla de comparación de jugadores en el panel de Comparaciones cuando hay comparados', () => {
+    const def = makeDef({ key: 'goles', label: 'Goles' })
+    const informe = makeInforme({
+      comparePlayerIndices: [1],
+      charts: { radar: ['goles'], bar: [], numbers: [], scatters: [] },
+      rows: [
+        { Jugador: 'Jugador Ejemplo', Goles: 3 },
+        { Jugador: '<b>Rival Peligroso</b>', Goles: 5 },
+      ],
+    })
+    const html = buildInformeHtml({
+      informe,
+      stats: emptyStats,
+      matrix: { goles: [3, 5] },
+      defs: [def],
+    })
+    expect(html).toContain('Comparación de jugadores')
+    expect(html).toContain('&lt;b&gt;Rival Peligroso&lt;/b&gt;')
+    expect(html).not.toContain('<b>Rival Peligroso</b>')
+  })
 })

@@ -1,5 +1,5 @@
 import { radarSvg, barsSvg, scatterSvg } from './chartSvg'
-import { radarData, barsData, scatterData } from './chartData'
+import { radarData, barsData, scatterData, comparisonTable } from './chartData'
 import type { Informe, MetricStat, MetricDef } from './types'
 
 // ---------------------------------------------------------------------------
@@ -60,6 +60,12 @@ function safeDataUrl(url: string | null | undefined): string | null {
   return /^data:image\//i.test(url) ? url : null
 }
 
+/** Defensivo: el color viene de un helper interno (hex fijo), pero igual se valida antes de usarlo en `style`. */
+function safeHexColor(color: string | null | undefined, fallback: string): string {
+  if (color && /^#[0-9A-Fa-f]{3,8}$/.test(color)) return color
+  return fallback
+}
+
 // ---------------------------------------------------------------------------
 // buildInformeHtml: construye el string HTML completo (puro, testeable)
 // ---------------------------------------------------------------------------
@@ -110,6 +116,9 @@ export function buildInformeHtml(opts: {
 
   const matches = content.ultimos5.filter(m => m.rival || m.resultado || m.rating || m.minutos)
   const comparables = content.comparables.filter(c => c.jugador || c.club || c.rating || c.delta)
+
+  const compTable = comparisonTable(informe, matrix, defs)
+  const hasPlayerComparison = (informe.comparePlayerIndices?.length ?? 0) > 0 && compTable.rows.length > 0
 
   // ── Header / logo ──
   const logoHtml = logoSafe
@@ -272,12 +281,43 @@ export function buildInformeHtml(opts: {
       </div>
     </div>`
 
+  const playerComparisonHtml = hasPlayerComparison
+    ? `<h3 class="dg-panel-title">Comparación de jugadores</h3>
+        <div class="dg-table-wrap"><table class="dg-table">
+          <thead><tr>
+            <th>Métrica</th>
+            ${compTable.players
+              .map(
+                p =>
+                  `<th><span class="dg-legend-item"><span class="dg-legend-dot" style="background:${safeHexColor(p.color, '#8A9099')}"></span>${escapeHtml(p.name || 'Sin nombre')}</span></th>`,
+              )
+              .join('')}
+          </tr></thead>
+          <tbody>
+            ${compTable.rows
+              .map(
+                row => `<tr>
+              <td>${escapeHtml(row.label)}</td>
+              ${row.cells
+                .map(
+                  cell =>
+                    `<td${cell.best ? ' style="color:#4ADE80;font-weight:700"' : ''}>${escapeHtml(cell.value)}</td>`,
+                )
+                .join('')}
+            </tr>`,
+              )
+              .join('')}
+          </tbody>
+        </table></div>`
+    : ''
+
   const comparacionesPanel = `
     <div class="dg-panel-inner">
+      ${playerComparisonHtml}
       ${
         content.hideComparables
           ? ''
-          : `<h3 class="dg-panel-title">Comparables</h3>
+          : `<h3 class="dg-panel-title${hasPlayerComparison ? ' dg-mt' : ''}">Comparables</h3>
             ${
               comparables.length === 0
                 ? '<p class="dg-empty">Sin comparables cargados.</p>'
