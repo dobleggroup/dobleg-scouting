@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeHeader, matchHeaderToMetric, buildColumnMap } from './metricRegistry'
+import { normalizeHeader, matchHeaderToMetric, buildColumnMap, inferRawMetric } from './metricRegistry'
 
 describe('normalizeHeader', () => {
   it('quita acentos, mayúsculas, barras y porcentajes', () => {
@@ -35,6 +35,13 @@ describe('buildColumnMap', () => {
     expect(rawDef?.label).toBe('Metrica Nueva')
   })
 
+  it('infiere unidad % y lower-is-better en columnas crudas no reconocidas', () => {
+    const { defs } = buildColumnMap(['Perdidas raras, %'])
+    const d = defs.find(x => x.sourceHeader === 'Perdidas raras, %')
+    expect(d?.unit).toBe('%')
+    expect(d?.higherIsBetter).toBe(false)
+  })
+
   it('dedupe: dos headers al mismo metric key -> un solo def', () => {
     const { columnMap, defs } = buildColumnMap(['Goles', 'Goals'], [{ Goles: 2, Goals: 3 }])
     expect(columnMap['Goles']).toBe('goals')
@@ -62,5 +69,54 @@ describe('buildColumnMap', () => {
     expect(k2).toBeDefined()
     expect(k1).not.toBe(k2)
     expect(defs.filter(d => d.key === k1 || d.key === k2)).toHaveLength(2)
+  })
+})
+
+describe('inferRawMetric', () => {
+  it('header con % -> unit %', () => {
+    expect(inferRawMetric('Pases hacia adelante, %').unit).toBe('%')
+  })
+
+  it('header con 90 -> unit /90', () => {
+    expect(inferRawMetric('Pases hacia adelante/90').unit).toBe('/90')
+  })
+
+  it('header terminado en metros -> unit m', () => {
+    expect(inferRawMetric('Distancia recorrida, m').unit).toBe('m')
+  })
+
+  it('header sin marcas -> unit vacio', () => {
+    expect(inferRawMetric('Metrica rara').unit).toBe('')
+  })
+
+  it('Pérdidas/90 -> higherIsBetter false', () => {
+    expect(inferRawMetric('Pérdidas/90').higherIsBetter).toBe(false)
+  })
+
+  it('Faltas recibidas/90 -> higherIsBetter true (no se flaggea "recibidas" sola)', () => {
+    expect(inferRawMetric('Faltas recibidas/90').higherIsBetter).toBe(true)
+  })
+
+  it('Goles recibidos/90 -> higherIsBetter false', () => {
+    expect(inferRawMetric('Goles recibidos/90').higherIsBetter).toBe(false)
+  })
+
+  it('Tarjetas amarillas -> higherIsBetter false', () => {
+    expect(inferRawMetric('Tarjetas amarillas').higherIsBetter).toBe(false)
+  })
+
+  it('Duelos ofensivos ganados, % -> higherIsBetter true (no tiene tokens negativos)', () => {
+    expect(inferRawMetric('Duelos ofensivos ganados, %').higherIsBetter).toBe(true)
+  })
+
+  it('short: header <= 14 chars se devuelve completo', () => {
+    expect(inferRawMetric('Corto').short).toBe('Corto')
+  })
+
+  it('short: header largo corta en borde de palabra, nunca a mitad de palabra', () => {
+    const header = 'Distancia recorrida total en metros por partido'
+    const { short } = inferRawMetric(header)
+    expect(short.length).toBeLessThan(header.length)
+    expect(header[short.length]).toBe(' ')
   })
 })
