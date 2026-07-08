@@ -135,6 +135,7 @@ export default function Step1Archivo({ parsed, informe, onParsed, onChange, onNe
   const photoInputRef = useRef<HTMLInputElement>(null)
 
   const [dbQuery, setDbQuery] = useState('')
+  const [dbApplied, setDbApplied] = useState<{ name: string; parts: string[] } | null>(null)
   const dbFilters = useMemo(
     () => (dbQuery.trim().length >= 2 ? { search: dbQuery.trim(), pageSize: 8 } : { pageSize: 0 }),
     [dbQuery]
@@ -204,21 +205,40 @@ export default function Step1Archivo({ parsed, informe, onParsed, onChange, onNe
       : mv >= 1_000_000 ? `€${(mv / 1_000_000).toFixed(mv % 1_000_000 === 0 ? 0 : 1)}M`
       : mv >= 1_000 ? `€${(mv / 1_000).toFixed(0)}K`
       : `€${mv}`
+    const edad = Number.isFinite(age) ? String(age) : ''
+    // Rating: autocompletar desde el Score GG del jugador si el campo está vacío.
+    const ggScore = p.primary_score ?? p.season_scores?.[0]?.avg_score ?? null
+    const ratingFromGG = ggScore != null ? String(Math.round(ggScore * 10) / 10) : ''
     onChange({
       ...informe,
+      dbPlayerId: p.id,
+      dbPlayerName: p.name,
+      dbPosition: p.primary_position ?? undefined,
+      dbPercentile: p.primary_percentile ?? undefined,
+      dbLeagueName: p.league?.name ?? undefined,
       content: {
         ...informe.content,
         club: p.team?.name ?? informe.content.club,
         posicion: p.primary_position ? displayPosition(p.primary_position) : informe.content.posicion,
-        edad: Number.isFinite(age) ? String(age) : informe.content.edad,
+        edad: edad || informe.content.edad,
         nacionalidad: p.nationality ?? informe.content.nacionalidad,
         liga: p.league?.name ?? informe.content.liga,
         contrato: p.contract_end_date ?? informe.content.contrato,
         valorMercado: mvFormatted || informe.content.valorMercado,
         transfermarktUrl: p.transfermarkt_url ?? informe.content.transfermarktUrl,
         representante: p.agent ?? informe.content.representante,
+        rating: informe.content.rating || ratingFromGG,
       },
     })
+    // Feedback visible: resumen de lo que se autocompletó (se ve completo en el paso 3).
+    const applied: string[] = []
+    if (p.team?.name) applied.push(p.team.name)
+    if (edad) applied.push(`${edad} años`)
+    if (p.league?.name) applied.push(p.league.name)
+    if (p.contract_end_date) applied.push(`contrato ${p.contract_end_date}`)
+    if (mvFormatted) applied.push(mvFormatted)
+    if (p.agent) applied.push(p.agent)
+    setDbApplied({ name: p.name, parts: applied })
     setDbQuery('')
   }
 
@@ -382,6 +402,30 @@ export default function Step1Archivo({ parsed, informe, onParsed, onChange, onNe
               </div>
             )}
           </div>
+
+          {dbApplied && (
+            <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-brand-green/30 bg-brand-green/5 px-3 py-2.5">
+              <svg className="w-4 h-4 text-brand-green flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="currentColor">
+                <path fillRule="evenodd" d="M12 2a10 10 0 100 20 10 10 0 000-20zm4.7 7.7a1 1 0 00-1.4-1.4L11 12.6l-1.8-1.8a1 1 0 10-1.4 1.4l2.5 2.5a1 1 0 001.4 0l5-5z" clipRule="evenodd" />
+              </svg>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-brand-green">Datos cargados de {dbApplied.name}</p>
+                <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
+                  {dbApplied.parts.length ? dbApplied.parts.join(' · ') : 'Sin datos extra para autocompletar.'} · se ven completos en el paso 3
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDbApplied(null)}
+                className="text-apple-gray-400 hover:text-brand-green transition-colors flex-shrink-0"
+                aria-label="Cerrar aviso"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
 
         <button

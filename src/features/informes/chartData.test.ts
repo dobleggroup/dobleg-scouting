@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getRowName, radarData, barsData, scatterData, suggestAxisFloor, comparisonTable } from './chartData'
+import { getRowName, radarData, radarComparisonData, barsData, scatterData, suggestAxisFloor, comparisonTable, comparisonWinCounts, parseRating, ratingMax, topStrengths } from './chartData'
 import type { Informe, MetricDef, MetricStat, ScatterAssignment } from './types'
 
 function makeDef(over: Partial<MetricDef>): MetricDef {
@@ -43,7 +43,7 @@ describe('getRowName', () => {
 })
 
 describe('radarData', () => {
-  it('arma N series con colores correctos y percentiles por jugador (A mejor, B peor)', () => {
+  it('arma protagonista + promedio del pool, con percentiles por eje', () => {
     const defs = [
       makeDef({ key: 'goals', label: 'Goles' }),
       makeDef({ key: 'assists', label: 'Asistencias' }),
@@ -56,7 +56,6 @@ describe('radarData', () => {
       headers: ['Jugador'],
       rows: [{ Jugador: 'A' }, { Jugador: 'B' }, { Jugador: 'C' }],
       protagonistIndex: 0,
-      comparePlayerIndices: [1],
       charts: { radar: ['goals', 'assists'], bar: [], numbers: [], scatters: [] },
     })
 
@@ -64,15 +63,35 @@ describe('radarData', () => {
 
     expect(result.axes).toEqual(['Goles', 'Asistencias'])
     expect(result.series).toHaveLength(2)
+    expect(result.droppedCount).toBe(0)
     expect(result.series[0]).toMatchObject({ name: 'A', color: '#22C55E' })
-    expect(result.series[1]).toMatchObject({ name: 'B', color: '#F5C451' })
+    // Segunda serie: referencia "Promedio del grupo", punteada y sin relleno.
+    expect(result.series[1]).toMatchObject({ name: 'Promedio del grupo', dashed: true, fill: false })
     // A tiene el valor mas alto en ambos ejes => percentil 100
     expect(result.series[0].values).toEqual([100, 100])
-    // B tiene el valor mas bajo en ambos ejes => percentil 0
-    expect(result.series[1].values).toEqual([0, 0])
+    // Referencia = jugador promedio: percentil del promedio real del pool por eje.
+    // goles [10,1,5] → media 5.33 supera a 2 de 3 => 100; asistencias [8,0,4] → media 4 supera a 1 de 3 => 50.
+    expect(result.series[1].values).toEqual([100, 50])
   })
 
-  it('soporta hasta 2 comparados con los colores en orden', () => {
+  it('omite del radar las métricas sin variación en el pool (evita el pinchado)', () => {
+    const defs = [
+      makeDef({ key: 'goals', label: 'Goles' }),
+      makeDef({ key: 'altura', label: 'Altura' }),
+    ]
+    // 'altura' es 0 para todos => sin variación => se descarta.
+    const matrix = { goals: [3, 1, 2], altura: [0, 0, 0] }
+    const informe = makeInforme({
+      headers: ['Jugador'],
+      rows: [{ Jugador: 'A' }, { Jugador: 'B' }, { Jugador: 'C' }],
+      charts: { radar: ['goals', 'altura'], bar: [], numbers: [], scatters: [] },
+    })
+    const result = radarData(informe, [], matrix, defs)
+    expect(result.axes).toEqual(['Goles'])
+    expect(result.droppedCount).toBe(1)
+  })
+
+  it('ignora comparePlayerIndices en el radar (no superpone jugadores)', () => {
     const defs = [makeDef({ key: 'goals', label: 'Goles' })]
     const matrix = { goals: [5, 3, 1] }
     const informe = makeInforme({
@@ -83,12 +102,14 @@ describe('radarData', () => {
       charts: { radar: ['goals'], bar: [], numbers: [], scatters: [] },
     })
     const result = radarData(informe, [], matrix, defs)
-    expect(result.series.map(s => s.color)).toEqual(['#22C55E', '#F5C451', '#38BDF8'])
+    // Solo protagonista + promedio, sin importar cuántos jugadores se elijan para comparar.
+    expect(result.series).toHaveLength(2)
+    expect(result.series.map(s => s.color)).toEqual(['#22C55E', '#9AA3AE'])
   })
 
   it('omite ejes cuya def no existe', () => {
     const defs = [makeDef({ key: 'goals', label: 'Goles' })]
-    const matrix = { goals: [5] }
+    const matrix = { goals: [5, 3] }
     const informe = makeInforme({
       charts: { radar: ['goals', 'missing'], bar: [], numbers: [], scatters: [] },
     })
@@ -98,20 +119,103 @@ describe('radarData', () => {
   })
 })
 
+describe('radarComparisonData', () => {
+  it('superpone protagonista + comparados con colores en orden, sin promedio', () => {
+    const defs = [
+      makeDef({ key: 'goals', label: 'Goles' }),
+      makeDef({ key: 'assists', label: 'Asistencias' }),
+      makeDef({ key: 'duels', label: 'Duelos' }),
+    ]
+    const matrix = { goals: [5, 3, 1], assists: [4, 2, 0], duels: [9, 6, 3] }
+    const informe = makeInforme({
+      headers: ['Jugador'],
+      rows: [{ Jugador: 'A' }, { Jugador: 'B' }, { Jugador: 'C' }],
+      protagonistIndex: 0,
+      comparePlayerIndices: [1, 2],
+      charts: { radar: ['goals', 'assists', 'duels'], bar: [], numbers: [], scatters: [] },
+    })
+    const result = radarComparisonData(informe, matrix, defs)
+    expect(result.series).toHaveLength(3)
+    expect(result.series.map(s => s.color)).toEqual(['#22C55E', '#F5C451', '#38BDF8'])
+    expect(result.series.map(s => s.name)).toEqual(['A', 'B', 'C'])
+  })
+})
+
+describe('comparisonWinCounts', () => {
+  it('cuenta las métricas ganadas por cada jugador', () => {
+    const defs = [
+      makeDef({ key: 'goals', label: 'Goles' }),
+      makeDef({ key: 'assists', label: 'Asistencias' }),
+    ]
+    const matrix = { goals: [5, 1], assists: [0, 4] }
+    const informe = makeInforme({
+      headers: ['Jugador'],
+      rows: [{ Jugador: 'A' }, { Jugador: 'B' }],
+      protagonistIndex: 0,
+      comparePlayerIndices: [1],
+      charts: { radar: ['goals', 'assists'], bar: [], numbers: [], scatters: [] },
+    })
+    const table = comparisonTable(informe, matrix, defs)
+    const { wins, total } = comparisonWinCounts(table)
+    expect(total).toBe(2)
+    // A gana goles (5>1), B gana asistencias (4>0) => 1 cada uno.
+    expect(wins.map(w => w.wins)).toEqual([1, 1])
+    expect(wins.map(w => w.name)).toEqual(['A', 'B'])
+  })
+})
+
+describe('parseRating / ratingMax', () => {
+  it('parsea números con coma, punto o sufijo', () => {
+    expect(parseRating('7,4')).toBe(7.4)
+    expect(parseRating('8.1/10')).toBe(8.1)
+    expect(parseRating('82')).toBe(82)
+    expect(parseRating('')).toBeNull()
+    expect(parseRating('s/d')).toBeNull()
+  })
+  it('escala automática: ≤10 sobre 10, si no sobre 100', () => {
+    expect(ratingMax(7.4)).toBe(10)
+    expect(ratingMax(10)).toBe(10)
+    expect(ratingMax(82)).toBe(100)
+  })
+})
+
+describe('topStrengths', () => {
+  it('devuelve las métricas con percentil alto, ordenadas', () => {
+    const mk = (key: string, label: string, percentile: number): MetricStat => ({
+      def: makeDef({ key, label }), value: 1, avg: 0, avgPercentile: 50, percentile, color: 'green', rank: 1, total: 10,
+    })
+    const stats = [mk('a', 'Alta', 90), mk('b', 'Media', 40), mk('c', 'Buena', 70)]
+    expect(topStrengths(stats, ['a', 'b', 'c'], 3)).toEqual(['Alta', 'Buena'])
+  })
+})
+
+describe('scatterData dirección', () => {
+  it('propaga higherIsBetter de cada eje', () => {
+    const defs = [
+      makeDef({ key: 'x', label: 'X', higherIsBetter: true }),
+      makeDef({ key: 'y', label: 'Y', higherIsBetter: false }),
+    ]
+    const matrix = { x: [1, 2], y: [3, 4] }
+    const res = scatterData({ xKey: 'x', yKey: 'y', caption: '' }, matrix, defs, 0)
+    expect(res.xHigherIsBetter).toBe(true)
+    expect(res.yHigherIsBetter).toBe(false)
+  })
+})
+
 describe('barsData', () => {
   it('mapea dot/rank/value desde MetricStat', () => {
     const def = makeDef({ key: 'goals', label: 'Goles', unit: '' })
     const stats: MetricStat[] = [
-      { def, value: 5, avg: 3, percentile: 80, color: 'green', rank: 1, total: 5 },
+      { def, value: 5, avg: 3, avgPercentile: 40, percentile: 80, color: 'green', rank: 1, total: 5 },
     ]
     const rows = barsData(stats, ['goals'])
-    expect(rows).toEqual([{ label: 'Goles', pct: 80, value: '5.00', rank: 'N°1/5', dot: 'green' }])
+    expect(rows).toEqual([{ label: 'Goles', pct: 80, avgPct: 40, value: '5.00', rank: 'N°1/5', dot: 'green' }])
   })
 
   it('formatea porcentaje con unit %', () => {
     const def = makeDef({ key: 'pct', label: 'Duelos ganados', unit: '%' })
     const stats: MetricStat[] = [
-      { def, value: 62.4, avg: 50, percentile: 70, color: 'green', rank: 2, total: 8 },
+      { def, value: 62.4, avg: 50, avgPercentile: 55, percentile: 70, color: 'green', rank: 2, total: 8 },
     ]
     const rows = barsData(stats, ['pct'])
     expect(rows[0].value).toBe('62%')
@@ -120,10 +224,10 @@ describe('barsData', () => {
   it('usa valores por defecto cuando no hay dato', () => {
     const def = makeDef({ key: 'goals', label: 'Goles' })
     const stats: MetricStat[] = [
-      { def, value: null, avg: null, percentile: null, color: 'neutral', rank: null, total: 0 },
+      { def, value: null, avg: null, avgPercentile: null, percentile: null, color: 'neutral', rank: null, total: 0 },
     ]
     const rows = barsData(stats, ['goals'])
-    expect(rows[0]).toMatchObject({ pct: 0, value: '—', rank: 's/d', dot: 'neutral' })
+    expect(rows[0]).toMatchObject({ pct: 0, avgPct: null, value: '—', rank: 's/d', dot: 'neutral' })
   })
 
   it('ignora keys sin stat correspondiente', () => {

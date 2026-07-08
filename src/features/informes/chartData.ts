@@ -26,9 +26,16 @@ export function getRowName(informe: Informe, idx: number): string {
 // radarData
 // ---------------------------------------------------------------------------
 
-export interface RadarSeriesData { name: string; color: string; values: number[] }
+export interface RadarSeriesData {
+  name: string
+  color: string
+  values: number[]
+  dashed?: boolean
+  fill?: boolean
+}
 
 const COMPARE_COLORS = ['#F5C451', '#38BDF8']
+const AVG_COLOR = '#9AA3AE'   // gris de la referencia "Promedio" del radar
 
 function axisPercentile(
   matrix: Record<string, (number | null)[]>,
@@ -43,16 +50,96 @@ function axisPercentile(
 }
 
 /**
- * Arma ejes (labels) + series (protagonista + hasta 2 comparados) para el radar.
- * Cada valor es el percentil (0-100) del jugador en esa métrica dentro del pool.
+ * Percentil donde cae el promedio del pool en un eje. Es la misma referencia
+ * que la marca gris "promedio" de las barras (computeStats.avgPercentile), así
+ * el hexágono gris del radar refleja al jugador promedio real por métrica en
+ * vez de un percentil 50 plano (que quedaba clavado como un hexágono regular).
+ */
+function axisAvgPercentile(
+  matrix: Record<string, (number | null)[]>,
+  key: string,
+  higherIsBetter: boolean,
+): number {
+  const nums = (matrix[key] ?? []).filter((v): v is number => v != null && !Number.isNaN(v))
+  if (nums.length <= 1) return 50
+  const mean = nums.reduce((a, b) => a + b, 0) / nums.length
+  return percentile(matrix[key] ?? [], mean, higherIsBetter)
+}
+
+/**
+ * Una métrica aporta info comparativa (y se puede graficar sin colapsar el
+ * radar) sólo si su columna tiene ≥2 valores distintos no nulos. Métricas
+ * vacías o constantes (ej. "Altura" 0 para todos en un export de Wyscout)
+ * colapsan los vértices al centro y "pinchan" el polígono — se omiten.
+ */
+function columnHasVariance(matrix: Record<string, (number | null)[]>, key: string): boolean {
+  const nums = (matrix[key] ?? []).filter((v): v is number => v != null && !Number.isNaN(v))
+  if (nums.length < 2) return false
+  return new Set(nums).size >= 2
+}
+
+/** Keys del radar que existen en defs y tienen variación real en el pool. */
+function usableRadarKeys(
+  requestedKeys: string[],
+  matrix: Record<string, (number | null)[]>,
+  defs: MetricDef[],
+): string[] {
+  return requestedKeys
+    .filter(key => defs.some(d => d.key === key))
+    .filter(key => columnHasVariance(matrix, key))
+}
+
+/**
+ * Arma ejes + series del radar principal: el protagonista (relleno verde) contra
+ * una referencia limpia del "jugador promedio" del pool (percentil 50, línea
+ * gris punteada). Cada valor del protagonista es su percentil (0-100) dentro del
+ * pool. Se omiten métricas sin variación para no romper el polígono. La
+ * comparación contra jugadores puntuales NO va acá — vive en "Comparaciones".
  */
 export function radarData(
   informe: Informe,
   _stats: MetricStat[],
   matrix: Record<string, (number | null)[]>,
   defs: MetricDef[],
+): { axes: string[]; series: RadarSeriesData[]; droppedCount: number } {
+  const requested = informe.charts.radar.filter(key => defs.some(d => d.key === key))
+  const keys = usableRadarKeys(informe.charts.radar, matrix, defs)
+  const droppedCount = requested.length - keys.length
+  const axes = keys.map(key => defs.find(d => d.key === key)!.label)
+
+  const protagonistValues = keys.map(key => {
+    const def = defs.find(d => d.key === key)!
+    return axisPercentile(matrix, key, informe.protagonistIndex, def.higherIsBetter)
+  })
+
+  const avgValues = keys.map(key => {
+    const def = defs.find(d => d.key === key)!
+    return axisAvgPercentile(matrix, key, def.higherIsBetter)
+  })
+
+  const protagonistName = getRowName(informe, informe.protagonistIndex) || informe.content?.nombre || ''
+  const series: RadarSeriesData[] = [
+    { name: protagonistName, color: '#22C55E', values: protagonistValues },
+    // Referencia del jugador promedio: percentil del promedio real del pool en cada eje.
+    { name: 'Promedio del grupo', color: AVG_COLOR, values: avgValues, dashed: true, fill: false },
+  ]
+
+  return { axes, series, droppedCount }
+}
+
+/**
+ * Radar de la pestaña "Comparaciones": superpone al protagonista con los hasta
+ * 2 jugadores elegidos (todos rellenos, colores distintos), sobre las mismas
+ * métricas del radar (o de barras si el radar está vacío). Sin referencia de
+ * promedio — acá lo que importa es jugador vs jugador.
+ */
+export function radarComparisonData(
+  informe: Informe,
+  matrix: Record<string, (number | null)[]>,
+  defs: MetricDef[],
 ): { axes: string[]; series: RadarSeriesData[] } {
-  const keys = informe.charts.radar.filter(key => defs.some(d => d.key === key))
+  const requested = informe.charts.radar.length ? informe.charts.radar : informe.charts.bar
+  const keys = usableRadarKeys(requested, matrix, defs)
   const axes = keys.map(key => defs.find(d => d.key === key)!.label)
 
   function valuesFor(idx: number): number[] {
@@ -62,15 +149,19 @@ export function radarData(
     })
   }
 
-  const protagonistName = getRowName(informe, informe.protagonistIndex) || informe.content?.nombre || ''
-  const series: RadarSeriesData[] = [
-    { name: protagonistName, color: '#22C55E', values: valuesFor(informe.protagonistIndex) },
-  ]
-
   const compareIdxs = (informe.comparePlayerIndices ?? []).slice(0, 2)
-  compareIdxs.forEach((idx, i) => {
-    series.push({ name: getRowName(informe, idx), color: COMPARE_COLORS[i], values: valuesFor(idx) })
-  })
+  const series: RadarSeriesData[] = [
+    {
+      name: getRowName(informe, informe.protagonistIndex) || informe.content?.nombre || '',
+      color: '#22C55E',
+      values: valuesFor(informe.protagonistIndex),
+    },
+    ...compareIdxs.map((idx, i) => ({
+      name: getRowName(informe, idx),
+      color: COMPARE_COLORS[i],
+      values: valuesFor(idx),
+    })),
+  ]
 
   return { axes, series }
 }
@@ -139,6 +230,56 @@ export function comparisonTable(
 }
 
 // ---------------------------------------------------------------------------
+// rating gauge helpers
+// ---------------------------------------------------------------------------
+
+/** Parsea un rating escrito a mano ("7,4", "82", "8.1/10" → toma el primer número). null si no hay número. */
+export function parseRating(raw: string | null | undefined): number | null {
+  if (!raw) return null
+  const m = String(raw).replace(',', '.').match(/-?\d+(\.\d+)?/)
+  if (!m) return null
+  const n = Number(m[0])
+  return Number.isFinite(n) ? n : null
+}
+
+/** Escala automática del gauge: ≤10 → sobre 10 (tipo partido); si no, sobre 100 (Score GG). */
+export function ratingMax(value: number): number {
+  return value <= 10 ? 10 : 100
+}
+
+/**
+ * Las métricas donde el jugador más destaca (percentil alto) entre las `keys`
+ * de un gráfico. Sirve para el "Destaca en: ..." de la mini-explicación.
+ */
+export function topStrengths(stats: MetricStat[], keys: string[], n = 3): string[] {
+  return keys
+    .map(k => stats.find(s => s.def.key === k))
+    .filter((s): s is MetricStat => !!s && s.percentile != null && (s.percentile ?? 0) >= 60)
+    .sort((a, b) => (b.percentile ?? 0) - (a.percentile ?? 0))
+    .slice(0, n)
+    .map(s => s.def.label)
+}
+
+// ---------------------------------------------------------------------------
+// comparisonWinCounts
+// ---------------------------------------------------------------------------
+
+export interface ComparisonWins { name: string; color: string; wins: number }
+
+/** Cuenta cuántas métricas gana cada jugador en la tabla de comparación (marca `best`). */
+export function comparisonWinCounts(
+  table: ComparisonTableResult,
+): { wins: ComparisonWins[]; total: number } {
+  const wins: ComparisonWins[] = table.players.map(p => ({ name: p.name, color: p.color, wins: 0 }))
+  table.rows.forEach(row =>
+    row.cells.forEach((cell, i) => {
+      if (cell.best && wins[i]) wins[i].wins++
+    }),
+  )
+  return { wins, total: table.rows.length }
+}
+
+// ---------------------------------------------------------------------------
 // barsData
 // ---------------------------------------------------------------------------
 
@@ -150,6 +291,7 @@ export function barsData(stats: MetricStat[], keys: string[]): BarRow[] {
     .map(stat => ({
       label: stat.def.label,
       pct: stat.percentile ?? 0,
+      avgPct: stat.avgPercentile,
       value:
         stat.value == null
           ? '—'
@@ -171,6 +313,8 @@ export interface ScatterDataResult {
   yLabel: string
   xMin?: number
   yMin?: number
+  xHigherIsBetter: boolean
+  yHigherIsBetter: boolean
 }
 
 /** Recorre matrix[xKey]/matrix[yKey] en paralelo, descarta pares incompletos y marca al protagonista. */
@@ -182,8 +326,10 @@ export function scatterData(
 ): ScatterDataResult {
   const xCol = matrix[scatter.xKey] ?? []
   const yCol = matrix[scatter.yKey] ?? []
-  const xLabel = defs.find(d => d.key === scatter.xKey)?.label ?? scatter.xKey
-  const yLabel = defs.find(d => d.key === scatter.yKey)?.label ?? scatter.yKey
+  const xDef = defs.find(d => d.key === scatter.xKey)
+  const yDef = defs.find(d => d.key === scatter.yKey)
+  const xLabel = xDef?.label ?? scatter.xKey
+  const yLabel = yDef?.label ?? scatter.yKey
 
   const points: { x: number; y: number; me: boolean }[] = []
   const len = Math.max(xCol.length, yCol.length)
@@ -194,7 +340,15 @@ export function scatterData(
     points.push({ x, y, me: i === protagonistIndex })
   }
 
-  return { points, xLabel, yLabel, xMin: scatter.xMin, yMin: scatter.yMin }
+  return {
+    points,
+    xLabel,
+    yLabel,
+    xMin: scatter.xMin,
+    yMin: scatter.yMin,
+    xHigherIsBetter: xDef?.higherIsBetter ?? true,
+    yHigherIsBetter: yDef?.higherIsBetter ?? true,
+  }
 }
 
 // ---------------------------------------------------------------------------

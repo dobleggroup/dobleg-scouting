@@ -48,20 +48,9 @@ export default function InformesPage() {
     return () => clearTimeout(timer)
   }, [saveFeedback])
 
-  // Autosave: cada cambio de `informe` (ya con id) se guarda solo tras ~1s sin más cambios.
-  // Los errores (ej. cuota de localStorage superada) se registran pero no interrumpen la edición;
-  // el usuario los ve recién si usa el botón "Guardar" manual.
-  useEffect(() => {
-    if (!informe || !informe.id) return
-    const timer = setTimeout(() => {
-      try {
-        saveInforme({ ...informe, updatedAt: new Date().toISOString() })
-      } catch (e) {
-        console.error('Autosave de informe falló:', e)
-      }
-    }, 1000)
-    return () => clearTimeout(timer)
-  }, [informe])
+  // No hay autosave: el informe vive en memoria mientras se edita y solo se persiste
+  // en "Mis informes" cuando el usuario pulsa "Guardar" (handleSave). Así la lista contiene
+  // únicamente los informes que el usuario eligió conservar para retomar más tarde.
 
   const handleSave = () => {
     if (!informe) return
@@ -171,6 +160,7 @@ export default function InformesPage() {
               defs={derived.defs}
               onBack={() => setStep(2)}
               onSave={handleSave}
+              onChange={setInforme}
             />
           )}
         </>

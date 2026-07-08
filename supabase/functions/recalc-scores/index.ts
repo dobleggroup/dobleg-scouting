@@ -1,5 +1,12 @@
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
 import { getSupabaseAdmin } from '../_shared/supabase-client.ts';
+import { calculateSeasonScore } from '../_shared/scoring.ts';
+import type { Position } from '../_shared/types.ts';
+
+// Pool mínimo de jugadores de una posición (en la liga) para que el ranking sea
+// confiable. Solo entran al pool los que tienen suficientes partidos.
+const MIN_POOL_MATCHES = 3;
+const MIN_POOL_SIZE = 5;
 
 serve(async (req) => {
   const supabase = getSupabaseAdmin();
@@ -30,6 +37,23 @@ serve(async (req) => {
 
     let totalUpserted = 0;
 
+    // Overrides de puesto: jugadores que la grilla de API detecta mal. Se fuerza
+    // su posición real (todos sus partidos se consolidan ahí). Ampliable.
+    const POSITION_OVERRIDES: Record<string, string> = {
+      'mauricio vera': 'VC',
+      'mario sanabria': 'EXT',
+      'julian lopez': 'VC',
+    };
+    const normName = (s: string) => (s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const overrideById = new Map<number, string>();
+    {
+      const { data: pls } = await supabase.from('players').select('id, name');
+      for (const p of pls ?? []) {
+        const ov = POSITION_OVERRIDES[normName(p.name)];
+        if (ov) overrideById.set(p.id, ov);
+      }
+    }
+
     for (const season of seasons) {
       // Process all leagues for each season — Clausura/Apertura leagues may have
       // fixtures tagged with a different season than the league's own season field
@@ -42,6 +66,11 @@ serve(async (req) => {
         .eq('season', season);
       const allFixtureIds = allFixtures?.map(f => f.id) ?? [];
       if (allFixtureIds.length === 0) continue;
+
+      // Filas de TODAS las ligas acumuladas: el rating se rankea por posición a
+      // nivel GLOBAL (contra todos los de su puesto en la plataforma, sin importar
+      // la liga), no liga por liga.
+      const allSeasonRows: any[] = [];
 
       for (const league of leaguesForSeason) {
         // Get teams that belong to this domestic league
@@ -77,7 +106,10 @@ serve(async (req) => {
 
         const groups = new Map<string, typeof allStats>();
         for (const s of allStats) {
-          const key = `${s.player_id}|${s.detected_position}`;
+          // Override de puesto: si el jugador tiene puesto real fijado, se lo
+          // agrupa ahí (todos sus partidos), corrigiendo la detección de la grilla.
+          const pos = overrideById.get(s.player_id) ?? s.detected_position;
+          const key = `${s.player_id}|${pos}`;
           if (!groups.has(key)) groups.set(key, []);
           groups.get(key)!.push(s);
         }
@@ -141,16 +173,8 @@ serve(async (req) => {
           });
         }
 
-        if (upsertRows.length > 0) {
-          const CHUNK = 500;
-          for (let i = 0; i < upsertRows.length; i += CHUNK) {
-            await supabase.from('player_season_scores').upsert(
-              upsertRows.slice(i, i + CHUNK),
-              { onConflict: 'player_id,season,position,league_id' }
-            );
-          }
-          totalUpserted += upsertRows.length;
-        }
+        // Se acumulan; el avg_score se calcula al cerrar la temporada (ranking global).
+        for (const r of upsertRows) allSeasonRows.push(r);
 
         // Compute position metric averages for this league
         const leagueStats = allStats.filter((s: any) => s.minutes >= 10);
@@ -201,6 +225,50 @@ serve(async (req) => {
             metricRows, { onConflict: 'position,league_id,season' }
           );
         }
+      }
+
+      // ── Consolidar a cada jugador en su posición PRIMARIA (la de más partidos) ──
+      // Evita fragmentarlo entre puestos por detección ruidosa. Los overrides ya
+      // vienen consolidados desde el agrupamiento (todos sus partidos en un puesto).
+      const bestPos = new Map<number, { position: string; mp: number }>();
+      for (const r of allSeasonRows) {
+        const cur = bestPos.get(r.player_id);
+        if (!cur || (r.matches_played ?? 0) > cur.mp) {
+          bestPos.set(r.player_id, { position: r.position, mp: r.matches_played ?? 0 });
+        }
+      }
+      const primaryRows = allSeasonRows.filter((r: any) => bestPos.get(r.player_id)?.position === r.position);
+
+      // ── Ranking GLOBAL por posición: cada jugador contra TODOS los de su puesto
+      // en la plataforma (todas las ligas), SIN ajuste por nivel de liga. ──
+      const byPos = new Map<string, any[]>();
+      for (const r of primaryRows) {
+        if (!byPos.has(r.position)) byPos.set(r.position, []);
+        byPos.get(r.position)!.push(r);
+      }
+      for (const [pos, rowsForPos] of byPos) {
+        const pool = rowsForPos.filter((r: any) => (r.matches_played ?? 0) >= MIN_POOL_MATCHES);
+        const canRank = pool.length >= MIN_POOL_SIZE;
+        for (const r of rowsForPos) {
+          let score: number | null = null;
+          if (canRank) score = calculateSeasonScore(r, pool, pos as Position);
+          if (score === null) score = r.avg_rating ?? null; // fallback: rating de API
+          r.avg_score = score;
+        }
+      }
+
+      // Reemplazar los datos de la temporada por las filas primarias frescas:
+      // borra filas viejas/fragmentadas de posiciones que ya no corresponden.
+      await supabase.from('player_season_scores').delete().eq('season', season);
+      if (primaryRows.length > 0) {
+        const CHUNK = 500;
+        for (let i = 0; i < primaryRows.length; i += CHUNK) {
+          await supabase.from('player_season_scores').upsert(
+            primaryRows.slice(i, i + CHUNK),
+            { onConflict: 'player_id,season,position,league_id' }
+          );
+        }
+        totalUpserted += primaryRows.length;
       }
 
       // Fix current_team_id: set to team from most recent fixture

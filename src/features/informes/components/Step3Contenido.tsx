@@ -122,6 +122,24 @@ export default function Step3Contenido({ content, onChange, onBack, onNext }: St
               <Field label="Minutos" value={content.minutos} onChange={v => set('minutos', v)} />
               <Field label="Goles" value={content.goles} onChange={v => set('goles', v)} />
               <Field label="Asistencias" value={content.asistencias} onChange={v => set('asistencias', v)} />
+              <Field label="Prom. rating (opc.)" value={content.ratingPromedio ?? ''} onChange={v => set('ratingPromedio', v)} placeholder="marca del gauge" />
+            </div>
+            <div className="mt-3 space-y-2">
+              <CheckboxField
+                label="Ocultar velocímetro de rating"
+                checked={content.hideRatingGauge ?? false}
+                onChange={v => set('hideRatingGauge', v)}
+              />
+              <CheckboxField
+                label="Sacar la pestaña Físico del informe"
+                checked={content.hideFisicoTab ?? false}
+                onChange={v => set('hideFisicoTab', v)}
+              />
+              <CheckboxField
+                label="Físico: mostrar sólo los datos (sin gráficos)"
+                checked={content.hideFisicoCharts ?? false}
+                onChange={v => set('hideFisicoCharts', v)}
+              />
             </div>
           </div>
 
@@ -130,7 +148,7 @@ export default function Step3Contenido({ content, onChange, onBack, onNext }: St
             <div className="space-y-3">
               <Field label="Video (URL de YouTube)" value={content.videoUrl} onChange={v => set('videoUrl', v)} placeholder="https://youtube.com/..." />
               <Field label="Transfermarkt" value={content.transfermarktUrl} onChange={v => set('transfermarktUrl', v)} placeholder="https://transfermarkt.com/..." />
-              <Field label="Representante" value={content.representante} onChange={v => set('representante', v)} />
+              <Field label="Agencia" value={content.representante} onChange={v => set('representante', v)} />
             </div>
           </div>
         </div>

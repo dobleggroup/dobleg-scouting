@@ -153,7 +153,8 @@ describe('buildInformeHtml', () => {
       matrix: { goles: [3, 5] },
       defs: [def],
     })
-    expect(html).toContain('Comparación de jugadores')
+    expect(html).toContain('Detalle por métrica')
+    expect(html).toContain('métricas ganadas')
     expect(html).toContain('&lt;b&gt;Rival Peligroso&lt;/b&gt;')
     expect(html).not.toContain('<b>Rival Peligroso</b>')
   })

@@ -1,3 +1,4 @@
+import { t, translateMetric, type Lang } from '@/features/informes/i18n'
 import type { MetricStat } from '@/features/informes/types'
 
 function formatValue(stat: MetricStat): string {
@@ -8,10 +9,11 @@ function formatValue(stat: MetricStat): string {
 
 interface InformeNumberCardProps {
   stat: MetricStat
+  lang: Lang
 }
 
 /** Card compacta: valor grande + ranking + label de la métrica. Colores Doble G explícitos (siempre dark, sin variantes `dark:`). */
-export default function InformeNumberCard({ stat }: InformeNumberCardProps) {
+export default function InformeNumberCard({ stat, lang }: InformeNumberCardProps) {
   return (
     <div
       className="p-4 flex flex-col items-center text-center gap-1"
@@ -28,9 +30,9 @@ export default function InformeNumberCard({ stat }: InformeNumberCardProps) {
             : { background: 'transparent', color: '#8A9099' }
         }
       >
-        {stat.rank != null ? `N°${stat.rank} de ${stat.total}` : 'Sin datos'}
+        {stat.rank != null ? `N°${stat.rank} ${t(lang, 'm_of')} ${stat.total}` : 'Sin datos'}
       </span>
-      <span className="text-sm leading-tight" style={{ color: '#8A9099' }}>{stat.def.label}</span>
+      <span className="text-sm leading-tight" style={{ color: '#8A9099' }}>{translateMetric(stat.def.label, lang)}</span>
     </div>
   )
 }

@@ -43,9 +43,11 @@ export function computeStats(
     const value = col[protagonistIndex] ?? null
     const nums = col.filter((v): v is number => v != null && !Number.isNaN(v))
     const avg = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null
+    // Percentil donde cae el promedio del pool — sirve de referencia visual en las barras.
+    const avgPercentile = avg != null && nums.length > 1 ? percentile(col, avg, def.higherIsBetter) : null
 
     if (value == null || !nums.length) {
-      return { def, value, avg, percentile: null, color: 'neutral', rank: null, total: nums.length }
+      return { def, value, avg, avgPercentile, percentile: null, color: 'neutral', rank: null, total: nums.length }
     }
 
     const pct = percentile(col, value, def.higherIsBetter)
@@ -58,6 +60,6 @@ export function computeStats(
     const better = def.higherIsBetter
       ? nums.filter(v => v > value).length
       : nums.filter(v => v < value).length
-    return { def, value, avg, percentile: pct, color, rank: better + 1, total: nums.length }
+    return { def, value, avg, avgPercentile, percentile: pct, color, rank: better + 1, total: nums.length }
   })
 }

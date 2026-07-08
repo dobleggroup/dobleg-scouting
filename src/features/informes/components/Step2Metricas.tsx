@@ -118,7 +118,7 @@ function CompareSelector({ players, compareIndices, onChange }: CompareSelectorP
   }
 
   return (
-    <div className="mt-4 pt-4 border-t border-apple-gray-100 dark:border-apple-gray-800">
+    <div className="mt-3">
       <span className="block text-xs font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-2">
         Comparar con (hasta 2 jugadores)
       </span>
@@ -333,12 +333,35 @@ export default function Step2Metricas({
     return stats.filter(s => normalizeForSearch(s.def.label).includes(q))
   }, [stats, query])
 
+  // Un clic en una métrica de la lista la suma a Radar y a Barras a la vez.
+  // Si ya está en ambos, la saca de ambos (para deshacer sin ir a la derecha).
+  function toggleMetric(key: string) {
+    const inRadar = charts.radar.includes(key)
+    const inBar = charts.bar.includes(key)
+    if (inRadar && inBar) {
+      onChangeCharts({
+        ...charts,
+        radar: charts.radar.filter(k => k !== key),
+        bar: charts.bar.filter(k => k !== key),
+      })
+    } else {
+      onChangeCharts({
+        ...charts,
+        radar: inRadar ? charts.radar : [...charts.radar, key],
+        bar: inBar ? charts.bar : [...charts.bar, key],
+      })
+    }
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* ── Izquierda: lista de métricas ── */}
       <div className="space-y-4">
         <div className="rounded-2xl border border-apple-gray-200 dark:border-apple-gray-800 bg-white dark:bg-apple-gray-900 p-5">
-          <h2 className="text-sm font-semibold text-apple-gray-900 dark:text-white mb-3">Métricas</h2>
+          <h2 className="text-sm font-semibold text-apple-gray-900 dark:text-white mb-1">Métricas</h2>
+          <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mb-3">
+            Tocá una métrica para sumarla a <span className="text-brand-green font-medium">Radar</span> y <span className="text-brand-green font-medium">Barras</span>. Después sacá lo que sobre desde la derecha.
+          </p>
           <input
             type="text"
             value={query}
@@ -355,20 +378,54 @@ export default function Step2Metricas({
           ) : (
             <>
               <div className="max-h-[28rem] overflow-y-auto rounded-xl border border-apple-gray-100 dark:border-apple-gray-800 divide-y divide-apple-gray-100 dark:divide-apple-gray-800">
-                {filteredStats.map(stat => (
-                  <div
-                    key={stat.def.key}
-                    className="flex items-center justify-between gap-3 px-3 py-2.5"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dotClass(stat.color)}`} />
-                      <span className="text-sm text-apple-gray-900 dark:text-white truncate">{stat.def.label}</span>
-                    </div>
-                    <span className="text-sm font-medium text-apple-gray-600 dark:text-apple-gray-300 flex-shrink-0">
-                      {formatValue(stat)}
-                    </span>
-                  </div>
-                ))}
+                {filteredStats.map(stat => {
+                  const key = stat.def.key
+                  const inRadar = charts.radar.includes(key)
+                  const inBar = charts.bar.includes(key)
+                  const selected = inRadar || inBar
+                  const inBoth = inRadar && inBar
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => toggleMetric(key)}
+                      className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors ${
+                        selected ? 'bg-brand-green/10' : 'hover:bg-apple-gray-50 dark:hover:bg-apple-gray-800/60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dotClass(stat.color)}`} />
+                        <span className={`text-sm truncate ${selected ? 'text-brand-green font-medium' : 'text-apple-gray-900 dark:text-white'}`}>
+                          {stat.def.label}
+                        </span>
+                        {selected && !inBoth && (
+                          <span className="text-[10px] uppercase tracking-wide text-apple-gray-400 dark:text-apple-gray-500 flex-shrink-0">
+                            {inRadar ? 'solo radar' : 'solo barras'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2.5 flex-shrink-0">
+                        <span className="text-sm font-medium text-apple-gray-600 dark:text-apple-gray-300 tabular-nums">
+                          {formatValue(stat)}
+                        </span>
+                        {inBoth ? (
+                          <svg className="w-4 h-4 text-brand-green" viewBox="0 0 24 24" fill="currentColor">
+                            <path fillRule="evenodd" d="M12 2a10 10 0 100 20 10 10 0 000-20zm4.7 7.7a1 1 0 00-1.4-1.4L11 12.6l-1.8-1.8a1 1 0 10-1.4 1.4l2.5 2.5a1 1 0 001.4 0l5-5z" clipRule="evenodd" />
+                          </svg>
+                        ) : selected ? (
+                          <svg className="w-4 h-4 text-brand-green/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                            <circle cx="12" cy="12" r="9" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4 text-apple-gray-300 dark:text-apple-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                            <circle cx="12" cy="12" r="9" />
+                            <path strokeLinecap="round" d="M12 8.5v7M8.5 12h7" />
+                          </svg>
+                        )}
+                      </div>
+                    </button>
+                  )
+                })}
                 {filteredStats.length === 0 && (
                   <p className="px-3 py-3 text-xs text-apple-gray-400 dark:text-apple-gray-500">Sin resultados</p>
                 )}
@@ -389,13 +446,7 @@ export default function Step2Metricas({
           stats={stats}
           selected={charts.radar}
           onChange={keys => onChangeCharts({ ...charts, radar: keys })}
-        >
-          <CompareSelector
-            players={players}
-            compareIndices={compareIndices}
-            onChange={onChangeCompare}
-          />
-        </ChipGroup>
+        />
         <ChipGroup
           title="Barras comparativas"
           stats={stats}
@@ -414,6 +465,21 @@ export default function Step2Metricas({
           selected={charts.numbers}
           onChange={keys => onChangeCharts({ ...charts, numbers: keys })}
         />
+
+        {/* El radar y las barras comparan contra el promedio del pool. Esta
+            comparación contra jugadores puntuales alimenta sólo la pestaña
+            "Comparaciones" del informe. */}
+        <div className="rounded-2xl border border-apple-gray-200 dark:border-apple-gray-800 bg-white dark:bg-apple-gray-900 p-5">
+          <h3 className="text-sm font-semibold text-apple-gray-900 dark:text-white">Comparación de jugadores</h3>
+          <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mt-1">
+            Arma la tabla de la pestaña <span className="font-medium text-apple-gray-500 dark:text-apple-gray-400">“Comparaciones”</span> (protagonista vs. estos jugadores, con las métricas que elegiste). No afecta el radar ni las barras.
+          </p>
+          <CompareSelector
+            players={players}
+            compareIndices={compareIndices}
+            onChange={onChangeCompare}
+          />
+        </div>
 
         <div className="flex items-center gap-3">
           <button

@@ -32,26 +32,26 @@ export const SCORING_WEIGHTS: Record<Position, ScoringWeight[]> = {
     { metric: 'passes_total_p90', weight: 8, source: r => per90(r.passes_total, r.minutes) },
   ],
   LD: [
-    { metric: 'duels_won_pct', weight: 19, source: r => pct(r.duels_won, r.duels_total), isPercentage: true },
-    { metric: 'key_passes_p90', weight: 14, source: r => per90(r.passes_key, r.minutes) },
-    { metric: 'dribbles_success_p90', weight: 12, source: r => per90(r.dribbles_success, r.minutes) },
-    { metric: 'assists_p90', weight: 12, source: r => per90(r.assists, r.minutes) },
+    { metric: 'key_passes_p90', weight: 15, source: r => per90(r.passes_key, r.minutes) },
+    { metric: 'duels_won_pct', weight: 15, source: r => pct(r.duels_won, r.duels_total), isPercentage: true },
+    { metric: 'assists_p90', weight: 13, source: r => per90(r.assists, r.minutes) },
+    { metric: 'dribbles_success_p90', weight: 13, source: r => per90(r.dribbles_success, r.minutes) },
     { metric: 'tackles_p90', weight: 10, source: r => per90(r.tackles, r.minutes) },
     { metric: 'passes_accuracy', weight: 10, source: r => r.passes_accuracy, isPercentage: true },
+    { metric: 'dribbles_success_pct', weight: 8, source: r => pct(r.dribbles_success, r.dribbles_attempted), isPercentage: true },
     { metric: 'interceptions_p90', weight: 8, source: r => per90(r.interceptions, r.minutes) },
     { metric: 'rating', weight: 8, source: r => r.rating ?? 0 },
-    { metric: 'dribbles_success_pct', weight: 7, source: r => pct(r.dribbles_success, r.dribbles_attempted), isPercentage: true },
   ],
   LI: [
-    { metric: 'duels_won_pct', weight: 19, source: r => pct(r.duels_won, r.duels_total), isPercentage: true },
-    { metric: 'key_passes_p90', weight: 14, source: r => per90(r.passes_key, r.minutes) },
-    { metric: 'dribbles_success_p90', weight: 12, source: r => per90(r.dribbles_success, r.minutes) },
-    { metric: 'assists_p90', weight: 12, source: r => per90(r.assists, r.minutes) },
+    { metric: 'key_passes_p90', weight: 15, source: r => per90(r.passes_key, r.minutes) },
+    { metric: 'duels_won_pct', weight: 15, source: r => pct(r.duels_won, r.duels_total), isPercentage: true },
+    { metric: 'assists_p90', weight: 13, source: r => per90(r.assists, r.minutes) },
+    { metric: 'dribbles_success_p90', weight: 13, source: r => per90(r.dribbles_success, r.minutes) },
     { metric: 'tackles_p90', weight: 10, source: r => per90(r.tackles, r.minutes) },
     { metric: 'passes_accuracy', weight: 10, source: r => r.passes_accuracy, isPercentage: true },
+    { metric: 'dribbles_success_pct', weight: 8, source: r => pct(r.dribbles_success, r.dribbles_attempted), isPercentage: true },
     { metric: 'interceptions_p90', weight: 8, source: r => per90(r.interceptions, r.minutes) },
     { metric: 'rating', weight: 8, source: r => r.rating ?? 0 },
-    { metric: 'dribbles_success_pct', weight: 7, source: r => pct(r.dribbles_success, r.dribbles_attempted), isPercentage: true },
   ],
   VC: [
     { metric: 'tackles_p90', weight: 19, source: r => per90(r.tackles, r.minutes) },
@@ -65,16 +65,16 @@ export const SCORING_WEIGHTS: Record<Position, ScoringWeight[]> = {
     { metric: 'passes_accuracy_extra', weight: 5, source: r => r.passes_accuracy, isPercentage: true },
   ],
   VI: [
-    { metric: 'duels_won_pct', weight: 16, source: r => pct(r.duels_won, r.duels_total), isPercentage: true },
-    { metric: 'key_passes_p90', weight: 14, source: r => per90(r.passes_key, r.minutes) },
+    { metric: 'key_passes_p90', weight: 15, source: r => per90(r.passes_key, r.minutes) },
+    { metric: 'assists_p90', weight: 13, source: r => per90(r.assists, r.minutes) },
+    { metric: 'goals_p90', weight: 12, source: r => per90(r.goals, r.minutes) },
     { metric: 'dribbles_success_p90', weight: 12, source: r => per90(r.dribbles_success, r.minutes) },
-    { metric: 'assists_p90', weight: 10, source: r => per90(r.assists, r.minutes) },
-    { metric: 'goals_p90', weight: 10, source: r => per90(r.goals, r.minutes) },
-    { metric: 'passes_accuracy', weight: 10, source: r => r.passes_accuracy, isPercentage: true },
+    { metric: 'duels_won_pct', weight: 12, source: r => pct(r.duels_won, r.duels_total), isPercentage: true },
+    { metric: 'passes_accuracy', weight: 11, source: r => r.passes_accuracy, isPercentage: true },
     { metric: 'shots_on_p90', weight: 8, source: r => per90(r.shots_on, r.minutes) },
     { metric: 'rating', weight: 8, source: r => r.rating ?? 0 },
-    { metric: 'tackles_p90', weight: 6, source: r => per90(r.tackles, r.minutes) },
-    { metric: 'dribbles_success_pct', weight: 6, source: r => pct(r.dribbles_success, r.dribbles_attempted), isPercentage: true },
+    { metric: 'dribbles_success_pct', weight: 5, source: r => pct(r.dribbles_success, r.dribbles_attempted), isPercentage: true },
+    { metric: 'tackles_p90', weight: 4, source: r => per90(r.tackles, r.minutes) },
   ],
   EXT: [
     { metric: 'dribbles_success_p90', weight: 17, source: r => per90(r.dribbles_success, r.minutes) },
@@ -166,4 +166,79 @@ export function calculateMatchScore(
   }
 
   return normalizeToScale(scoreRaw);
+}
+
+// ─── Score por temporada (ranking contra el pool de la misma posición) ──────
+//
+// El match_score de arriba rankea contra los 2-4 jugadores del MISMO partido, lo
+// que aplasta todo al ~50 (≈6/10) y castiga a puestos con pocos representantes
+// por partido (ej. laterales). Este cálculo, en cambio, toma las métricas /90
+// AGREGADAS de la temporada y rankea al jugador contra TODO el pool de su puesto
+// en su liga → refleja "qué tan bueno es en su puesto" y usa todo el rango.
+
+/** Métrica de SCORING_WEIGHTS → campo agregado de player_season_scores. '' = sin equivalente (se omite). */
+const METRIC_TO_SEASON_FIELD: Record<string, string> = {
+  saves_p90: 'saves_p90',
+  goals_conceded_p90: 'goals_conceded_p90',
+  rating: 'avg_rating',
+  penalty_saved: 'penalty_saved_avg',
+  clean_sheet: 'clean_sheet_pct',
+  duels_won_pct: 'duels_won_pct',
+  tackles_p90: 'tackles_p90',
+  interceptions_p90: 'interceptions_p90',
+  blocks_p90: 'blocks_p90',
+  passes_accuracy: 'passes_accuracy',
+  passes_accuracy_extra: 'passes_accuracy',
+  passes_total_p90: 'passes_total_p90',
+  key_passes_p90: 'passes_key_p90',
+  dribbles_success_p90: 'dribbles_success_p90',
+  dribbles_success_pct: 'dribbles_pct',
+  assists_p90: 'assists_p90',
+  goals_p90: 'goals_p90',
+  shots_on_p90: 'shots_on_p90',
+  shots_on_pct: 'shots_pct',
+  fouls_drawn_p90: 'fouls_drawn_p90',
+  penalty_scored: '', // sin campo agregado equivalente
+}
+
+export type SeasonAggRow = Record<string, number | null | undefined>
+
+/**
+ * Rankea las métricas agregadas de `playerRow` contra `pool` (jugadores de la
+ * misma posición en la liga/temporada) usando los pesos de la posición, y
+ * devuelve el score 1.0-10.0. Normaliza por el peso realmente usado, así las
+ * métricas sin dato (para el jugador o el pool) no rompen la escala.
+ */
+export function calculateSeasonScore(
+  playerRow: SeasonAggRow,
+  pool: SeasonAggRow[],
+  position: Position,
+): number | null {
+  const weights = SCORING_WEIGHTS[position]
+  if (!weights) return null
+
+  let scoreRaw = 0
+  let usedWeight = 0
+
+  for (const w of weights) {
+    const field = METRIC_TO_SEASON_FIELD[w.metric]
+    if (!field) continue
+    const pv = playerRow[field]
+    if (pv === null || pv === undefined) continue
+
+    let vals = pool
+      .map(r => r[field])
+      .filter((v): v is number => typeof v === 'number' && !Number.isNaN(v))
+    if (vals.length <= 1) continue
+    if (w.inverse) vals = vals.map(v => -v)
+
+    const sorted = vals.slice().sort((a, b) => a - b)
+    const playerValue = w.inverse ? -(pv as number) : (pv as number)
+    const normalized = rankNormalize(playerValue, sorted)
+    scoreRaw += normalized * w.weight
+    usedWeight += w.weight
+  }
+
+  if (usedWeight === 0) return null
+  return normalizeToScale(scoreRaw / usedWeight)
 }

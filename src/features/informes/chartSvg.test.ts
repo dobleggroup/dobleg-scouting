@@ -6,6 +6,8 @@ import {
   radarSvg,
   barsSvg,
   scatterSvg,
+  gaugeSvg,
+  lineChartSvg,
 } from './chartSvg'
 
 describe('polarPoint', () => {
@@ -145,14 +147,62 @@ describe('smoke tests de ensamblado SVG', () => {
   it('barsSvg devuelve un svg valido con una fila por metrica', () => {
     const svg = barsSvg({
       rows: [
-        { label: 'Goles/90', pct: 80, value: '0.45', rank: '2/18', dot: 'green' },
-        { label: 'xG/90', pct: 40, value: '0.20', rank: '10/18', dot: 'amber' },
+        { label: 'Goles/90', pct: 80, avgPct: 45, value: '0.45', rank: '2/18', dot: 'green' },
+        { label: 'xG/90', pct: 40, avgPct: null, value: '0.20', rank: '10/18', dot: 'amber' },
       ],
     })
     expect(svg).toContain('<svg')
     expect(svg).toContain('</svg>')
     expect(svg).toContain('#22C55E')
     expect(svg).toContain('#FBBF24')
+    // El marcador de promedio se dibuja cuando avgPct != null.
+    expect(svg).toContain('#CBD2DB')
+  })
+
+  it('radarSvg parte en 2 líneas las etiquetas largas (tspan)', () => {
+    const svg = radarSvg({
+      axes: ['Duelos defensivos ganados, %', 'Goles', 'xG'],
+      series: [{ name: 'A', color: '#22C55E', values: [50, 60, 70] }],
+    })
+    // El label largo se corta en el espacio del medio → aparece en <tspan>.
+    expect(svg).toContain('<tspan')
+    expect(svg).toContain('ganados, %')
+  })
+
+  it('scatterSvg marca el cuadrante "mejores" según la dirección de los ejes', () => {
+    const svg = scatterSvg({
+      points: [
+        { x: 1, y: 2, me: false },
+        { x: 3, y: 4, me: true },
+      ],
+      xLabel: 'Goles',
+      yLabel: 'Faltas',
+      xHigherIsBetter: true,
+      yHigherIsBetter: false,
+    })
+    // más-es-mejor en X, menos-es-mejor en Y => esquina abajo-derecha (flecha ↘).
+    expect(svg).toContain('Mejores ↘')
+  })
+
+  it('gaugeSvg dibuja el arco de valor y el número', () => {
+    const svg = gaugeSvg({ value: 7.4, max: 10, avg: 6 })
+    expect(svg).toContain('<svg')
+    expect(svg).toContain('</svg>')
+    expect(svg).toContain('7.4')
+    expect(svg).toContain('de 10')
+  })
+
+  it('lineChartSvg dibuja la línea con los puntos dados', () => {
+    const svg = lineChartSvg({
+      points: [
+        { label: '01/05', value: 60 },
+        { label: '08/05', value: 72 },
+        { label: '15/05', value: 68 },
+      ],
+    })
+    expect(svg).toContain('<polyline')
+    expect(svg).toContain('01/05')
+    expect(svg).toContain('15/05')
   })
 
   it('scatterSvg devuelve un svg valido', () => {

@@ -1,6 +1,8 @@
-import { radarSvg, barsSvg, scatterSvg } from './chartSvg'
-import { radarData, barsData, scatterData, comparisonTable } from './chartData'
+import { radarSvg, barsSvg, scatterSvg, gaugeSvg, lineChartSvg } from './chartSvg'
+import { radarData, radarComparisonData, barsData, scatterData, comparisonTable, comparisonWinCounts, parseRating, ratingMax } from './chartData'
+import { t, translateMetric, translateInjury, isRtl } from './i18n'
 import type { Informe, MetricStat, MetricDef } from './types'
+import type { InformeEnrichment } from './useInformeEnrichment'
 
 // ---------------------------------------------------------------------------
 // Seguridad: escape de texto de usuario antes de interpolar en el HTML.
@@ -76,9 +78,12 @@ export function buildInformeHtml(opts: {
   matrix: Record<string, (number | null)[]>
   defs: MetricDef[]
   logoDataUrl?: string
+  enrichment?: InformeEnrichment
 }): string {
-  const { informe, stats, matrix, defs } = opts
+  const { informe, stats, matrix, defs, enrichment } = opts
   const { content } = informe
+  const lang = informe.idioma ?? 'es'
+  const rtl = isRtl(lang)
 
   const nombre = content.nombre || 'Sin nombre'
   const rolYPosicion = [content.posicion, content.rol].filter(Boolean).join(' · ')
@@ -89,12 +94,14 @@ export function buildInformeHtml(opts: {
   const transfermarktUrl = safeHttpUrl(content.transfermarktUrl)
   const youtubeId = safeYouTubeId(content.videoUrl)
 
-  // ── Charts ──
+  // ── Charts (con métricas traducidas) ──
   const radar = radarData(informe, stats, matrix, defs)
-  const radarSvgStr = radarSvg({ axes: radar.axes, series: radar.series })
+  const radarSeries = radar.series.map(s => (s.dashed ? { ...s, name: t(lang, 'l_avgPosition') } : s))
+  const radarSvgStr = radarSvg({ axes: radar.axes.map(a => translateMetric(a, lang)), series: radarSeries })
 
-  const barsRows = barsData(stats, informe.charts.bar)
-  const barsSvgStr = barsSvg({ rows: barsRows })
+  const barsRows = barsData(stats, informe.charts.bar).map(r => ({ ...r, label: translateMetric(r.label, lang) }))
+  // Dos layouts: ancho para desktop, apilado para mobile (labels legibles en pantallas angostas).
+  const barsSvgStr = `<div class="dg-bars-wide dg-chart">${barsSvg({ rows: barsRows })}</div><div class="dg-bars-narrow dg-chart">${barsSvg({ rows: barsRows, stacked: true })}</div>`
 
   const scatterBlocks = informe.charts.scatters.map(sc => {
     const data = scatterData(sc, matrix, defs, informe.protagonistIndex)
@@ -102,10 +109,12 @@ export function buildInformeHtml(opts: {
       caption: sc.caption,
       svg: scatterSvg({
         points: data.points,
-        xLabel: data.xLabel,
-        yLabel: data.yLabel,
+        xLabel: translateMetric(data.xLabel, lang),
+        yLabel: translateMetric(data.yLabel, lang),
         xMin: data.xMin,
         yMin: data.yMin,
+        xHigherIsBetter: data.xHigherIsBetter,
+        yHigherIsBetter: data.yHigherIsBetter,
       }),
     }
   })
@@ -119,6 +128,89 @@ export function buildInformeHtml(opts: {
 
   const compTable = comparisonTable(informe, matrix, defs)
   const hasPlayerComparison = (informe.comparePlayerIndices?.length ?? 0) > 0 && compTable.rows.length > 0
+  const compRadar = radarComparisonData(informe, matrix, defs)
+  const compRadarSvgStr = compRadar.axes.length >= 3 ? radarSvg({ axes: compRadar.axes.map(a => translateMetric(a, lang)), series: compRadar.series }) : ''
+  const compWins = comparisonWinCounts(compTable)
+
+  // ── Enriquecimiento: físico (interno), evolución de nivel, valor, continuidad, lesiones ──
+  const hasPhysical = !!enrichment?.hasPhysical && !content.hideFisicoTab
+  const levelByMatch = enrichment?.levelByMatch ?? []
+  const levelByWeek = enrichment?.levelByWeek ?? []
+  const levelByMonth = enrichment?.levelByMonth ?? []
+  const physEvo = enrichment?.physicalEvolution ?? []
+  const marketEvo = enrichment?.marketEvolution ?? []
+  const continuity = enrichment?.continuity ?? null
+  const injuries = enrichment?.injuries ?? []
+  const showFisico = hasPhysical
+
+  const physTiles = (enrichment?.physicalTiles ?? []).filter(pt => !pt.zero)
+  const physicalTilesHtml = hasPhysical
+    ? `<div class="dg-wins">${physTiles
+        .map(pt => `<div class="dg-win-card"><p class="dg-win-value">${escapeHtml(pt.value)}</p><p class="dg-win-label">${escapeHtml(pt.label)}</p></div>`)
+        .join('')}</div>`
+    : ''
+  const physEvoHtml = physEvo.length >= 2 && !content.hideFisicoCharts ? lineChartSvg({ points: physEvo, color: '#38BDF8', formatValue: v => String(Math.round(v)) }) : ''
+  const marketEvoHtml = marketEvo.length >= 2 ? lineChartSvg({ points: marketEvo, color: '#F5C451', formatValue: v => `€${v >= 10 ? v.toFixed(0) : v.toFixed(1)}M` }) : ''
+
+  // Evolución de nivel con toggle Partido / Semanal / Mensual. Se renderizan las
+  // vistas disponibles (≥2 puntos) y el JB del HTML alterna cuál se muestra.
+  const evoViews = ([
+    { id: 'match', label: t(lang, 'evo_match'), points: levelByMatch },
+    { id: 'week', label: t(lang, 'evo_week'), points: levelByWeek },
+    { id: 'month', label: t(lang, 'evo_month'), points: levelByMonth },
+  ] as const).filter(v => v.points.length >= 2)
+  const levelEvoBlock = evoViews.length
+    ? `<div class="dg-evo-head">
+         <h3 class="dg-panel-title">${escapeHtml(t(lang, 't_levelEvo'))}</h3>
+         ${evoViews.length > 1
+           ? `<div class="dg-seg">${evoViews
+               .map((v, i) => `<button type="button" class="dg-seg-btn${i === 0 ? ' active' : ''}" data-evo="${v.id}">${escapeHtml(v.label)}</button>`)
+               .join('')}</div>`
+           : ''}
+       </div>
+       ${evoViews
+         .map((v, i) => `<div class="dg-chart dg-evo-chart${i === 0 ? ' active' : ''}" data-evo="${v.id}">${lineChartSvg({ points: v.points, color: '#22C55E', formatValue: x => String(Math.round(x)), showValues: true })}</div>`)
+         .join('')}`
+    : ''
+
+  const fisicoPanel = `
+    <div class="dg-panel-inner">
+      ${hasPhysical && enrichment
+        ? `<h3 class="dg-panel-title">${escapeHtml(t(lang, 't_phys'))}</h3>
+           <p class="dg-muted dg-subtitle">${escapeHtml(t(lang, 'm_avg'))} · ${enrichment.physicalMatches}</p>
+           ${physicalTilesHtml}
+           ${physEvoHtml ? `<h4 class="dg-panel-title dg-mt">${escapeHtml(t(lang, 't_phys_intensity'))}</h4><div class="dg-chart">${physEvoHtml}</div>` : ''}`
+        : `<p class="dg-empty">${escapeHtml(t(lang, 'm_selectPlayerData'))}</p>`}
+    </div>`
+
+  // ── General: evolución de nivel + continuidad + lesiones ──
+  const minStat = stats.find(s => s.def.label.toLowerCase().includes('minutos'))
+  const minPct = minStat?.percentile ?? null
+  const continuityHtml = continuity
+    ? `<h3 class="dg-panel-title${levelEvoBlock ? ' dg-mt' : ''}">${escapeHtml(t(lang, 't_continuity'))}</h3>
+       <div class="dg-wins">
+         <div class="dg-win-card"><p class="dg-win-value">${continuity.matches}</p><p class="dg-win-label">${escapeHtml(t(lang, 's_matches'))}</p></div>
+         <div class="dg-win-card"><p class="dg-win-value">${continuity.starts}</p><p class="dg-win-label">${escapeHtml(t(lang, 's_starts'))}</p></div>
+         <div class="dg-win-card"><p class="dg-win-value">${continuity.minutes}</p><p class="dg-win-label">${escapeHtml(t(lang, 's_minutes'))}</p></div>
+         <div class="dg-win-card"><p class="dg-win-value">${continuity.last5Played}/${continuity.last5Total}</p><p class="dg-win-label">${escapeHtml(t(lang, 's_last5'))}</p></div>
+         <div class="dg-win-card"><p class="dg-win-value">${continuity.last10Played}/${continuity.last10Total}</p><p class="dg-win-label">${escapeHtml(t(lang, 's_last10'))}</p></div>
+       </div>
+       ${minPct != null ? `<p class="dg-note">▲ ${escapeHtml(t(lang, 'm_playedMoreThan', { pct: minPct }))}</p>` : ''}`
+    : ''
+  const injuriesHtml = continuity || injuries.length
+    ? `<h3 class="dg-panel-title dg-mt">${escapeHtml(t(lang, 't_injuries'))}</h3>
+       ${injuries.length === 0
+        ? `<p class="dg-empty">${escapeHtml(t(lang, 'm_noInjuries'))}</p>`
+        : `<div class="dg-inj-list">${injuries.slice(0, 8)
+            .map(inj => `<div class="dg-inj"><span>${escapeHtml(translateInjury(inj.type, lang))}</span><span class="dg-muted">${escapeHtml(inj.start)} → ${escapeHtml(inj.end || t(lang, 'm_present'))}</span></div>`)
+            .join('')}</div>`}`
+    : ''
+  const showGeneral = !!(levelEvoBlock || continuityHtml || injuriesHtml)
+  const generalPanel = `
+    <div class="dg-panel-inner">
+      ${levelEvoBlock}${continuityHtml}${injuriesHtml}
+      ${!showGeneral ? `<p class="dg-empty">${escapeHtml(t(lang, 'm_selectPlayerData'))}</p>` : ''}
+    </div>`
 
   // ── Header / logo ──
   const logoHtml = logoSafe
@@ -137,16 +229,16 @@ export function buildInformeHtml(opts: {
   const mainStatsHtml = (() => {
     if (content.hideMainStats) return ''
     const items = [
-      { label: 'Rating', value: content.rating },
-      { label: 'PJ', value: content.pj },
-      { label: 'Minutos', value: content.minutos },
-      { label: 'Goles', value: content.goles },
-      { label: 'Asistencias', value: content.asistencias },
+      { label: t(lang, 's_rating'), value: content.rating },
+      { label: t(lang, 's_pj'), value: content.pj },
+      { label: t(lang, 's_minutes'), value: content.minutos },
+      { label: t(lang, 's_goals'), value: content.goles },
+      { label: t(lang, 's_assists'), value: content.asistencias },
     ].filter(i => i.value !== '')
     if (items.length === 0) return ''
     return `
       <div class="dg-mainstats">
-        <h4>Estadísticas principales</h4>
+        <h4>${escapeHtml(t(lang, 't_mainStats'))}</h4>
         <div class="dg-mainstats-grid">
           ${items
             .map(
@@ -162,6 +254,16 @@ export function buildInformeHtml(opts: {
     ? `<a class="dg-tm-link" href="${escapeHtml(transfermarktUrl)}" target="_blank" rel="noreferrer">Transfermarkt ↗</a>`
     : ''
 
+  // Gauge de rating (velocímetro) bajo la foto + comparación vs su posición.
+  const ratingVal = parseRating(content.rating)
+  const ratingAvg = parseRating(content.ratingPromedio ?? '')
+  const ratingCompareHtml = informe.dbPercentile != null
+    ? `<p class="dg-rating-cmp">${escapeHtml(t(lang, 'm_ratingVsPos', { pct: Math.round(informe.dbPercentile), pos: content.posicion || '—', league: informe.dbLeagueName || content.liga || '—' }))}</p>`
+    : ''
+  const ratingGaugeHtml = !content.hideRatingGauge && ratingVal != null
+    ? `<div class="dg-gauge">${gaugeSvg({ value: ratingVal, max: ratingMax(ratingVal), avg: ratingAvg != null ? ratingAvg : undefined, size: 200 })}<p class="dg-gauge-label">${escapeHtml(t(lang, 'm_ratingGauge'))}${ratingAvg != null ? ' · ' + escapeHtml(t(lang, 'm_avgLine')) : ''}</p>${ratingCompareHtml}</div>`
+    : ''
+
   const playerRailHtml = `
     <aside class="dg-rail">
       <div class="dg-rail-head">
@@ -171,20 +273,21 @@ export function buildInformeHtml(opts: {
           ${rolYPosicion ? `<p class="dg-muted">${escapeHtml(rolYPosicion)}</p>` : ''}
         </div>
       </div>
+      ${ratingGaugeHtml}
       <dl class="dg-datalist">
-        ${dataRow('Club', content.club)}
-        ${dataRow('Liga', content.liga)}
-        ${dataRow('Edad', content.edad)}
-        ${dataRow('País', content.nacionalidad)}
-        ${dataRow('Contrato', content.contrato)}
-        ${dataRow('Representante', content.representante)}
+        ${dataRow(t(lang, 'r_club'), content.club)}
+        ${dataRow(t(lang, 'r_league'), content.liga)}
+        ${dataRow(t(lang, 'r_age'), content.edad)}
+        ${dataRow(t(lang, 'r_country'), content.nacionalidad)}
+        ${dataRow(t(lang, 'r_contract'), content.contrato)}
+        ${dataRow(t(lang, 'r_agent'), content.representante)}
       </dl>
       ${mainStatsHtml}
       ${transfermarktHtml}
     </aside>`
 
   // ── Tabs / panels (derecha) ──
-  const legendHtml = radar.series
+  const legendHtml = radarSeries
     .map(
       s =>
         `<span class="dg-legend-item"><span class="dg-legend-dot" style="background:${s.color}"></span>${escapeHtml(s.name || 'Jugador')}</span>`,
@@ -194,15 +297,15 @@ export function buildInformeHtml(opts: {
   const numberCardsHtml = numberCards.length
     ? `
       <div class="dg-numbers">
-        <h4>Números clave</h4>
+        <h4>${escapeHtml(t(lang, 't_keyNumbers'))}</h4>
         <div class="dg-numbers-grid">
           ${numberCards
             .map(
               stat => `
             <div class="dg-number-card dg-color-${stat.color}">
               <span class="dg-number-value">${escapeHtml(formatStatValue(stat))}</span>
-              <span class="dg-number-rank">${stat.rank != null ? `N°${stat.rank} de ${stat.total}` : 'Sin datos'}</span>
-              <span class="dg-number-label">${escapeHtml(stat.def.label)}</span>
+              <span class="dg-number-rank">${stat.rank != null ? `N°${stat.rank} ${escapeHtml(t(lang, 'm_of'))} ${stat.total}` : '—'}</span>
+              <span class="dg-number-label">${escapeHtml(translateMetric(stat.def.label, lang))}</span>
             </div>`,
             )
             .join('')}
@@ -210,27 +313,40 @@ export function buildInformeHtml(opts: {
       </div>`
     : ''
 
+  function helpBox(text: string, highlights?: string[]): string {
+    return `<div class="dg-help"><span class="dg-help-k">${escapeHtml(t(lang, 'howToRead'))} · </span>${escapeHtml(text)}${
+      highlights && highlights.length ? `<div class="dg-help-h"><span>${escapeHtml(t(lang, 'standsOut'))}: </span>${escapeHtml(highlights.join(' · '))}</div>` : ''
+    }</div>`
+  }
+
   const radarPanel = `
     <div class="dg-panel-inner">
-      <h3 class="dg-panel-title">Radar comparativo</h3>
-      <p class="dg-muted dg-subtitle">${escapeHtml(informe.contextoComparacion || 'Sin contexto de comparación definido')}</p>
+      <h3 class="dg-panel-title">${escapeHtml(t(lang, 't_radar'))}</h3>
+      ${informe.contextoComparacion ? `<p class="dg-muted dg-subtitle">${escapeHtml(informe.contextoComparacion)}</p>` : ''}
       <div class="dg-legend">${legendHtml}</div>
       <div class="dg-chart">${radarSvgStr}</div>
+      ${helpBox(t(lang, 'help_radar'))}
       ${numberCardsHtml}
+    </div>`
+
+  const barsLegend = `
+    <div class="dg-legend">
+      <span class="dg-legend-item"><span class="dg-legend-dot" style="background:#22C55E"></span>${escapeHtml(t(lang, 'l_thisPlayer'))}</span>
+      <span class="dg-legend-item"><span class="dg-legend-bar" style="background:#CBD2DB"></span>${escapeHtml(t(lang, 'm_avg'))}</span>
     </div>`
 
   const barsPanel = `
     <div class="dg-panel-inner">
-      <h3 class="dg-panel-title">Barras comparativas</h3>
-      ${barsRows.length ? `<div class="dg-chart">${barsSvgStr}</div>` : '<p class="dg-empty">Sin métricas asignadas.</p>'}
+      <h3 class="dg-panel-title">${escapeHtml(t(lang, 't_bars'))}</h3>
+      ${barsRows.length ? `${barsLegend}${barsSvgStr}${helpBox(t(lang, 'help_bars'))}` : `<p class="dg-empty">—</p>`}
     </div>`
 
   const scatterPanel = `
     <div class="dg-panel-inner">
-      <h3 class="dg-panel-title">Dispersión en el contexto</h3>
+      <h3 class="dg-panel-title">${escapeHtml(t(lang, 't_scatter'))}</h3>
       ${
         scatterBlocks.length === 0
-          ? '<p class="dg-empty">Sin scatter plots definidos.</p>'
+          ? '<p class="dg-empty">—</p>'
           : scatterBlocks
               .map(
                 b => `
@@ -239,28 +355,32 @@ export function buildInformeHtml(opts: {
             ${b.caption ? `<p class="dg-caption">${escapeHtml(b.caption)}</p>` : ''}
           </div>`,
               )
-              .join('')
+              .join('') + helpBox(t(lang, 'help_scatter'))
       }
     </div>`
 
+  const rawVideoUrl = safeHttpUrl(content.videoUrl)
   const videoPanel = `
     <div class="dg-panel-inner">
-      <h3 class="dg-panel-title">Video</h3>
+      <h3 class="dg-panel-title">${escapeHtml(t(lang, 'tab_video'))}</h3>
       ${
         youtubeId
-          ? `<div class="dg-video-wrap"><iframe src="https://www.youtube.com/embed/${youtubeId}" title="Video del jugador" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`
-          : '<p class="dg-empty dg-empty-box">Sin video cargado.</p>'
+          ? `<div class="dg-video-wrap"><iframe src="https://www.youtube.com/embed/${youtubeId}" title="Video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>
+             <a class="dg-video-link" href="https://www.youtube.com/watch?v=${youtubeId}" target="_blank" rel="noopener noreferrer">▶ ${escapeHtml(t(lang, 'v_youtube'))}</a>`
+          : rawVideoUrl
+            ? `<a class="dg-video-link" href="${rawVideoUrl}" target="_blank" rel="noopener noreferrer">▶ ${escapeHtml(t(lang, 'v_watch'))}</a>`
+            : `<p class="dg-empty dg-empty-box">${escapeHtml(t(lang, 'm_noVideo'))}</p>`
       }
     </div>`
 
   const carreraPanel = `
     <div class="dg-panel-inner">
-      <h3 class="dg-panel-title">Últimos 5 partidos</h3>
+      <h3 class="dg-panel-title">${escapeHtml(t(lang, 't_last5'))}</h3>
       ${
         matches.length === 0
-          ? '<p class="dg-empty">Sin partidos cargados.</p>'
+          ? `<p class="dg-empty">${escapeHtml(t(lang, 'm_noMatches'))}</p>`
           : `<div class="dg-table-wrap"><table class="dg-table">
-              <thead><tr><th>Rival</th><th>Resultado</th><th>Rating</th><th>Minutos</th></tr></thead>
+              <thead><tr><th>${escapeHtml(t(lang, 'h_opponent'))}</th><th>${escapeHtml(t(lang, 'h_result'))}</th><th>${escapeHtml(t(lang, 's_rating'))}</th><th>${escapeHtml(t(lang, 's_minutes'))}</th></tr></thead>
               <tbody>
                 ${matches
                   .map(
@@ -276,16 +396,46 @@ export function buildInformeHtml(opts: {
             </table></div>`
       }
       <div class="dg-cards-2col">
-        <div class="dg-info-card"><p class="dg-muted">Contrato</p><p class="dg-info-value">${escapeHtml(content.contrato) || '—'}</p></div>
-        <div class="dg-info-card"><p class="dg-muted">Valor de mercado</p><p class="dg-info-value">${escapeHtml(content.valorMercado) || '—'}</p></div>
+        <div class="dg-info-card"><p class="dg-muted">${escapeHtml(t(lang, 'r_contract'))}</p><p class="dg-info-value">${escapeHtml(content.contrato) || '—'}</p></div>
+        <div class="dg-info-card"><p class="dg-muted">${escapeHtml(t(lang, 'r_marketValue'))}</p><p class="dg-info-value">${escapeHtml(content.valorMercado) || '—'}</p></div>
       </div>
+      ${marketEvoHtml
+        ? `<h3 class="dg-panel-title dg-mt">${escapeHtml(t(lang, 't_marketEvo'))}</h3><div class="dg-chart">${marketEvoHtml}</div>${helpBox(t(lang, 'help_market'))}`
+        : ''}
     </div>`
 
+  const leaderWins = Math.max(0, ...compWins.wins.map(w => w.wins))
+  const compRadarHtml = hasPlayerComparison && compRadarSvgStr
+    ? `<h3 class="dg-panel-title">Radar comparativo</h3>
+        <div class="dg-legend">${compRadar.series
+          .map(s => `<span class="dg-legend-item"><span class="dg-legend-dot" style="background:${safeHexColor(s.color, '#8A9099')}"></span>${escapeHtml(s.name || 'Jugador')}</span>`)
+          .join('')}</div>
+        <div class="dg-chart">${compRadarSvgStr}</div>`
+    : ''
+
+  const compWinsHtml = hasPlayerComparison
+    ? `<div class="dg-wins">
+        ${compWins.wins
+          .map(w => {
+            const leads = w.wins === leaderWins && leaderWins > 0
+            const col = safeHexColor(w.color, '#8A9099')
+            return `<div class="dg-win-card"${leads ? ` style="border-color:${col}"` : ''}>
+              <div class="dg-win-head"><span class="dg-legend-dot" style="background:${col}"></span><span>${escapeHtml(w.name || 'Sin nombre')}</span></div>
+              <p class="dg-win-value"${leads ? ` style="color:${col}"` : ''}>${w.wins}<span class="dg-win-total"> / ${compWins.total}</span></p>
+              <p class="dg-win-label">${escapeHtml(t(lang, 'm_metricsWon'))}</p>
+            </div>`
+          })
+          .join('')}
+      </div>`
+    : ''
+
   const playerComparisonHtml = hasPlayerComparison
-    ? `<h3 class="dg-panel-title">Comparación de jugadores</h3>
+    ? `${compRadarHtml}${compWinsHtml}
+        ${helpBox(t(lang, 'help_compar'))}
+        <h3 class="dg-panel-title dg-mt">${escapeHtml(t(lang, 't_detail'))}</h3>
         <div class="dg-table-wrap"><table class="dg-table">
           <thead><tr>
-            <th>Métrica</th>
+            <th>${escapeHtml(t(lang, 'h_metric'))}</th>
             ${compTable.players
               .map(
                 p =>
@@ -297,7 +447,7 @@ export function buildInformeHtml(opts: {
             ${compTable.rows
               .map(
                 row => `<tr>
-              <td>${escapeHtml(row.label)}</td>
+              <td>${escapeHtml(translateMetric(row.label, lang))}</td>
               ${row.cells
                 .map(
                   cell =>
@@ -317,12 +467,12 @@ export function buildInformeHtml(opts: {
       ${
         content.hideComparables
           ? ''
-          : `<h3 class="dg-panel-title${hasPlayerComparison ? ' dg-mt' : ''}">Comparables</h3>
+          : `<h3 class="dg-panel-title${hasPlayerComparison ? ' dg-mt' : ''}">${escapeHtml(t(lang, 't_comparables'))}</h3>
             ${
               comparables.length === 0
-                ? '<p class="dg-empty">Sin comparables cargados.</p>'
+                ? `<p class="dg-empty">${escapeHtml(t(lang, 'm_noComparables'))}</p>`
                 : `<div class="dg-table-wrap"><table class="dg-table">
-                    <thead><tr><th>Jugador</th><th>Club</th><th>Rating</th><th>Delta</th></tr></thead>
+                    <thead><tr><th>${escapeHtml(t(lang, 'h_player'))}</th><th>${escapeHtml(t(lang, 'r_club'))}</th><th>${escapeHtml(t(lang, 's_rating'))}</th><th>${escapeHtml(t(lang, 'h_delta'))}</th></tr></thead>
                     <tbody>
                       ${comparables
                         .map(
@@ -340,35 +490,37 @@ export function buildInformeHtml(opts: {
       }
       ${
         content.comparaciones
-          ? `<h4 class="dg-panel-title dg-mt">Notas</h4><p class="dg-notes">${escapeHtml(content.comparaciones)}</p>`
+          ? `<h4 class="dg-panel-title dg-mt">${escapeHtml(t(lang, 't_notes'))}</h4><p class="dg-notes">${escapeHtml(content.comparaciones)}</p>`
           : ''
       }
     </div>`
 
   const tabs = [
-    { id: 'radar', label: 'Radar', html: radarPanel },
-    { id: 'bars', label: 'Barras', html: barsPanel },
-    { id: 'scatter', label: 'Scatter', html: scatterPanel },
-    { id: 'video', label: 'Video', html: videoPanel },
-    { id: 'carrera', label: 'Carrera', html: carreraPanel },
-    { id: 'comparaciones', label: 'Comparaciones', html: comparacionesPanel },
+    ...(showGeneral ? [{ id: 'general', html: generalPanel }] : []),
+    { id: 'radar', html: radarPanel },
+    { id: 'bars', html: barsPanel },
+    { id: 'scatter', html: scatterPanel },
+    ...(showFisico ? [{ id: 'fisico', html: fisicoPanel }] : []),
+    { id: 'video', html: videoPanel },
+    { id: 'carrera', html: carreraPanel },
+    { id: 'comparaciones', html: comparacionesPanel },
   ]
 
   const tabBarHtml = tabs
     .map(
-      (t, i) =>
-        `<button type="button" class="dg-tab${i === 0 ? ' active' : ''}" data-tab="${t.id}">${escapeHtml(t.label)}</button>`,
+      (tb, i) =>
+        `<button type="button" class="dg-tab${i === 0 ? ' active' : ''}" data-tab="${tb.id}">${escapeHtml(t(lang, `tab_${tb.id}`))}</button>`,
     )
     .join('')
 
   const panelsHtml = tabs
-    .map((t, i) => `<section class="dg-panel${i === 0 ? ' active' : ''}" data-panel="${t.id}">${t.html}</section>`)
+    .map((tb, i) => `<section class="dg-panel${i === 0 ? ' active' : ''}" data-panel="${tb.id}">${tb.html}</section>`)
     .join('')
 
   const title = `Informe — ${nombre}`
 
   return `<!doctype html>
-<html lang="es">
+<html lang="${lang}" dir="${rtl ? 'rtl' : 'ltr'}">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -379,10 +531,11 @@ ${css}
 </head>
 <body>
 <div class="dg-bg"></div>
+<div class="dg-rotate-hint"><svg class="dg-rotate-ico" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.6" width="6.6" height="12" rx="1.5"/><path d="M6.3 12.7a7.6 7.6 0 0 0 12.4 2.9"/><polyline points="18.9 11.9 19.1 15.9 15.4 14.9"/></svg><span>${escapeHtml(t(lang, 'hint_rotate'))}</span></div>
 <div class="dg-container">
   <header class="dg-header">
     ${logoHtml}
-    <span class="dg-header-badge">Informe de Scouting</span>
+    <span class="dg-header-badge">${escapeHtml(t(lang, 'm_scoutingReport'))}</span>
   </header>
 
   <div class="dg-layout">
@@ -427,12 +580,61 @@ const css = `
     pointer-events: none;
     z-index: 0;
   }
+  /* Aviso efímero solo en mobile: sugiere girar el teléfono para leer mejor.
+     Pastilla estilo Doble G (tarjeta oscura + hairline, verde solo en el ícono).
+     Aparece al abrir y se desvanece solo (~3.4s) con animación CSS pura. */
+  .dg-rotate-hint { display: none; }
+  .dg-rotate-ico { width: 17px; height: 17px; flex-shrink: 0; transform-origin: 50% 55%; }
+  @media (max-width: 640px) {
+    .dg-rotate-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      position: fixed;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 50;
+      max-width: calc(100% - 28px);
+      padding: 9px 15px 9px 12px;
+      border-radius: 13px;
+      background: #0F1114;
+      border: 1px solid rgba(255,255,255,0.09);
+      color: #C3C9D1;
+      font-size: 12.5px;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      line-height: 1.35;
+      box-shadow: 0 14px 34px rgba(0,0,0,0.5);
+      pointer-events: none;
+      animation: dgRotateHint 3.4s cubic-bezier(0.22,1,0.36,1) forwards;
+    }
+    .dg-rotate-ico { animation: dgRotateIco 3.4s ease-in-out forwards; }
+  }
+  @keyframes dgRotateHint {
+    0% { opacity: 0; transform: translate(-50%, -14px) scale(0.96); }
+    10% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    80% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -10px) scale(0.98); visibility: hidden; }
+  }
+  @keyframes dgRotateIco {
+    0%, 24% { transform: rotate(0deg); }
+    38% { transform: rotate(-20deg); }
+    54%, 100% { transform: rotate(0deg); }
+  }
+  @media (prefers-reduced-motion: reduce) and (max-width: 640px) {
+    .dg-rotate-hint { animation: dgRotateHintFade 3.4s linear forwards; }
+    .dg-rotate-ico { animation: none; }
+  }
+  @keyframes dgRotateHintFade {
+    0% { opacity: 0; } 8% { opacity: 1; } 82% { opacity: 1; } 100% { opacity: 0; visibility: hidden; }
+  }
   .dg-container {
     position: relative;
     z-index: 1;
-    max-width: 1000px;
+    max-width: 1240px;
     margin: 0 auto;
-    padding: 24px 20px 48px;
+    padding: 24px 24px 48px;
   }
   .dg-header {
     display: flex;
@@ -453,8 +655,23 @@ const css = `
     grid-template-columns: 280px 1fr;
     gap: 20px;
   }
-  @media (max-width: 720px) {
+  /* Tablet / pantallas medianas: apila la barra lateral sobre el contenido y la
+     centra, para que no quede un panel angosto al costado. */
+  @media (max-width: 900px) {
     .dg-layout { grid-template-columns: 1fr; }
+    .dg-rail { width: 100%; max-width: 560px; margin: 0 auto; }
+  }
+  /* Mobile: menos padding, tipografía y tabs más compactas, tarjetas en 1 columna. */
+  @media (max-width: 560px) {
+    .dg-container { padding: 16px 14px 40px; }
+    .dg-panel-card { padding: 16px 14px; }
+    .dg-rail { padding: 16px; }
+    .dg-header { margin-bottom: 14px; gap: 10px; }
+    .dg-tabbar { margin-bottom: 16px; }
+    .dg-tab { padding: 8px 10px; font-size: 12px; }
+    .dg-cards-2col { grid-template-columns: 1fr; }
+    .dg-wins { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+    .dg-mainstats-grid { gap: 8px; }
   }
   .dg-rail, .dg-panel-card {
     background: #0F1114;
@@ -561,10 +778,10 @@ const css = `
   .dg-tabbar {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 2px;
     border-bottom: 1px solid rgba(255,255,255,0.08);
     margin-bottom: 20px;
-    overflow-x: auto;
   }
   .dg-tab {
     appearance: none;
@@ -603,6 +820,126 @@ const css = `
     color: #F5F7FA;
   }
   .dg-legend-dot { width: 9px; height: 9px; border-radius: 999px; flex-shrink: 0; }
+  .dg-legend-bar { width: 3px; height: 13px; border-radius: 2px; flex-shrink: 0; }
+  .dg-wins {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 12px;
+    margin-top: 18px;
+  }
+  .dg-win-card {
+    background: #14171B;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    padding: 12px;
+    text-align: center;
+  }
+  .dg-win-head {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-bottom: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #F5F7FA;
+  }
+  .dg-win-value {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: #F5F7FA;
+  }
+  .dg-win-total { font-size: 12px; font-weight: 400; color: #8A9099; }
+  .dg-win-label {
+    margin: 2px 0 0;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #8A9099;
+  }
+  .dg-gauge { margin: 4px 0 14px; }
+  .dg-gauge svg { display: block; max-width: 200px; margin: 0 auto; }
+  .dg-gauge-label {
+    margin: -2px 0 0;
+    text-align: center;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #8A9099;
+  }
+  .dg-rating-cmp {
+    margin: 6px 0 0;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: #22C55E;
+  }
+  .dg-help {
+    margin-top: 16px;
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    color: #8A9099;
+  }
+  .dg-help-k { color: #22C55E; font-weight: 700; }
+  .dg-help-h { margin-top: 6px; color: #C3C9D1; }
+  .dg-help-h span { color: #8A9099; }
+  .dg-note { margin: 6px 0 0; font-size: 13px; color: #F5F7FA; }
+  .dg-inj-list { display: flex; flex-direction: column; gap: 6px; }
+  .dg-inj {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: #14171B;
+    font-size: 13px;
+    color: #F5F7FA;
+  }
+  .dg-inj .dg-muted { font-size: 12px; font-variant-numeric: tabular-nums; }
+  .dg-evo-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .dg-evo-head .dg-panel-title { margin: 0; }
+  .dg-seg {
+    display: inline-flex;
+    padding: 2px;
+    border-radius: 10px;
+    background: #14171B;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .dg-seg-btn {
+    appearance: none;
+    border: none;
+    background: none;
+    padding: 5px 12px;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    color: #8A9099;
+    cursor: pointer;
+  }
+  .dg-seg-btn.active { background: #22C55E; color: #08090B; }
+  .dg-evo-chart { display: none; }
+  .dg-evo-chart.active { display: block; }
+  .dg-bars-narrow { display: none; }
+  @media (max-width: 640px) {
+    .dg-bars-wide { display: none; }
+    .dg-bars-narrow { display: block; }
+  }
   .dg-chart { width: 100%; max-width: 100%; overflow-x: auto; }
   .dg-chart svg { display: block; max-width: 100%; height: auto; }
   .dg-numbers { margin-top: 24px; }
@@ -666,6 +1003,19 @@ const css = `
     height: 100%;
     border: 0;
   }
+  .dg-video-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+    padding: 10px 16px;
+    border-radius: 12px;
+    background: #FF0000;
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+    text-decoration: none;
+  }
   .dg-table-wrap { overflow-x: auto; }
   .dg-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .dg-table th {
@@ -716,6 +1066,18 @@ const script = `
       if (panel) panel.classList.add('active');
     });
   });
+
+  // Toggle Partido / Semanal / Mensual del gráfico de evolución de nivel.
+  var segs = document.querySelectorAll('.dg-seg-btn');
+  segs.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var v = btn.getAttribute('data-evo');
+      segs.forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-evo') === v); });
+      document.querySelectorAll('.dg-evo-chart').forEach(function (c) {
+        c.classList.toggle('active', c.getAttribute('data-evo') === v);
+      });
+    });
+  });
 })();
 `
 
@@ -729,6 +1091,7 @@ export function exportInformeHTML(opts: {
   matrix: Record<string, (number | null)[]>
   defs: MetricDef[]
   logoDataUrl?: string
+  enrichment?: InformeEnrichment
 }): void {
   const html = buildInformeHtml(opts)
   const nombre = opts.informe.content.nombre || 'informe'

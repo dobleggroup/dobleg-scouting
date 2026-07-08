@@ -1,5 +1,6 @@
 import { radarSvg } from '@/features/informes/chartSvg'
 import { radarData } from '@/features/informes/chartData'
+import { t, translateMetric, type Lang } from '@/features/informes/i18n'
 import type { Informe, MetricDef, MetricStat } from '@/features/informes/types'
 
 interface InformeRadarProps {
@@ -7,25 +8,28 @@ interface InformeRadarProps {
   stats: MetricStat[]
   matrix: Record<string, (number | null)[]>
   defs: MetricDef[]
+  lang: Lang
 }
 
 /**
- * Radar del jugador (protagonista) vs hasta 2 comparados, en percentil (0-100) por eje.
- * Renderiza el SVG puro de `chartSvg.ts` — no depende de Recharts ni del DOM para calcular.
+ * Radar del protagonista (relleno verde) contra el promedio del resto de su
+ * posición (línea gris punteada, percentil 50), en 0-100 por métrica. La
+ * explicación va en el recuadro "Cómo leerlo" (fuera de este componente).
  */
-export default function InformeRadar({ informe, stats, matrix, defs }: InformeRadarProps) {
+export default function InformeRadar({ informe, stats, matrix, defs, lang }: InformeRadarProps) {
   const { axes, series } = radarData(informe, stats, matrix, defs)
 
-  if (axes.length === 0) {
+  if (axes.length < 3) {
     return (
       <p className="text-sm text-apple-gray-400 dark:text-apple-gray-500 italic py-8 text-center">
-        Asigná métricas al radar en el paso 2 para verlo acá.
+        {informe.charts.radar.length === 0
+          ? 'Elegí al menos 3 métricas para el radar en el paso 2 para verlo acá.'
+          : 'Las métricas elegidas no tienen datos suficientes para armar el radar. Elegí otras en el paso 2.'}
       </p>
     )
   }
 
-  const svg = radarSvg({ axes, series })
-  const [protagonist, ...compared] = series
+  const svg = radarSvg({ axes: axes.map(a => translateMetric(a, lang)), series })
 
   return (
     <div>
@@ -33,21 +37,20 @@ export default function InformeRadar({ informe, stats, matrix, defs }: InformeRa
       <div className="flex items-center justify-center gap-5 mt-4 flex-wrap">
         {series.map(s => (
           <div key={s.name || s.color} className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
-            <span className="text-sm font-medium text-apple-gray-300">{s.name || 'Sin nombre'}</span>
+            <span
+              className="w-3 h-3 flex-shrink-0"
+              style={{
+                backgroundColor: s.dashed ? 'transparent' : s.color,
+                border: s.dashed ? `2px dashed ${s.color}` : undefined,
+                borderRadius: s.dashed ? 3 : 999,
+              }}
+            />
+            <span className="text-sm font-medium text-apple-gray-300">
+              {s.dashed ? t(lang, 'l_avgPosition') : s.name || 'Sin nombre'}
+            </span>
           </div>
         ))}
       </div>
-      {compared.length > 0 && (
-        <p className="text-xs text-apple-gray-400 mt-2 text-center">
-          Comparando: <span className="font-medium">{protagonist?.name || 'Protagonista'}</span>
-          {' vs '}
-          <span className="font-medium">{compared.map(s => s.name || 'Sin nombre').join(', ')}</span>
-        </p>
-      )}
-      <p className="text-xs text-apple-gray-500 mt-2 text-center">
-        Cada eje normalizado 0-100 (percentil vs. el pool).
-      </p>
     </div>
   )
 }
