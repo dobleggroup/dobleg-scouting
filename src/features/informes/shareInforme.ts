@@ -14,7 +14,7 @@ const SHARE_BASE = 'https://dobleg-scouting.netlify.app/i'
 // vive la regla de proxy `/i/*`). Mientras se prueba en local / sin deployar,
 // dejamos `false` para devolver la URL directa de Supabase (anda desde cualquier
 // lado). Al publicar la feature, poné `true`.
-const USE_BRANDED_LINK = false
+const USE_BRANDED_LINK = true
 
 function slugify(nombre: string): string {
   return (
