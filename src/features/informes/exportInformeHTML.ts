@@ -229,7 +229,7 @@ export function buildInformeHtml(opts: {
   const mainStatsHtml = (() => {
     if (content.hideMainStats) return ''
     const items = [
-      { label: t(lang, 's_rating'), value: content.rating },
+      ...(content.hideRating ? [] : [{ label: t(lang, 's_rating'), value: content.rating }]),
       { label: t(lang, 's_pj'), value: content.pj },
       { label: t(lang, 's_minutes'), value: content.minutos },
       { label: t(lang, 's_goals'), value: content.goles },
@@ -260,7 +260,7 @@ export function buildInformeHtml(opts: {
   const ratingCompareHtml = informe.dbPercentile != null
     ? `<p class="dg-rating-cmp">${escapeHtml(t(lang, 'm_ratingVsPos', { pct: Math.round(informe.dbPercentile), pos: content.posicion || '—', league: informe.dbLeagueName || content.liga || '—' }))}</p>`
     : ''
-  const ratingGaugeHtml = !content.hideRatingGauge && ratingVal != null
+  const ratingGaugeHtml = !content.hideRating && !content.hideRatingGauge && ratingVal != null
     ? `<div class="dg-gauge">${gaugeSvg({ value: ratingVal, max: ratingMax(ratingVal), avg: ratingAvg != null ? ratingAvg : undefined, size: 200 })}<p class="dg-gauge-label">${escapeHtml(t(lang, 'm_ratingGauge'))}${ratingAvg != null ? ' · ' + escapeHtml(t(lang, 'm_avgLine')) : ''}</p>${ratingCompareHtml}</div>`
     : ''
 

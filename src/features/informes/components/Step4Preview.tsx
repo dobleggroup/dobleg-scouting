@@ -109,7 +109,7 @@ function StatTile({ label, value }: { label: string; value: string }) {
 function renderMainStats(content: InformeContent, lang: Lang) {
   if (content.hideMainStats) return null
   const items = [
-    { label: t(lang, 's_rating'), value: content.rating },
+    ...(content.hideRating ? [] : [{ label: t(lang, 's_rating'), value: content.rating }]),
     { label: t(lang, 's_pj'), value: content.pj },
     { label: t(lang, 's_minutes'), value: content.minutos },
     { label: t(lang, 's_goals'), value: content.goles },
@@ -161,7 +161,7 @@ function PlayerRail({ informe, lang }: { informe: Informe; lang: Lang }) {
           {rolYPosicion && <p className="text-sm mt-0.5" style={{ color: DG.muted }}>{rolYPosicion}</p>}
         </div>
       </div>
-      {!content.hideRatingGauge && (
+      {!(content.hideRating || content.hideRatingGauge) && (
         <div>
           <InformeRatingGauge rating={content.rating} promedio={content.ratingPromedio} />
           {ratingCompare && (

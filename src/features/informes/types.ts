@@ -49,6 +49,7 @@ export interface InformeContent {
   rating: string; pj: string; minutos: string; goles: string; asistencias: string
   ratingPromedio?: string        // referencia opcional para el gauge de rating (marca de promedio)
   hideRatingGauge?: boolean       // ocultar el velocímetro de rating (ej. si el rating es bajo)
+  hideRating?: boolean            // no mostrar el rating (Score GG) en ningún lado del informe
   hideFisicoTab?: boolean         // sacar la pestaña Físico del informe
   hideFisicoCharts?: boolean      // en Físico, mostrar sólo los datos (sin gráficos)
   lecturaAutor: string; lecturaTexto: string

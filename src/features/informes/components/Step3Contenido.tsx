@@ -126,9 +126,9 @@ export default function Step3Contenido({ content, onChange, onBack, onNext }: St
             </div>
             <div className="mt-3 space-y-2">
               <CheckboxField
-                label="Ocultar velocímetro de rating"
-                checked={content.hideRatingGauge ?? false}
-                onChange={v => set('hideRatingGauge', v)}
+                label="No mostrar el rating (Score GG) en este informe"
+                checked={content.hideRating ?? false}
+                onChange={v => set('hideRating', v)}
               />
               <CheckboxField
                 label="Sacar la pestaña Físico del informe"
