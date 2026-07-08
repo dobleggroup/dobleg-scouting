@@ -242,3 +242,55 @@ export function calculateSeasonScore(
   if (usedWeight === 0) return null
   return normalizeToScale(scoreRaw / usedWeight)
 }
+
+/**
+ * Versión por lote y eficiente: precalcula UNA vez el array ordenado de cada
+ * métrica del pool (no por jugador), y luego rankea a cada jugador por búsqueda
+ * binaria. Evita el O(n²) de reordenar el pool en cada llamada (que agotaba el
+ * CPU del worker con miles de jugadores por posición). Devuelve un score por
+ * cada fila de `rowsToScore`, en el mismo orden.
+ */
+export function calculateSeasonScores(
+  rowsToScore: SeasonAggRow[],
+  pool: SeasonAggRow[],
+  position: Position,
+): (number | null)[] {
+  const weights = SCORING_WEIGHTS[position]
+  if (!weights) return rowsToScore.map(() => null)
+
+  // Campo → { inverse } (dedup: métricas distintas pueden apuntar al mismo campo).
+  const fieldInverse = new Map<string, boolean>()
+  for (const w of weights) {
+    const field = METRIC_TO_SEASON_FIELD[w.metric]
+    if (field && !fieldInverse.has(field)) fieldInverse.set(field, !!w.inverse)
+  }
+  // Array ordenado por campo, precalculado una sola vez.
+  const sortedByField = new Map<string, number[]>()
+  for (const [field, inverse] of fieldInverse) {
+    let vals = pool
+      .map(r => r[field])
+      .filter((v): v is number => typeof v === 'number' && !Number.isNaN(v))
+    if (inverse) vals = vals.map(v => -v)
+    vals.sort((a, b) => a - b)
+    sortedByField.set(field, vals)
+  }
+
+  return rowsToScore.map(row => {
+    let scoreRaw = 0
+    let usedWeight = 0
+    for (const w of weights) {
+      const field = METRIC_TO_SEASON_FIELD[w.metric]
+      if (!field) continue
+      const pv = row[field]
+      if (pv === null || pv === undefined) continue
+      const sorted = sortedByField.get(field)
+      if (!sorted || sorted.length <= 1) continue
+      const inverse = fieldInverse.get(field)!
+      const playerValue = inverse ? -(pv as number) : (pv as number)
+      scoreRaw += rankNormalize(playerValue, sorted) * w.weight
+      usedWeight += w.weight
+    }
+    if (usedWeight === 0) return null
+    return normalizeToScale(scoreRaw / usedWeight)
+  })
+}
