@@ -7,6 +7,7 @@ export default {
       colors: {
         brand: {
           green: '#22C55E',
+          red: '#DC2626',
           dark: '#111111',
         },
         apple: {

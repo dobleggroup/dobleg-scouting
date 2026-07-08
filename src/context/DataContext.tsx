@@ -1,9 +1,11 @@
-import { createContext, useContext, useEffect, useRef, useCallback, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useCallback, useMemo, useState, type ReactNode } from 'react'
 import { loadAllData, type MasDatosEntry, type SeguimientoMetricsPlayer } from '@/services/csvService'
 import { computeGGScores, normalizeName, parseMarketValue, formatMarketValue, parseContractDate, monthsBetween, getNumericValue } from '@/utils/scoring'
 import { POSITION_MAP, SCORING_CONFIG, FILTER_POSITION_MAP } from '@/constants/scoring'
 import { loadAgencyPlayers } from '@/services/agencyPlayersService'
-import { getAgencyPlayersList, type AgencyPlayer } from '@/constants/agencyPlayers'
+import { getAgencyPlayersList, AGENCY_OVERRIDES, type AgencyPlayer } from '@/constants/agencyPlayers'
+import { fetchAllPlayerVideos, computePlayerFreshness } from '@/services/playerVideosService'
+import type { PlayerVideo, VideoFreshness } from '@/types/videos'
 import { nameKey } from '@/utils/nameUtils'
 import type { AppData, EnrichedPlayer, EvolutionEntry, TransfermarktData, MonitoringPlayer, MarketValueHistoryEntry, GPSEntry } from '@/types'
 
@@ -80,7 +82,29 @@ export function mergeAgencyIntoInternal(
     present.add(exact)
     present.add(keyFull)
   }
-  return [...baseInternal, ...additions]
+  return applyAgencyOverrides([...baseInternal, ...additions])
+}
+
+/** Aplica AGENCY_OVERRIDES (correcciones puntuales) pisando el dato del CSV. */
+function applyAgencyOverrides(players: EnrichedPlayer[]): EnrichedPlayer[] {
+  if (AGENCY_OVERRIDES.length === 0) return players
+  const byKey = new Map(AGENCY_OVERRIDES.map(o => [identityKey(o.name), o]))
+  return players.map(p => {
+    const o = byKey.get(identityKey(p.Jugador))
+    if (!o) return p
+    const patched = { ...p }
+    if (o.team) patched.Equipo = o.team
+    if (o.contractEnd) {
+      patched['Vencimiento contrato'] = o.contractEnd
+      const d = parseContractDate(o.contractEnd)
+      if (d) {
+        const mr = monthsBetween(new Date(), d)
+        patched.monthsRemaining = mr
+        patched.contractStatus = mr < 7 ? 'critical' : mr < 13 ? 'warning' : 'ok'
+      }
+    }
+    return patched
+  })
 }
 
 function buildTransfermarktMap(tmData: TransfermarktData[]): Map<string, TransfermarktData> {
@@ -1077,6 +1101,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     positionAverages: {},
     agencyPlayers: [],
     refreshAgencyPlayers: async () => {},
+    playerVideos: [],
+    refreshPlayerVideos: async () => {},
+    videoFreshnessByKey: new Map(),
     loading: true,
     error: null,
     lastUpdated: null,
@@ -1096,6 +1123,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }))
   }, [])
 
+  const refreshPlayerVideos = useCallback(async () => {
+    const videos = await fetchAllPlayerVideos()
+    setData(prev => ({ ...prev, playerVideos: videos }))
+  }, [])
+
   useEffect(() => {
     let cancelled = false
 
@@ -1105,6 +1137,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
         // Cargar overlay Doble G (altas/bajas) antes de derivar internal
         await loadAgencyPlayers()
+        if (cancelled) return
+
+        // Cargar videos de jugadores
+        const playerVideos = await fetchAllPlayerVideos()
         if (cancelled) return
 
         // Build lookup maps
@@ -1190,6 +1226,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
           positionAverages,
           agencyPlayers,
           refreshAgencyPlayers,
+          playerVideos,
+          refreshPlayerVideos,
+          videoFreshnessByKey: new Map(),
           loading: false,
           error: null,
           lastUpdated: new Date(),
@@ -1208,8 +1247,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true }
   }, [])
 
+  const videoFreshnessByKey = useMemo(() => {
+    const byKey = new Map<string, PlayerVideo[]>()
+    for (const v of data.playerVideos) {
+      const arr = byKey.get(v.player_key) ?? []
+      arr.push(v)
+      byKey.set(v.player_key, arr)
+    }
+    const out = new Map<string, VideoFreshness>()
+    for (const [key, vids] of byKey) out.set(key, computePlayerFreshness(vids))
+    return out
+  }, [data.playerVideos])
+
+  const contextValue = useMemo(
+    () => ({ ...data, videoFreshnessByKey }),
+    [data, videoFreshnessByKey]
+  )
+
   return (
-    <DataContext.Provider value={data}>
+    <DataContext.Provider value={contextValue}>
       {children}
     </DataContext.Provider>
   )

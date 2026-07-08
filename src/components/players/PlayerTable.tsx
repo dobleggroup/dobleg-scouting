@@ -11,6 +11,21 @@ import { FILTER_POSITION_MAP } from '@/constants/scoring'
 import { useScoreLookup } from '@/hooks/usePlayerStats'
 import { normalizeName } from '@/utils/scoring'
 import { AGENCY_PLAYERS } from '@/constants/agencyPlayers'
+import { playerVideoKey } from '@/services/playerVideosService'
+import type { VideoFreshness } from '@/types/videos'
+
+const FRESH_DOT: Record<VideoFreshness, string> = {
+  green: 'bg-green-500',
+  amber: 'bg-amber-500',
+  red: 'bg-red-500',
+  none: 'bg-apple-gray-300 dark:bg-apple-gray-600',
+}
+const FRESH_LABEL: Record<VideoFreshness, string> = {
+  green: 'Video actualizado',
+  amber: 'Video necesita atención',
+  red: 'Video desactualizado',
+  none: 'Sin video',
+}
 
 interface PlayerTableProps {
   players: EnrichedPlayer[]
@@ -89,7 +104,7 @@ function NoScoreIndicator({ reason }: { reason: string }) {
 
 export default function PlayerTable({ players, source, isLoading, selectedMetrics = [] }: PlayerTableProps) {
   const navigate = useNavigate()
-  const { positionAverages } = useData()
+  const { positionAverages, videoFreshnessByKey } = useData()
   const { lookup: scoreLookup } = useScoreLookup()
   const [sort, setSort] = useState<SortState>({ column: 'ggScore', direction: 'desc' })
   const [page, setPage] = useState(1)
@@ -200,6 +215,15 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
                     <span className="font-semibold text-apple-gray-800 dark:text-white text-sm truncate">{player.Jugador}</span>
                     <ScoutsGGBadge playerName={player.Jugador} />
                     <ContractBadge status={player.contractStatus} monthsRemaining={player.monthsRemaining} />
+                    {source === 'interno' && (() => {
+                      const fr: VideoFreshness = videoFreshnessByKey.get(playerVideoKey(player.Jugador)) ?? 'none'
+                      return (
+                        <span
+                          title={FRESH_LABEL[fr]}
+                          className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${FRESH_DOT[fr]}`}
+                        />
+                      )
+                    })()}
                   </div>
                   <p className="text-xs text-apple-gray-500 truncate mt-0.5">
                     {[player.Liga, player.Equipo, player.Edad ? `${player.Edad}a` : null].filter(Boolean).join(' · ')}
@@ -293,6 +317,15 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
                             status={player.contractStatus}
                             monthsRemaining={player.monthsRemaining}
                           />
+                          {source === 'interno' && (() => {
+                            const fr: VideoFreshness = videoFreshnessByKey.get(playerVideoKey(player.Jugador)) ?? 'none'
+                            return (
+                              <span
+                                title={FRESH_LABEL[fr]}
+                                className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${FRESH_DOT[fr]}`}
+                              />
+                            )
+                          })()}
                         </div>
                       </div>
                     </div>

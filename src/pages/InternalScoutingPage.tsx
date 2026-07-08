@@ -9,6 +9,8 @@ import { FILTER_POSITION_MAP } from '@/constants/scoring'
 import { parseContractDate } from '@/utils/scoring'
 import { fuzzyMatch } from '@/lib/search'
 import type { FilterState, EnrichedPlayer } from '@/types'
+import type { VideoFreshness } from '@/types/videos'
+import { playerVideoKey } from '@/services/playerVideosService'
 
 const DEFAULT_FILTERS: FilterState = {
   search: '',
@@ -29,6 +31,7 @@ const DEFAULT_FILTERS: FilterState = {
   minHeight: 0,
   maxHeight: 0,
   selectedMetrics: [],
+  videoFreshness: [],
 }
 
 const FILTERS_STORAGE_KEY = 'internal_scouting_filters'
@@ -47,7 +50,7 @@ function saveFiltersToStorage(filters: FilterState): void {
   } catch {}
 }
 
-function applyFilters(players: EnrichedPlayer[], filters: FilterState): EnrichedPlayer[] {
+function applyFilters(players: EnrichedPlayer[], filters: FilterState, videoFreshnessByKey?: Map<string, VideoFreshness>): EnrichedPlayer[] {
   return players.filter(p => {
     // Smart search for player name (handles accents, case, partial matches)
     if (filters.search && !fuzzyMatch(filters.search, p.Jugador)) return false
@@ -83,12 +86,17 @@ function applyFilters(players: EnrichedPlayer[], filters: FilterState): Enriched
       if (filters.minHeight > 0 && altura < filters.minHeight) return false
       if (filters.maxHeight > 0 && altura > filters.maxHeight) return false
     }
+    // Filter by video freshness (internal only)
+    if (filters.videoFreshness && filters.videoFreshness.length > 0 && videoFreshnessByKey) {
+      const fr: VideoFreshness = videoFreshnessByKey.get(playerVideoKey(p.Jugador)) ?? 'none'
+      if (!filters.videoFreshness.includes(fr)) return false
+    }
     return true
   })
 }
 
 export default function InternalScoutingPage() {
-  const { internal, loading, error } = useData()
+  const { internal, loading, error, videoFreshnessByKey } = useData()
   const [filters, setFilters] = useState<FilterState>(loadFiltersFromStorage)
   const [showMobileFilters, setShowMobileFilters] = useState(false)
 
@@ -108,6 +116,7 @@ export default function InternalScoutingPage() {
     filters.minHeight > 0,
     filters.maxHeight > 0,
     filters.selectedMetrics.length > 0,
+    filters.videoFreshness && filters.videoFreshness.length > 0,
   ].filter(Boolean).length
 
   // Save filters to storage when they change
@@ -115,7 +124,7 @@ export default function InternalScoutingPage() {
     saveFiltersToStorage(filters)
   }, [filters])
 
-  const filtered = useMemo(() => applyFilters(internal, filters), [internal, filters])
+  const filtered = useMemo(() => applyFilters(internal, filters, videoFreshnessByKey), [internal, filters, videoFreshnessByKey])
   const handleReset = useCallback(() => {
     setFilters(DEFAULT_FILTERS)
     sessionStorage.removeItem(FILTERS_STORAGE_KEY)
@@ -160,7 +169,7 @@ export default function InternalScoutingPage() {
       {/* Layout */}
       <div className="flex gap-6">
         <div className="hidden lg:block">
-          <FilterSidebar players={internal} filters={filters} onChange={setFilters} onReset={handleReset} />
+          <FilterSidebar players={internal} filters={filters} onChange={setFilters} onReset={handleReset} showVideoFreshness />
         </div>
         <div className="flex-1 min-w-0">
           <PlayerTable players={filtered} source="interno" selectedMetrics={filters.selectedMetrics} />
@@ -170,7 +179,7 @@ export default function InternalScoutingPage() {
       {/* Mobile filter button + panel */}
       <MobileFilterButton onClick={() => setShowMobileFilters(true)} activeCount={activeFiltersCount} />
       <MobileFilterPanel isOpen={showMobileFilters} onClose={() => setShowMobileFilters(false)} activeCount={activeFiltersCount}>
-        <FilterSidebar players={internal} filters={filters} onChange={setFilters} onReset={handleReset} />
+        <FilterSidebar players={internal} filters={filters} onChange={setFilters} onReset={handleReset} showVideoFreshness />
       </MobileFilterPanel>
     </div>
   )

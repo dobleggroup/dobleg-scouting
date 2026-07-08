@@ -16,7 +16,7 @@ export const BASE_AGENCY_PLAYERS: AgencyPlayer[] = [
   { shortName: 'M. Palacios', fullName: 'Matías Palacios', image: 'https://encrypted-tbn3.gstatic.com/images?q=tbn:ANd9GcSxrDN9XYs6U4e-l794ud5TnO9SufmqTPdIkv2ri3RlnWYkwg', contractEnd: '31/12/2026', marketValue: '€2.00m', team: 'Al Ain', apiTeamId: 2865, isReserve: false },
   { shortName: 'J. Palacios', fullName: 'Julián Palacios', image: 'https://encrypted-tbn1.gstatic.com/images?q=tbn:ANd9GcQJxq3RZzOpKDnn4VlT9M8rGYpNJ0dYFc7nRpTB5D_OCi5wrQ', contractEnd: '31/12/2026', marketValue: '€1.50m', team: 'Unión Santa Fe', apiTeamId: 441, isReserve: false },
   { shortName: 'J. López', fullName: 'Julián López', image: 'https://encrypted-tbn3.gstatic.com/images?q=tbn:ANd9GcR06ZxgTLDKhTeyGv2BZ8E6SIiUE14T7F_eTpFhz8Rja7XmHw', contractEnd: '31/12/2026', marketValue: '€1.20m', team: 'Defensa y Justicia', apiTeamId: 442, isReserve: false },
-  { shortName: 'A. Steimbach', fullName: 'Alexis Steimbach', image: 'https://encrypted-tbn1.gstatic.com/images?q=tbn:ANd9GcQr_My0D5s71XBbpmycFbmouMZRlDXQzXTec_rwZlxc6iqK3Q', contractEnd: '31/12/2026', marketValue: '€1.00m', team: 'Gimnasia La Plata', apiTeamId: 434, isReserve: false },
+  { shortName: 'A. Steimbach', fullName: 'Alexis Steimbach', image: 'https://encrypted-tbn1.gstatic.com/images?q=tbn:ANd9GcQr_My0D5s71XBbpmycFbmouMZRlDXQzXTec_rwZlxc6iqK3Q', contractEnd: '31/12/2028', marketValue: '€1.00m', team: 'Gimnasia La Plata', apiTeamId: 434, isReserve: false },
   { shortName: 'C. Bravo', fullName: 'Claudio Bravo', image: 'https://encrypted-tbn2.gstatic.com/images?q=tbn:ANd9GcRoALNfMMbFmfQPzTnBQWX5HYDQXE3xtaoYKbHQU23fCXYf-w', contractEnd: '31/12/2029', marketValue: '€800k', team: 'Argentinos Juniors', apiTeamId: 458, isReserve: false },
   { shortName: 'M. Carabajal', fullName: 'Mateo Carabajal', image: 'https://img.a.transfermarkt.technology/portrait/header/578757-1739213760.png?lm=1', contractEnd: '31/12/2027', marketValue: '€700k', team: 'Independiente del Valle', apiTeamId: 1153, isReserve: false },
   { shortName: 'M. Vera', fullName: 'Mauricio Vera', image: 'https://encrypted-tbn2.gstatic.com/images?q=tbn:ANd9GcSHFjZ591GzSnBG525pUcTExQgvHYyltJKa_nRsLERsiHgtlw', contractEnd: '31/12/2026', marketValue: '€600k', team: 'Nacional', apiTeamId: 2356, isReserve: false },
@@ -32,7 +32,7 @@ export const BASE_AGENCY_PLAYERS: AgencyPlayer[] = [
   { shortName: 'I. Erquiaga', fullName: 'Iván Erquiaga', image: 'https://encrypted-tbn3.gstatic.com/images?q=tbn:ANd9GcRLy5FdX5SvVylOGfBs4v4r_rC_cNtlygXgM5WGbMhit-iOyQ', contractEnd: '31/12/2027', marketValue: '€250k', team: 'Instituto', apiTeamId: 478, isReserve: false },
   { shortName: 'M. Enrique', fullName: 'Marcos Enrique', image: null, contractEnd: '31/12/2026', marketValue: '€200k', team: 'Patronato', apiTeamId: 444, isReserve: false },
   { shortName: 'J. Ginzo', fullName: 'Juan Martín Ginzo', image: 'https://img.a.transfermarkt.technology/portrait/header/1029486-1772241954.jpeg?lm=1', contractEnd: '31/07/2027', marketValue: '€200k', team: 'Deportivo Maldonado', apiTeamId: 2370, isReserve: false },
-  { shortName: 'J. Farías', fullName: 'Juan Farías', image: 'https://encrypted-tbn2.gstatic.com/images?q=tbn:ANd9GcSeyo5gGMiLddj8cHb_6EZ_CJGpDJC-WFa566-GM39W22fDcg', contractEnd: null, marketValue: '€150k', team: 'Atlético Tucumán', apiTeamId: 455, isReserve: false },
+  { shortName: 'J. Farías', fullName: 'Juan Farías', image: 'https://encrypted-tbn2.gstatic.com/images?q=tbn:ANd9GcSeyo5gGMiLddj8cHb_6EZ_CJGpDJC-WFa566-GM39W22fDcg', contractEnd: null, marketValue: '€150k', team: 'Unión Magdalena', apiTeamId: 1465, isReserve: false },
   { shortName: 'N. Leguizamón', fullName: 'Nicolás Leguizamón', image: 'https://encrypted-tbn1.gstatic.com/images?q=tbn:ANd9GcQeiIZQqDWF9nZhEPfh1Y0WJTs1OFRuv-QGk0NEs4RElokHAw', contractEnd: null, marketValue: '€125k', team: 'Deportivo Cuenca', apiTeamId: 1154, isReserve: false },
   { shortName: 'M. Sanabria', fullName: 'Mario Sanabria', image: 'https://encrypted-tbn3.gstatic.com/images?q=tbn:ANd9GcTvZuQnpOfVdtMn6NL50S41G0RzQqp63nUguMH2FfcbZ9DB6Q', contractEnd: '31/12/2026', marketValue: '€100k', team: 'Chacarita Juniors', apiTeamId: 447, isReserve: false },
   { shortName: 'S. Echeverría', fullName: 'Santiago Echeverría', image: 'https://encrypted-tbn3.gstatic.com/images?q=tbn:ANd9GcTtZsHEGQRjOrsXhBK3eByEIrY9wMSo-t_g0r0FeJEPKt5JcA', contractEnd: null, marketValue: '€75k', team: 'Bolívar', apiTeamId: 3702, isReserve: false },
@@ -46,7 +46,23 @@ export const BASE_AGENCY_PLAYERS: AgencyPlayer[] = [
   { shortName: 'A. Melano', fullName: 'Agustín Melano', image: 'https://encrypted-tbn3.gstatic.com/images?q=tbn:ANd9GcQI0lcQIHGis9Sa6VDh2h8FANIarYviSQSNpUcOLYYuPpzl2w', contractEnd: '31/12/2026', marketValue: null, team: 'Belgrano', apiTeamId: 440, isReserve: true },
   { shortName: 'F. Paradela', fullName: 'Francesco Paradela', image: null, contractEnd: null, marketValue: null, team: 'Gimnasia La Plata', apiTeamId: 434, isReserve: true },
   { shortName: 'M. Isopi', fullName: 'Mauro Isopi', image: null, contractEnd: null, marketValue: null, team: 'Platense', apiTeamId: 1064, isReserve: true },
-  { shortName: 'T. Valdecantos', fullName: 'Tomás Valdecantos', image: 'https://encrypted-tbn1.gstatic.com/images?q=tbn:ANd9GcR40YiqK6AdAQ-O3cU6kajD5P8SZGbDdGbF7kU1f7KuCUzxOw', contractEnd: null, marketValue: null, team: 'Al Ain', apiTeamId: 2865, isReserve: true },
+  { shortName: 'T. Valdecantos Valle', fullName: 'Tomás Valdecantos', image: 'https://encrypted-tbn1.gstatic.com/images?q=tbn:ANd9GcR40YiqK6AdAQ-O3cU6kajD5P8SZGbDdGbF7kU1f7KuCUzxOw', contractEnd: null, marketValue: null, team: 'Al Ain', apiTeamId: 2865, isReserve: true },
+]
+
+// ─── Correcciones puntuales (override sobre el CSV "interno") ───────────────────
+// Cuando un jugador Doble G está en el Google Sheet "interno" con un dato viejo
+// (p. ej. un traspaso reciente), el CSV gana sobre la lista de agencia. Estas
+// correcciones pisan ese dato por código, solo para los jugadores listados.
+// Se aplican por clave inicial:apellido (tolerante al formato del nombre).
+export interface AgencyOverride {
+  name: string          // cualquier formato; se matchea por inicial:apellido
+  team?: string
+  contractEnd?: string  // 'DD/MM/YYYY'
+}
+
+export const AGENCY_OVERRIDES: AgencyOverride[] = [
+  { name: 'Juan Farías', team: 'Unión Magdalena' },
+  { name: 'Alexis Steimbach', contractEnd: '31/12/2028' },
 ]
 
 // ─── Runtime list (base + overlay de Supabase) ─────────────────────────────────

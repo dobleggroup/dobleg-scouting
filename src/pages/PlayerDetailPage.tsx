@@ -30,6 +30,7 @@ import DobleGWidget from '@/components/agency/DobleGWidget'
 import ManualFixturesEditor from '@/components/agency/ManualFixturesEditor'
 import BodyMapSVG from '@/components/health/BodyMapSVG'
 import ScoutsGGBadge from '@/components/ui/ScoutsGGBadge'
+import VideosTab from '@/components/videos/VideosTab'
 import type { EnrichedPlayer, SubjectiveMetric } from '@/types'
 
 const SupabasePlayerDetailLazy = lazy(() => import('@/components/players/SupabasePlayerDetail'))
@@ -596,6 +597,7 @@ export default function PlayerDetailPage() {
   const [customRadarMetrics, setCustomRadarMetrics] = useState<string[]>([])
   const [showMetricSelector, setShowMetricSelector] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
+  const [showComments, setShowComments] = useState(false)
   const [showPlayerSelector, setShowPlayerSelector] = useState(false)
   const [playerSearchQuery, setPlayerSearchQuery] = useState('')
   const contentRef = useRef<HTMLDivElement>(null)
@@ -905,6 +907,7 @@ export default function PlayerDetailPage() {
     { id: 'Neurociencia', label: 'Neurociencia', icon: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z', internal: true },
     { id: 'Psicología', label: 'Psicología', icon: 'M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z', internal: true },
     { id: 'Coaching', label: 'Coaching', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z', internal: true },
+    { id: 'Videos', label: 'Videos', icon: 'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z', internal: true },
   ]
 
   // Filter tabs based on source
@@ -1008,11 +1011,143 @@ export default function PlayerDetailPage() {
         <span className="text-apple-gray-800 dark:text-white font-medium">{player.Jugador}</span>
       </nav>
 
-      {/* Main content grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left sidebar - Player info & Score */}
-        <div className="lg:col-span-4 space-y-5">
-          {/* Player card */}
+      {/* Main content layout: rail izquierdo + columna derecha */}
+      <div className="flex flex-col md:flex-row gap-4 lg:gap-6">
+        {/* RAIL - navegación de tabs (full-height) */}
+        <aside className="shrink-0 md:w-14 xl:w-52 order-last md:order-first">
+          <div className="md:sticky md:top-4 flex flex-col gap-3">
+            <nav className="bg-white dark:bg-apple-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark p-1.5 xl:p-2 flex md:flex-col gap-0.5 overflow-x-auto md:overflow-visible">
+              {tabs.map((tab, index) => {
+                const isActive = activeTab === tab.id
+                const showSeparator = tab.id === 'Salud'
+
+                return (
+                  <div key={tab.id} className="flex-shrink-0">
+                    {showSeparator && (
+                      <div className="hidden md:block my-2 mx-2 border-t border-apple-gray-100 dark:border-apple-gray-700" />
+                    )}
+                    <button
+                      data-tab={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`relative w-full flex items-center gap-2.5 px-2.5 xl:px-3 py-2 xl:py-2.5 rounded-lg text-left transition-all duration-200 group ${
+                        isActive
+                          ? 'bg-brand-green text-white shadow-sm'
+                          : 'text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/50 hover:text-apple-gray-700 dark:hover:text-apple-gray-200'
+                      }`}
+                    >
+                      <svg
+                        className={`w-4 h-4 shrink-0 transition-colors ${
+                          isActive ? 'text-white' : 'text-apple-gray-400 group-hover:text-apple-gray-600 dark:group-hover:text-apple-gray-300'
+                        }`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={1.5}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d={tab.icon} />
+                      </svg>
+                      <span className="text-xs font-medium hidden xl:inline whitespace-nowrap">{tab.label}</span>
+                      <span className="text-2xs font-medium md:hidden whitespace-nowrap">{tab.label}</span>
+                      {/* Tooltip for medium screens without labels */}
+                      <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">
+                        {tab.label}
+                      </span>
+                    </button>
+                  </div>
+                )
+              })}
+            </nav>
+            {/* Acciones al pie del rail */}
+            <div className="bg-white dark:bg-apple-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark p-1.5 xl:p-2 flex md:flex-col gap-1 mt-auto overflow-x-auto">
+              {player.Transfermkt && (
+                <a
+                  href={player.Transfermkt}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="relative w-full flex items-center gap-2.5 px-2.5 xl:px-3 py-2 xl:py-2.5 rounded-lg text-left transition-all duration-200 group text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/50 hover:text-apple-gray-700 dark:hover:text-apple-gray-200"
+                >
+                  <svg className="w-4 h-4 shrink-0 transition-colors text-apple-gray-400 group-hover:text-brand-green" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  <span className="hidden xl:inline text-xs font-medium whitespace-nowrap">Transfermarkt</span>
+                  <span className="text-2xs font-medium md:hidden whitespace-nowrap">Transfermarkt</span>
+                  <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">
+                    Transfermarkt
+                  </span>
+                </a>
+              )}
+              {monitoringPlayer?.WyscoutVideo && (
+                <a
+                  href={monitoringPlayer.WyscoutVideo}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="relative w-full flex items-center gap-2.5 px-2.5 xl:px-3 py-2 xl:py-2.5 rounded-lg text-left transition-all duration-200 group text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/50 hover:text-apple-gray-700 dark:hover:text-apple-gray-200"
+                >
+                  <svg className="w-4 h-4 shrink-0 text-apple-gray-400 group-hover:text-brand-green transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="hidden xl:inline text-xs font-medium whitespace-nowrap">Video Wyscout</span>
+                  <span className="text-2xs font-medium md:hidden whitespace-nowrap">Video Wyscout</span>
+                  <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">
+                    Video Wyscout
+                  </span>
+                </a>
+              )}
+              <AddToReportButton
+                type="player-card"
+                title={`Ficha: ${player.Jugador}`}
+                description={`${player.Equipo} - ${player['Posición'] || player['Posicion']} - ${player.ageNum} años`}
+                captureId="player-detail-container"
+                source={source === 'interno' ? 'Scout Interno' : 'Scout Externo'}
+                variant="rail"
+                players={[player.Jugador]}
+              />
+              <button
+                onClick={() => setShowExportModal(true)}
+                className="relative w-full flex items-center gap-2.5 px-2.5 xl:px-3 py-2 xl:py-2.5 rounded-lg text-left transition-all duration-200 group text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/50 hover:text-apple-gray-700 dark:hover:text-apple-gray-200"
+              >
+                <svg className="w-4 h-4 shrink-0 text-apple-gray-400 group-hover:text-brand-green transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className="hidden xl:inline text-xs font-medium whitespace-nowrap">Exportar PDF</span>
+                <span className="text-2xs font-medium md:hidden whitespace-nowrap">Exportar PDF</span>
+                <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">
+                  Exportar PDF
+                </span>
+              </button>
+              <button
+                onClick={() => setShowComments(true)}
+                className="relative w-full flex items-center gap-2.5 px-2.5 xl:px-3 py-2 xl:py-2.5 rounded-lg text-left transition-all duration-200 group text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/50 hover:text-apple-gray-700 dark:hover:text-apple-gray-200"
+                aria-label="Comentarios"
+              >
+                <svg className="w-4 h-4 shrink-0 text-apple-gray-400 group-hover:text-brand-green transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <span className="hidden xl:inline text-xs font-medium whitespace-nowrap">Comentarios</span>
+                <span className="text-2xs font-medium md:hidden whitespace-nowrap">Comentarios</span>
+                <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">Comentarios</span>
+              </button>
+              <div className="hidden xl:block w-full pt-1 mt-1 border-t border-apple-gray-100 dark:border-apple-gray-700">
+                <DobleGWidget player={player} apiPlayerId={apiIdParam ? Number(apiIdParam) : null} />
+                {source !== 'interno' && (
+                  <TrackingWidget
+                    playerName={player.Jugador}
+                    playerDbId={player.id || null}
+                    playerClub={player.Equipo || undefined}
+                    playerPosition={player['Posición'] || undefined}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* COLUMNA DERECHA */}
+        <div className="flex-1 min-w-0 space-y-4 lg:space-y-6 order-first md:order-last">
+          {/* HERO: perfil + Score GG */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4 lg:gap-6 items-start">
+          <div className="space-y-4 lg:space-y-6">
           <div className="card-apple" id="player-header-card">
             {/* Header with gradient, pattern and logo */}
             <div className="relative h-28 overflow-hidden rounded-t-apple-xl">
@@ -1218,6 +1353,16 @@ export default function PlayerDetailPage() {
               </div>
             </div>
           </div>
+          {supabaseDetail?.player?.position_distribution && Object.keys(supabaseDetail.player.position_distribution).length > 0 && (
+            <div className="card-apple p-4">
+              <PositionBar
+                distribution={supabaseDetail.player.position_distribution}
+                selectedPosition={selectedPosition ?? supabaseDetail.player.primary_position}
+                onSelectPosition={setSelectedPosition}
+              />
+            </div>
+          )}
+          </div>{/* end left column wrapper */}
 
           {/* Score — uses Supabase when available, falls back to GG */}
           <div className="card-apple p-6" id="player-score-card">
@@ -1238,6 +1383,53 @@ export default function PlayerDetailPage() {
               comparisonScore={supabaseAvgScore != null ? supabasePosAverage : positionAverageScore}
               comparisonLabel={`Promedio ${formatPosition(supabaseDetail?.player?.primary_position) || posKey || 'posición'}`}
             />
+            {(() => {
+              const activePos = selectedPosition ?? supabaseDetail?.player?.primary_position
+              const activeSeasonScore = supabaseDetail?.allSeasonScores?.find(s => s.position === activePos)
+              if (!supabaseDetail || !activeSeasonScore) return null
+              const scores = (supabaseDetail.allSeasonScores ?? [])
+                .filter(s => s.avg_score != null)
+                .sort((a, b) => b.matches_played - a.matches_played)
+              return (
+                <div className="mt-4 pt-4 border-t border-apple-gray-100 dark:border-apple-gray-700 space-y-3">
+                  <h3 className="text-2xs font-semibold text-apple-gray-400 dark:text-apple-gray-500 uppercase tracking-wider">Sobre el Score GG</h3>
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    <div>
+                      <p className="text-sm font-bold text-apple-gray-800 dark:text-white">{activeSeasonScore.avg_rating != null ? activeSeasonScore.avg_rating.toFixed(2) : '—'}</p>
+                      <p className="text-2xs text-apple-gray-400">Rating</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-apple-gray-800 dark:text-white">{activeSeasonScore.matches_played}</p>
+                      <p className="text-2xs text-apple-gray-400">PJ</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-apple-gray-800 dark:text-white">{activeSeasonScore.total_goals}</p>
+                      <p className="text-2xs text-apple-gray-400">Goles</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-apple-gray-800 dark:text-white">{activeSeasonScore.total_assists}</p>
+                      <p className="text-2xs text-apple-gray-400">Asist</p>
+                    </div>
+                  </div>
+                  {activeSeasonScore.percentile != null && (
+                    <p className="text-2xs text-center text-apple-gray-500 dark:text-apple-gray-400">
+                      Top {Math.round(100 - activeSeasonScore.percentile)}% en su posición
+                    </p>
+                  )}
+                  {scores.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-2xs font-medium text-apple-gray-400 uppercase tracking-wider">Score por posición</p>
+                      {scores.map(s => (
+                        <div key={s.position} className={`flex items-center justify-between text-xs px-2.5 py-1.5 rounded-lg ${s.position === activePos ? 'bg-brand-green/10 dark:bg-brand-green/15' : 'bg-apple-gray-50 dark:bg-apple-gray-800/50'}`}>
+                          <span className="font-semibold text-apple-gray-700 dark:text-apple-gray-300">{s.position}</span>
+                          <span className="text-apple-gray-500 dark:text-apple-gray-400">{s.avg_score != null ? s.avg_score.toFixed(1) : '—'} · {s.matches_played} PJ</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
             {subjectiveGroups.length > 0 && (
               <div className="mt-6 pt-5 border-t border-apple-gray-100 dark:border-apple-gray-700/50">
                 <h3 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-4 text-center">
@@ -1301,148 +1493,14 @@ export default function PlayerDetailPage() {
               </div>
             )}
           </div>
+          </div>{/* end hero grid */}
 
-          {/* Position Distribution */}
-          {supabaseDetail?.player?.position_distribution && Object.keys(supabaseDetail.player.position_distribution).length > 0 && (
-            <div className="card-apple p-4">
-              <PositionBar
-                distribution={supabaseDetail.player.position_distribution}
-                selectedPosition={selectedPosition ?? supabaseDetail.player.primary_position}
-                onSelectPosition={setSelectedPosition}
-              />
-            </div>
-          )}
-
-          {/* Score Scout Timeline - self-contained, renders its own card if evaluations exist */}
-          <ScoreScoutTimeline playerId={player.id || player.Jugador} playerName={player.Jugador} />
-
-          {/* Quick links & actions */}
-          <div className="card-apple p-4 space-y-2">
-            <DobleGWidget
-              player={player}
-              apiPlayerId={apiIdParam ? Number(apiIdParam) : null}
-            />
-            {source !== 'interno' && (
-              <TrackingWidget
-                playerName={player.Jugador}
-                playerDbId={player.id || null}
-                playerClub={player.Equipo || undefined}
-                playerPosition={player['Posición'] || undefined}
-              />
-            )}
-            {player.Transfermkt && (
-              <a
-                href={player.Transfermkt}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-apple-gray-50 dark:bg-apple-gray-800/50 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700/50 transition-colors group"
-              >
-                <span className="text-sm text-apple-gray-700 dark:text-apple-gray-300">Transfermarkt</span>
-                <svg className="w-4 h-4 text-apple-gray-400 group-hover:text-brand-green transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-              </a>
-            )}
-            {monitoringPlayer?.WyscoutVideo && (
-              <a
-                href={monitoringPlayer.WyscoutVideo}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors group"
-              >
-                <span className="text-sm text-red-600 dark:text-red-400">Video Wyscout</span>
-                <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </a>
-            )}
-            <AddToReportButton
-              type="player-card"
-              title={`Ficha: ${player.Jugador}`}
-              description={`${player.Equipo} - ${player['Posición'] || player['Posicion']} - ${player.ageNum} años`}
-              captureId="player-detail-container"
-              source={source === 'interno' ? 'Scout Interno' : 'Scout Externo'}
-              variant="menu-item"
-              players={[player.Jugador]}
-            />
-            <button
-              onClick={() => setShowExportModal(true)}
-              className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-brand-green/10 hover:bg-brand-green/20 transition-colors"
-            >
-              <span className="text-sm text-brand-green font-medium">
-                Exportar PDF
-              </span>
-              <svg className="w-4 h-4 text-brand-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </button>
-          </div>
-
-          {needsManualFixtures && <ManualFixturesEditor playerName={player.Jugador} />}
-
-          {/* Comments - on sidebar */}
-          <div className="card-apple p-5">
-            <PlayerComments player={player} />
-          </div>
-        </div>
-
-        {/* Main content area */}
-        <div className="lg:col-span-8">
-          <div className="flex flex-col md:flex-row gap-4">
-            {/* Horizontal tab bar on mobile, vertical sidebar on md+ */}
-            <div className="shrink-0 md:w-12 xl:w-auto">
-              <div className="md:sticky md:top-4 bg-white dark:bg-apple-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark p-1.5 xl:p-2 overflow-x-auto">
-                <nav className="flex md:flex-col gap-0.5 md:space-y-0.5">
-                  {tabs.map((tab, index) => {
-                    const isActive = activeTab === tab.id
-                    const showSeparator = tab.id === 'Salud'
-
-                    return (
-                      <div key={tab.id} className="flex-shrink-0">
-                        {showSeparator && (
-                          <div className="hidden md:block my-2 mx-2 border-t border-apple-gray-100 dark:border-apple-gray-700" />
-                        )}
-                        <button
-                          data-tab={tab.id}
-                          onClick={() => setActiveTab(tab.id)}
-                          className={`relative w-full flex items-center gap-2.5 px-2.5 xl:px-3 py-2 xl:py-2.5 rounded-lg text-left transition-all duration-200 group ${
-                            isActive
-                              ? 'bg-brand-green text-white shadow-sm'
-                              : 'text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/50 hover:text-apple-gray-700 dark:hover:text-apple-gray-200'
-                          }`}
-                        >
-                          <svg
-                            className={`w-4 h-4 shrink-0 transition-colors ${
-                              isActive ? 'text-white' : 'text-apple-gray-400 group-hover:text-apple-gray-600 dark:group-hover:text-apple-gray-300'
-                            }`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={1.5}
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" d={tab.icon} />
-                          </svg>
-                          <span className="text-xs font-medium hidden xl:block whitespace-nowrap">{tab.label}</span>
-                          <span className="text-2xs font-medium md:hidden whitespace-nowrap">{tab.label}</span>
-                          {/* Tooltip for medium screens without labels */}
-                          <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">
-                            {tab.id}
-                          </span>
-                        </button>
-                      </div>
-                    )
-                  })}
-                </nav>
-              </div>
-            </div>
-
-            {/* Tab content */}
-            <div className="flex-1 card-apple p-6 min-w-0" id="player-tab-content">
+          <div className="flex-1 card-apple p-6 min-w-0" id="player-tab-content">
 
             {/* GENERAL TAB */}
             {activeTab === 'General' && (
               <div className="space-y-6 animate-fade-in" id="tab-content-general">
+                <ScoreScoutTimeline playerId={player.id || player.Jugador} playerName={player.Jugador} />
                 {/* Key info cards — use Supabase match stats when available */}
                 {(() => {
                   const activeSeasonScore = supabaseDetail?.allSeasonScores.find(s => s.position === (selectedPosition ?? supabaseDetail?.player?.primary_position))
@@ -1949,12 +2007,24 @@ export default function PlayerDetailPage() {
                     </div>
                   </div>
                 )}
+                <div className="xl:hidden card-apple p-4 space-y-2">
+                  <DobleGWidget player={player} apiPlayerId={apiIdParam ? Number(apiIdParam) : null} />
+                  {source !== 'interno' && (
+                    <TrackingWidget
+                      playerName={player.Jugador}
+                      playerDbId={player.id || null}
+                      playerClub={player.Equipo || undefined}
+                      playerPosition={player['Posición'] || undefined}
+                    />
+                  )}
+                </div>
               </div>
             )}
 
             {/* FÍSICO / GPS TAB */}
             {activeTab === 'Físico' && source === 'interno' && (
               <div className="animate-fade-in" id="tab-content-gps">
+                {needsManualFixtures && <ManualFixturesEditor playerName={player.Jugador} />}
                 <GPSTab
                   gpsEntries={playerGpsData}
                   playerName={player.Jugador}
@@ -2726,7 +2796,7 @@ export default function PlayerDetailPage() {
                   </div>
                 </div>
 
-                {/* Sesiones y feedback */}
+                {/* Sessions and feedback */}
                 <div className="mt-6">
                   <h4 className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2766,10 +2836,14 @@ export default function PlayerDetailPage() {
                 </div>
               </div>
             )}
-            </div>
+
+            {activeTab === 'Videos' && source === 'interno' && (
+              <VideosTab player={player} />
+            )}
           </div>
-        </div>
-      </div>
+
+        </div>{/* end right column */}
+      </div>{/* end outer flex */}
 
       {/* Export PDF Modal */}
       <ExportPDFModal
@@ -2781,6 +2855,24 @@ export default function PlayerDetailPage() {
         availableEvolutionCharts={[]}
         selectedEvolutionCharts={[]}
       />
+
+      {/* Comments slide-over */}
+      {showComments && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowComments(false)} />
+          <div className="relative w-full max-w-md h-full bg-white dark:bg-apple-gray-900 shadow-2xl overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-apple-gray-100 dark:border-apple-gray-700">
+              <h3 className="font-semibold text-apple-gray-800 dark:text-white">Comentarios</h3>
+              <button onClick={() => setShowComments(false)} className="p-1.5 rounded-lg hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700" aria-label="Cerrar">
+                <svg className="w-5 h-5 text-apple-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-5">
+              <PlayerComments player={player} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

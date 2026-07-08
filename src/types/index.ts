@@ -224,6 +224,7 @@ export interface FilterState {
   minHeight: number  // cm
   maxHeight: number  // cm
   selectedMetrics: string[]  // Metrics to show as columns
+  videoFreshness: import('@/types/videos').VideoFreshness[]  // Filter by video freshness (internal only)
 }
 
 // ─── SORT STATE ──────────────────────────────────────────────────────────────
@@ -247,6 +248,9 @@ export interface AppData {
   positionAverages: Record<string, number>
   agencyPlayers: import('@/constants/agencyPlayers').AgencyPlayer[]
   refreshAgencyPlayers: () => Promise<void>
+  playerVideos: import('@/types/videos').PlayerVideo[]
+  refreshPlayerVideos: () => Promise<void>
+  videoFreshnessByKey: Map<string, import('@/types/videos').VideoFreshness>
   loading: boolean
   error: string | null
   lastUpdated: Date | null

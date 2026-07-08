@@ -9,6 +9,15 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
+# Informes compartibles: proxy a Supabase Storage con la marca propia.
+# status=200 = proxy real (la URL de dobleg-scouting.netlify.app queda en la barra).
+# Debe ir ANTES del catch-all de la SPA, si no lo pisa.
+[[redirects]]
+  from = "/i/*"
+  to = "https://qgwmxjjumauortbwvivu.supabase.co/storage/v1/object/public/informes-compartidos/:splat"
+  status = 200
+  force = true
+
 # SPA routing - redirect all routes to index.html (must be last)
 [[redirects]]
   from = "/*"

@@ -9,7 +9,7 @@ interface AddToReportButtonProps {
   data?: unknown
   source: string
   className?: string
-  variant?: 'button' | 'icon' | 'compact' | 'menu-item'
+  variant?: 'button' | 'icon' | 'compact' | 'menu-item' | 'rail'
   players?: string[]
   size?: 'small' | 'medium' | 'large' | 'full'
 }
@@ -129,6 +129,37 @@ export default function AddToReportButton({
             Al PDF
           </>
         )}
+      </button>
+    )
+  }
+
+  if (variant === 'rail') {
+    return (
+      <button
+        onClick={handleAdd}
+        disabled={adding}
+        className={`relative w-full flex items-center gap-2.5 px-2.5 xl:px-3 py-2 xl:py-2.5 rounded-lg text-left transition-all duration-200 group ${
+          added
+            ? 'text-brand-green'
+            : 'text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/50 hover:text-apple-gray-700 dark:hover:text-apple-gray-200'
+        } ${className}`}
+        aria-label="Agregar al informe PDF"
+      >
+        {adding ? (
+          <div className="w-4 h-4 shrink-0 border-2 border-current border-t-transparent rounded-full animate-spin" />
+        ) : (
+          <svg
+            className={`w-4 h-4 shrink-0 transition-colors ${added ? 'text-brand-green' : 'text-apple-gray-400 group-hover:text-brand-green'}`}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d={added ? 'M5 13l4 4L19 7' : 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'} />
+          </svg>
+        )}
+        <span className="hidden xl:inline text-xs font-medium whitespace-nowrap">{added ? 'En el informe' : 'Agregar al informe'}</span>
+        <span className="text-2xs font-medium md:hidden whitespace-nowrap">{added ? 'En informe' : 'Al informe'}</span>
+        <span className="absolute left-full ml-2 px-2 py-1 bg-apple-gray-900 text-white text-xs rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 xl:hidden hidden md:block whitespace-nowrap z-50 pointer-events-none">
+          Agregar al informe PDF
+        </span>
       </button>
     )
   }
