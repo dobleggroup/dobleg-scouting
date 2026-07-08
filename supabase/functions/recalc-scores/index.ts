@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
 import { getSupabaseAdmin } from '../_shared/supabase-client.ts';
-import { calculateSeasonScore } from '../_shared/scoring.ts';
+import { calculateSeasonScores } from '../_shared/scoring.ts';
 import type { Position } from '../_shared/types.ts';
 
 // Pool mínimo de jugadores de una posición (en la liga) para que el ranking sea
@@ -47,7 +47,12 @@ serve(async (req) => {
     const normName = (s: string) => (s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     const overrideById = new Map<number, string>();
     {
-      const { data: pls } = await supabase.from('players').select('id, name');
+      // Solo traemos los pocos jugadores con override (no todos, para no cargar
+      // miles de filas ni chocar con el límite de 1000).
+      const { data: pls } = await supabase
+        .from('players')
+        .select('id, name')
+        .or('name.ilike.mauricio vera,name.ilike.mario sanabria,name.ilike.juli_n l_pez');
       for (const p of pls ?? []) {
         const ov = POSITION_OVERRIDES[normName(p.name)];
         if (ov) overrideById.set(p.id, ov);
@@ -249,12 +254,12 @@ serve(async (req) => {
       for (const [pos, rowsForPos] of byPos) {
         const pool = rowsForPos.filter((r: any) => (r.matches_played ?? 0) >= MIN_POOL_MATCHES);
         const canRank = pool.length >= MIN_POOL_SIZE;
-        for (const r of rowsForPos) {
-          let score: number | null = null;
-          if (canRank) score = calculateSeasonScore(r, pool, pos as Position);
-          if (score === null) score = r.avg_rating ?? null; // fallback: rating de API
-          r.avg_score = score;
-        }
+        const scores = canRank
+          ? calculateSeasonScores(rowsForPos, pool, pos as Position)
+          : rowsForPos.map(() => null);
+        rowsForPos.forEach((r: any, i: number) => {
+          r.avg_score = scores[i] ?? (r.avg_rating ?? null); // fallback: rating de API
+        });
       }
 
       // Reemplazar los datos de la temporada por las filas primarias frescas:
