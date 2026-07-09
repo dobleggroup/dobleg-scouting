@@ -10,6 +10,8 @@ import type { Position, PlayerWithScore } from '@/types/scoring'
 import { POSITION_DISPLAY, displayPosition } from '@/types/scoring'
 import { useAuth } from '@/context/AuthContext'
 import { addScoutPlayer } from '@/services/scoutPlayersService'
+import MobileSheet from '@/components/ui/MobileSheet'
+import MobileFilterPanel, { MobileFilterButton } from '@/components/filters/MobileFilterPanel'
 import Slider from 'rc-slider'
 import 'rc-slider/assets/index.css'
 
@@ -80,10 +82,14 @@ function AgentMultiSelect({
   agents,
   selected,
   onChange,
+  inline = false,
 }: {
   agents: string[]
   selected: string[]
   onChange: (agents: string[]) => void
+  /** En mobile (dentro del bottom-sheet) la lista se despliega en flujo, no absoluta,
+   *  para que participe del scroll del panel y no quede recortada. */
+  inline?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -100,12 +106,71 @@ function AgentMultiSelect({
     }
   }
 
+  const list = (
+    <div
+      className={
+        inline
+          ? 'relative mt-2 bg-apple-gray-50 dark:bg-apple-gray-800/60 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 w-full max-h-72 flex flex-col'
+          : 'absolute top-full left-0 mt-1 z-[101] bg-white dark:bg-apple-gray-800 rounded-xl shadow-2xl border border-apple-gray-200 dark:border-apple-gray-700 w-64 max-h-72 flex flex-col'
+      }
+    >
+      <div className="p-2 border-b border-apple-gray-100 dark:border-apple-gray-700">
+        <input
+          type="text"
+          placeholder="Buscar agente..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-full text-xs px-2.5 py-1.5 rounded-lg bg-white dark:bg-apple-gray-700 border-0 focus:ring-1 focus:ring-brand-green/50 text-apple-gray-800 dark:text-white placeholder:text-apple-gray-400"
+          autoFocus={!inline}
+        />
+      </div>
+      <div className="overflow-y-auto flex-1 p-1.5">
+        {filtered.length === 0 ? (
+          <p className="text-xs text-apple-gray-400 px-2 py-3 text-center">Sin resultados</p>
+        ) : (
+          filtered.map(agent => (
+            <button
+              key={agent}
+              type="button"
+              onClick={() => toggle(agent)}
+              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left text-xs hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700/50 transition-colors"
+            >
+              <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-all ${
+                selected.includes(agent)
+                  ? 'bg-brand-green border-brand-green'
+                  : 'border-apple-gray-300 dark:border-apple-gray-600'
+              }`}>
+                {selected.includes(agent) && (
+                  <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </div>
+              <span className="text-apple-gray-700 dark:text-apple-gray-200 truncate">{agent}</span>
+            </button>
+          ))
+        )}
+      </div>
+      {selected.length > 0 && (
+        <div className="p-2 border-t border-apple-gray-100 dark:border-apple-gray-700">
+          <button
+            type="button"
+            onClick={() => onChange([])}
+            className="w-full text-xs text-apple-gray-500 hover:text-red-500 transition-colors"
+          >
+            Limpiar seleccion
+          </button>
+        </div>
+      )}
+    </div>
+  )
+
   return (
-    <div className="relative">
+    <div className={inline ? 'w-full' : 'relative'}>
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="input-apple text-xs py-1.5 px-3 min-w-[160px] text-left flex items-center justify-between gap-2"
+        className={`input-apple text-xs px-3 text-left flex items-center justify-between gap-2 ${inline ? 'py-2.5 w-full' : 'py-1.5 min-w-[160px]'}`}
       >
         <span className="truncate">
           {selected.length === 0
@@ -119,61 +184,14 @@ function AgentMultiSelect({
         </svg>
       </button>
 
-      {open && (
+      {open && (inline ? (
+        list
+      ) : (
         <>
           <div className="fixed inset-0 z-[100]" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-1 z-[101] bg-white dark:bg-apple-gray-800 rounded-xl shadow-2xl border border-apple-gray-200 dark:border-apple-gray-700 w-64 max-h-72 flex flex-col">
-            <div className="p-2 border-b border-apple-gray-100 dark:border-apple-gray-700">
-              <input
-                type="text"
-                placeholder="Buscar agente..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full text-xs px-2.5 py-1.5 rounded-lg bg-apple-gray-50 dark:bg-apple-gray-700 border-0 focus:ring-1 focus:ring-brand-green/50 text-apple-gray-800 dark:text-white placeholder:text-apple-gray-400"
-                autoFocus
-              />
-            </div>
-            <div className="overflow-y-auto flex-1 p-1.5">
-              {filtered.length === 0 ? (
-                <p className="text-xs text-apple-gray-400 px-2 py-3 text-center">Sin resultados</p>
-              ) : (
-                filtered.map(agent => (
-                  <button
-                    key={agent}
-                    type="button"
-                    onClick={() => toggle(agent)}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-xs hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/50 transition-colors"
-                  >
-                    <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-all ${
-                      selected.includes(agent)
-                        ? 'bg-brand-green border-brand-green'
-                        : 'border-apple-gray-300 dark:border-apple-gray-600'
-                    }`}>
-                      {selected.includes(agent) && (
-                        <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
-                    </div>
-                    <span className="text-apple-gray-700 dark:text-apple-gray-200 truncate">{agent}</span>
-                  </button>
-                ))
-              )}
-            </div>
-            {selected.length > 0 && (
-              <div className="p-2 border-t border-apple-gray-100 dark:border-apple-gray-700">
-                <button
-                  type="button"
-                  onClick={() => onChange([])}
-                  className="w-full text-xs text-apple-gray-500 hover:text-red-500 transition-colors"
-                >
-                  Limpiar seleccion
-                </button>
-              </div>
-            )}
-          </div>
+          {list}
         </>
-      )}
+      ))}
     </div>
   )
 }
@@ -218,13 +236,9 @@ function BulkTrackingModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white dark:bg-apple-gray-800 rounded-2xl shadow-2xl border border-apple-gray-200 dark:border-apple-gray-700 w-full max-w-sm mx-4 p-5">
-        <h3 className="text-lg font-bold text-apple-gray-800 dark:text-white mb-1">
-          Agregar a seguimiento
-        </h3>
-        <p className="text-sm text-apple-gray-500 mb-4">
+    <MobileSheet open onClose={saving ? () => {} : onClose} title="Agregar a seguimiento">
+      <div>
+        <p className="text-sm text-apple-gray-500 -mt-1 mb-4">
           {players.length} jugador{players.length > 1 ? 'es' : ''} seleccionado{players.length > 1 ? 's' : ''}
         </p>
 
@@ -282,6 +296,189 @@ function BulkTrackingModal({
           </button>
         </div>
       </div>
+    </MobileSheet>
+  )
+}
+
+/**
+ * Controles de filtro de Scouting Externo. Mobile-first (apilado); bajo `lg:`
+ * reproduce exactamente las dos barras horizontales del desktop. Se renderiza
+ * dos veces: una en la barra de desktop (`hidden lg:block`) y otra dentro del
+ * bottom-sheet de mobile. `agentInline` hace que el multiselect de agentes se
+ * despliegue en flujo (para el panel), en vez de como dropdown absoluto.
+ */
+function ScoutingFilters({
+  filters,
+  setFilters,
+  leagues,
+  teams,
+  allAgents,
+  activeCount,
+  onReset,
+  agentInline = false,
+}: {
+  filters: Filters
+  setFilters: React.Dispatch<React.SetStateAction<Filters>>
+  leagues: ReturnType<typeof useLeagues>
+  teams: TeamInfo[]
+  allAgents: string[]
+  activeCount: number
+  onReset: () => void
+  agentInline?: boolean
+}) {
+  const selectCls = 'input-apple text-xs py-2 lg:py-1.5 px-3 w-full lg:w-auto lg:min-w-0'
+
+  return (
+    <div className="space-y-5 lg:space-y-0">
+      {/* Fila 1: chips de posición + selects */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-2 lg:mb-5">
+        <div className="flex flex-wrap gap-1.5">
+          {POSITIONS.map(pos => (
+            <button
+              key={pos.key}
+              onClick={() => setFilters(f => ({
+                ...f,
+                positions: f.positions.includes(pos.key)
+                  ? f.positions.filter(p => p !== pos.key)
+                  : [...f.positions, pos.key],
+              }))}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                filters.positions.includes(pos.key)
+                  ? 'bg-brand-green text-white shadow-sm'
+                  : 'bg-apple-gray-100 dark:bg-apple-gray-800 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-700'
+              }`}
+            >
+              {pos.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="w-px h-6 bg-apple-gray-200 dark:bg-apple-gray-700 hidden lg:block" />
+
+        {/* Liga */}
+        <select
+          value={filters.league_id ?? ''}
+          onChange={e => setFilters(f => ({ ...f, league_id: e.target.value ? Number(e.target.value) : undefined, team_id: undefined }))}
+          className={selectCls}
+        >
+          <option value="">Todas las ligas</option>
+          {leagues.map(l => (
+            <option key={l.id} value={l.id}>{l.name} ({l.country})</option>
+          ))}
+        </select>
+
+        {/* Equipo (si hay liga elegida) */}
+        {filters.league_id && teams.length > 0 && (
+          <select
+            value={filters.team_id ?? ''}
+            onChange={e => setFilters(f => ({ ...f, team_id: e.target.value ? Number(e.target.value) : undefined }))}
+            className={selectCls}
+          >
+            <option value="">Todos los equipos</option>
+            {teams.map(t => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        )}
+
+        {/* Mín. partidos */}
+        <select
+          value={filters.min_matches}
+          onChange={e => setFilters(f => ({ ...f, min_matches: Number(e.target.value) }))}
+          className={selectCls}
+        >
+          <option value={0}>Sin mín. partidos</option>
+          <option value={3}>3+ partidos</option>
+          <option value={5}>5+ partidos</option>
+          <option value={10}>10+ partidos</option>
+          <option value={15}>15+ partidos</option>
+          <option value={20}>20+ partidos</option>
+        </select>
+
+        {/* Mín. score */}
+        <select
+          value={filters.min_score}
+          onChange={e => setFilters(f => ({ ...f, min_score: Number(e.target.value) }))}
+          className={selectCls}
+        >
+          <option value={0}>Sin mín. score</option>
+          <option value={5}>5.0+</option>
+          <option value={6}>6.0+</option>
+          <option value={7}>7.0+</option>
+          <option value={8}>8.0+</option>
+        </select>
+
+        {activeCount > 0 && (
+          <button
+            onClick={onReset}
+            className="text-xs text-apple-gray-500 hover:text-red-500 transition-colors underline text-left lg:ml-1"
+          >
+            Limpiar filtros
+          </button>
+        )}
+      </div>
+
+      {/* Fila 2: sliders de rango + contrato + agentes */}
+      <div className="flex flex-col gap-5 lg:flex-row lg:flex-wrap lg:items-end lg:gap-x-6 lg:gap-y-3 lg:mb-5">
+        {/* Edad */}
+        <div className="w-full lg:w-[200px]">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400">Edad</span>
+            <span className="text-xs font-semibold text-apple-gray-700 dark:text-apple-gray-200 tabular-nums">
+              {filters.min_age} – {filters.max_age}
+            </span>
+          </div>
+          <Slider
+            range
+            min={15}
+            max={40}
+            value={[filters.min_age, filters.max_age]}
+            onChange={(v) => { const [lo, hi] = v as number[]; setFilters(f => ({ ...f, min_age: lo, max_age: hi })) }}
+            styles={{ track: { backgroundColor: '#22c55e', height: 4 }, rail: { backgroundColor: '#e5e7eb', height: 4 }, handle: { backgroundColor: '#fff', borderColor: '#22c55e', borderWidth: 2, width: 16, height: 16, marginTop: -6, opacity: 1, boxShadow: '0 1px 3px rgba(0,0,0,0.15)' } }}
+          />
+        </div>
+
+        {/* Valor de mercado */}
+        <div className="w-full lg:w-[220px]">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400">Valor de mercado</span>
+            <span className="text-xs font-semibold text-apple-gray-700 dark:text-apple-gray-200 tabular-nums">
+              {filters.min_market_value > 0 || filters.max_market_value < 50_000_000
+                ? `€${formatValue(filters.min_market_value)} – €${formatValue(filters.max_market_value)}`
+                : 'Todos'}
+            </span>
+          </div>
+          <Slider
+            range
+            min={0}
+            max={MARKET_VALUE_STEPS.length - 1}
+            value={[MARKET_VALUE_STEPS.indexOf(filters.min_market_value), MARKET_VALUE_STEPS.indexOf(filters.max_market_value)]}
+            onChange={(v) => { const [lo, hi] = v as number[]; setFilters(f => ({ ...f, min_market_value: MARKET_VALUE_STEPS[lo], max_market_value: MARKET_VALUE_STEPS[hi] })) }}
+            styles={{ track: { backgroundColor: '#22c55e', height: 4 }, rail: { backgroundColor: '#e5e7eb', height: 4 }, handle: { backgroundColor: '#fff', borderColor: '#22c55e', borderWidth: 2, width: 16, height: 16, marginTop: -6, opacity: 1, boxShadow: '0 1px 3px rgba(0,0,0,0.15)' } }}
+          />
+        </div>
+
+        {/* Fin de contrato */}
+        <select
+          value={filters.max_contract_months}
+          onChange={e => setFilters(f => ({ ...f, max_contract_months: Number(e.target.value) }))}
+          className={selectCls}
+        >
+          <option value={0}>Fin de contrato</option>
+          <option value={6}>Vence en 6 meses</option>
+          <option value={12}>Vence en 1 año</option>
+          <option value={18}>Vence en 18 meses</option>
+          <option value={24}>Vence en 2 años</option>
+        </select>
+
+        {/* Agentes */}
+        <AgentMultiSelect
+          agents={allAgents}
+          selected={filters.agents}
+          onChange={agents => setFilters(f => ({ ...f, agents }))}
+          inline={agentInline}
+        />
+      </div>
     </div>
   )
 }
@@ -332,6 +529,7 @@ export default function ExternalScoutingPage() {
   const { user, userDisplayName } = useAuth()
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [showTrackingModal, setShowTrackingModal] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
 
   const toggleSelect = (id: number) => {
     setSelectedIds(prev => {
@@ -408,6 +606,8 @@ export default function ExternalScoutingPage() {
         </div>
       </div>
 
+      {/* Filtros — desktop (en mobile van al bottom-sheet más abajo) */}
+      <div className="hidden lg:block">
       {/* Filters bar */}
       <div className="flex flex-wrap items-center gap-2 mb-5">
         {/* Position chips */}
@@ -557,6 +757,30 @@ export default function ExternalScoutingPage() {
           onChange={agents => setFilters(f => ({ ...f, agents }))}
         />
       </div>
+      </div>
+
+      {/* Filtros — mobile: FAB + bottom-sheet */}
+      {selectedIds.size === 0 && (
+        <MobileFilterButton onClick={() => setShowFilters(true)} activeCount={activeCount} />
+      )}
+      <MobileFilterPanel isOpen={showFilters} onClose={() => setShowFilters(false)} activeCount={activeCount}>
+        <ScoutingFilters
+          filters={filters}
+          setFilters={setFilters}
+          leagues={leagues}
+          teams={teams}
+          allAgents={allAgents}
+          activeCount={activeCount}
+          onReset={handleReset}
+          agentInline
+        />
+        <button
+          onClick={() => setShowFilters(false)}
+          className="mt-6 w-full py-3 rounded-xl text-sm font-semibold text-gray-900 bg-brand-green hover:bg-emerald-500 transition-colors"
+        >
+          Ver {count.toLocaleString('es')} resultados
+        </button>
+      </MobileFilterPanel>
 
       {/* Table */}
       {loading && page === 0 ? (
@@ -737,7 +961,7 @@ export default function ExternalScoutingPage() {
       )}
 
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-apple-gray-800 rounded-2xl shadow-2xl border border-apple-gray-200 dark:border-apple-gray-700 px-5 py-3 flex flex-wrap items-center gap-4">
+        <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+5.25rem)] lg:bottom-6 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100vw-1.5rem)] bg-white dark:bg-apple-gray-800 rounded-2xl shadow-2xl border border-apple-gray-200 dark:border-apple-gray-700 px-4 sm:px-5 py-3 flex flex-wrap items-center justify-center gap-3 sm:gap-4">
           <span className="text-sm font-medium text-apple-gray-600 dark:text-apple-gray-300">
             {selectedIds.size} seleccionado{selectedIds.size > 1 ? 's' : ''}
           </span>
