@@ -39,6 +39,9 @@ interface FilterSidebarProps {
   onChange: (filters: FilterState) => void
   onReset: () => void
   showVideoFreshness?: boolean
+  /** En el bottom-sheet de mobile: ocupa todo el ancho, sin card/sticky ni header
+   *  propio (el panel ya aporta título y cierre). Desktop no pasa este prop. */
+  inPanel?: boolean
 }
 
 function Section({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
@@ -106,7 +109,7 @@ function formatMV(v: number): string {
   return v === 0 ? 'Todos' : `€${v}`
 }
 
-export default function FilterSidebar({ players, filters, onChange, onReset, showVideoFreshness = false }: FilterSidebarProps) {
+export default function FilterSidebar({ players, filters, onChange, onReset, showVideoFreshness = false, inPanel = false }: FilterSidebarProps) {
   const update = <K extends keyof FilterState>(key: K, value: FilterState[K]) => {
     onChange({ ...filters, [key]: value })
   }
@@ -224,29 +227,31 @@ export default function FilterSidebar({ players, filters, onChange, onReset, sho
   const selectedMetricsCount = (filters.selectedMetrics || []).length
 
   return (
-    <aside className="w-60 flex-shrink-0">
-      <div className="sticky top-[4rem] card-apple overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-apple-gray-200/50 dark:border-apple-gray-700/50 bg-apple-gray-50 dark:bg-apple-gray-800/50">
-          <span className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider flex items-center gap-2">
-            Filtros
+    <aside className={inPanel ? 'w-full' : 'w-60 flex-shrink-0'}>
+      <div className={inPanel ? '' : 'sticky top-[4rem] card-apple overflow-hidden'}>
+        {/* Header (en panel mobile lo aporta el propio panel) */}
+        {!inPanel && (
+          <div className="flex items-center justify-between px-4 py-3 border-b border-apple-gray-200/50 dark:border-apple-gray-700/50 bg-apple-gray-50 dark:bg-apple-gray-800/50">
+            <span className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider flex items-center gap-2">
+              Filtros
+              {activeFiltersCount > 0 && (
+                <span className="px-1.5 py-0.5 bg-brand-green text-black rounded-full text-2xs font-bold">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </span>
             {activeFiltersCount > 0 && (
-              <span className="px-1.5 py-0.5 bg-brand-green text-black rounded-full text-2xs font-bold">
-                {activeFiltersCount}
-              </span>
+              <button
+                onClick={onReset}
+                className="text-xs font-medium text-brand-green hover:text-green-400 transition-colors"
+              >
+                Limpiar
+              </button>
             )}
-          </span>
-          {activeFiltersCount > 0 && (
-            <button
-              onClick={onReset}
-              className="text-xs font-medium text-brand-green hover:text-green-400 transition-colors"
-            >
-              Limpiar
-            </button>
-          )}
-        </div>
+          </div>
+        )}
 
-        <div className="px-4 divide-y divide-apple-gray-200/50 dark:divide-apple-gray-800/50">
+        <div className={inPanel ? 'divide-y divide-apple-gray-200/50 dark:divide-apple-gray-800/50' : 'px-4 divide-y divide-apple-gray-200/50 dark:divide-apple-gray-800/50'}>
           {/* Position */}
           <Section title="Posición">
             <div className="space-y-2 max-h-48 overflow-y-auto scrollbar-thin pr-1">

@@ -179,7 +179,23 @@ export default function InternalScoutingPage() {
       {/* Mobile filter button + panel */}
       <MobileFilterButton onClick={() => setShowMobileFilters(true)} activeCount={activeFiltersCount} />
       <MobileFilterPanel isOpen={showMobileFilters} onClose={() => setShowMobileFilters(false)} activeCount={activeFiltersCount}>
-        <FilterSidebar players={internal} filters={filters} onChange={setFilters} onReset={handleReset} showVideoFreshness />
+        <FilterSidebar players={internal} filters={filters} onChange={setFilters} onReset={handleReset} showVideoFreshness inPanel />
+        <div className="flex items-center gap-2 mt-5">
+          {activeFiltersCount > 0 && (
+            <button
+              onClick={handleReset}
+              className="py-3 px-4 rounded-xl text-sm font-medium text-apple-gray-600 dark:text-apple-gray-300 bg-apple-gray-100 dark:bg-apple-gray-800 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-700 transition-colors"
+            >
+              Limpiar
+            </button>
+          )}
+          <button
+            onClick={() => setShowMobileFilters(false)}
+            className="flex-1 py-3 rounded-xl text-sm font-semibold text-gray-900 bg-brand-green hover:bg-emerald-500 transition-colors"
+          >
+            Ver {filtered.length.toLocaleString('es')} resultados
+          </button>
+        </div>
       </MobileFilterPanel>
     </div>
   )
