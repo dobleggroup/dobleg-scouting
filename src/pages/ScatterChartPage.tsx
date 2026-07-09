@@ -445,10 +445,10 @@ export default function ScatterChartPage() {
         {/* Advanced Filters */}
         <div className="pt-5 border-t border-apple-gray-100 dark:border-apple-gray-700 space-y-4">
           {/* Row 1: Min Matches + Age Range */}
-          <div className="flex flex-wrap items-center gap-6">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-4 sm:gap-6">
+            <div className="flex items-center gap-3 w-full sm:w-auto">
               <label className="text-xs text-apple-gray-500 font-medium whitespace-nowrap">Min. partidos:</label>
-              <div className="flex items-center gap-2 flex-1 max-w-[180px]">
+              <div className="flex items-center gap-2 flex-1 sm:max-w-[180px]">
                 <input
                   type="range"
                   min={0}
@@ -463,11 +463,11 @@ export default function ScatterChartPage() {
             </div>
 
             {/* Age Range */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 w-full sm:w-auto">
               <label className="text-xs text-apple-gray-500 font-medium">Edad:</label>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-1 sm:flex-none">
                 <span className="text-xs font-medium text-apple-gray-600 dark:text-apple-gray-300 w-6 tabular-nums">{ageRange[0]}</span>
-                <div className="relative w-28 h-5 flex items-center">
+                <div className="relative flex-1 sm:flex-none sm:w-28 h-5 flex items-center">
                   <input
                     type="range"
                     min={minAge}
