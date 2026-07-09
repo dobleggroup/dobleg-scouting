@@ -66,7 +66,7 @@ function ScoreSelector({
         )}
       </div>
 
-      <div className="grid grid-cols-10 gap-1.5">
+      <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
         {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
           <button
             key={n}
@@ -693,8 +693,8 @@ export default function ScoutEvaluationPage() {
         </form>
       </div>
 
-      {/* Fixed submit button */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 dark:bg-apple-gray-900/80 backdrop-blur-xl border-t border-apple-gray-200/50 dark:border-apple-gray-800/50 z-30">
+      {/* Fixed submit button — en mobile se apoya por encima del bottom nav flotante */}
+      <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+5rem)] lg:bottom-0 left-0 right-0 p-4 bg-white/80 dark:bg-apple-gray-900/80 backdrop-blur-xl border-t border-apple-gray-200/50 dark:border-apple-gray-800/50 z-30">
         <div className="max-w-2xl mx-auto">
           <button
             type="submit"
