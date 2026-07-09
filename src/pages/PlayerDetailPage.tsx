@@ -1011,10 +1011,36 @@ export default function PlayerDetailPage() {
         <span className="text-apple-gray-800 dark:text-white font-medium">{player.Jugador}</span>
       </nav>
 
+      {/* Navegación de tabs — mobile (píldoras, sticky bajo el navbar) */}
+      <div className="md:hidden sticky top-14 z-20 -mx-4 sm:-mx-6 mb-4 px-4 sm:px-6 py-2.5 bg-apple-gray-50/95 dark:bg-apple-gray-900/95 backdrop-blur-md border-b border-apple-gray-200/60 dark:border-apple-gray-800/60">
+        <div className="flex gap-1.5 overflow-x-auto scrollbar-thin [-webkit-overflow-scrolling:touch]">
+          {tabs.map(tab => {
+            const isActive = activeTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                  isActive
+                    ? 'bg-brand-green text-white shadow-sm'
+                    : 'bg-white dark:bg-apple-gray-800 text-apple-gray-500 dark:text-apple-gray-400 hover:text-apple-gray-700 dark:hover:text-apple-gray-200'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d={tab.icon} />
+                </svg>
+                {tab.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
       {/* Main content layout: rail izquierdo + columna derecha */}
       <div className="flex flex-col md:flex-row gap-4 lg:gap-6">
-        {/* RAIL - navegación de tabs (full-height) */}
-        <aside className="shrink-0 md:w-14 xl:w-52 order-last md:order-first">
+        {/* RAIL - navegación de tabs (full-height). En mobile se reemplaza por la
+            barra de píldoras sticky de arriba + el bloque de acciones del pie. */}
+        <aside className="hidden md:block shrink-0 md:w-14 xl:w-52 md:order-first">
           <div className="md:sticky md:top-4 flex flex-col gap-3">
             <nav className="bg-white dark:bg-apple-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark p-1.5 xl:p-2 flex md:flex-col gap-0.5 overflow-x-auto md:overflow-visible">
               {tabs.map((tab, index) => {
@@ -2844,6 +2870,69 @@ export default function PlayerDetailPage() {
 
         </div>{/* end right column */}
       </div>{/* end outer flex */}
+
+      {/* Acciones + widgets — mobile (reemplazan al pie del rail de desktop) */}
+      <div className="md:hidden mt-6 space-y-4">
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setShowExportModal(true)}
+            className="flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm font-medium bg-white dark:bg-apple-gray-800 border border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-700 dark:text-apple-gray-200 active:scale-[0.98] transition-transform"
+          >
+            <svg className="w-4 h-4 text-brand-green" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Exportar PDF
+          </button>
+          <button
+            onClick={() => setShowComments(true)}
+            className="flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm font-medium bg-white dark:bg-apple-gray-800 border border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-700 dark:text-apple-gray-200 active:scale-[0.98] transition-transform"
+          >
+            <svg className="w-4 h-4 text-brand-green" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            Comentarios
+          </button>
+          {player.Transfermkt && (
+            <a
+              href={player.Transfermkt}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm font-medium bg-white dark:bg-apple-gray-800 border border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-700 dark:text-apple-gray-200 active:scale-[0.98] transition-transform"
+            >
+              <svg className="w-4 h-4 text-brand-green" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              Transfermarkt
+            </a>
+          )}
+          {monitoringPlayer?.WyscoutVideo && (
+            <a
+              href={monitoringPlayer.WyscoutVideo}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm font-medium bg-white dark:bg-apple-gray-800 border border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-700 dark:text-apple-gray-200 active:scale-[0.98] transition-transform"
+            >
+              <svg className="w-4 h-4 text-brand-green" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Video Wyscout
+            </a>
+          )}
+        </div>
+        {/* Estado Doble G + seguimiento */}
+        <div className="bg-white dark:bg-apple-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark p-2">
+          <DobleGWidget player={player} apiPlayerId={apiIdParam ? Number(apiIdParam) : null} />
+          {source !== 'interno' && (
+            <TrackingWidget
+              playerName={player.Jugador}
+              playerDbId={player.id || null}
+              playerClub={player.Equipo || undefined}
+              playerPosition={player['Posición'] || undefined}
+            />
+          )}
+        </div>
+      </div>
 
       {/* Export PDF Modal */}
       <ExportPDFModal
