@@ -433,7 +433,7 @@ export default function HomePage() {
         </div>
 
         <div className="bg-white dark:bg-apple-gray-800/60 rounded-apple-lg border border-apple-gray-200/60 dark:border-apple-gray-700/40 overflow-hidden">
-          <div className="flex overflow-x-auto">
+          <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-thin [-webkit-overflow-scrolling:touch]">
             {calendarDays.map(day => {
               const key = dateKey(day)
               const count = fixturesByDate.get(key)?.length || 0
@@ -444,7 +444,7 @@ export default function HomePage() {
                 <button
                   key={key}
                   onClick={() => setSelectedDate(day)}
-                  className={`flex-1 min-w-[48px] flex flex-col items-center py-3 px-1 transition-all ${
+                  className={`flex-1 min-w-[48px] snap-start flex flex-col items-center py-3 px-1 transition-all ${
                     isSelected
                       ? 'bg-brand-green/10 dark:bg-brand-green/10'
                       : 'hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/30'
