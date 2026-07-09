@@ -602,6 +602,18 @@ export default function PlayerDetailPage() {
   const [playerSearchQuery, setPlayerSearchQuery] = useState('')
   const contentRef = useRef<HTMLDivElement>(null)
   const playerSelectorRef = useRef<HTMLDivElement>(null)
+  const mobileTabsRef = useRef<HTMLDivElement>(null)
+
+  // Centrar la píldora del tab activo en el scroller horizontal de mobile
+  // (solo mueve el contenedor, no la página).
+  useEffect(() => {
+    const c = mobileTabsRef.current
+    if (!c) return
+    const btn = c.querySelector<HTMLElement>(`[data-mtab="${CSS.escape(activeTab)}"]`)
+    if (!btn) return
+    const target = btn.offsetLeft - (c.clientWidth - btn.clientWidth) / 2
+    c.scrollTo({ left: Math.max(0, target), behavior: 'smooth' })
+  }, [activeTab])
 
   // Get available players for selector based on source
   const availablePlayers = useMemo(() => {
@@ -1013,14 +1025,18 @@ export default function PlayerDetailPage() {
 
       {/* Navegación de tabs — mobile (píldoras, sticky bajo el navbar) */}
       <div className="md:hidden sticky top-14 z-20 -mx-4 sm:-mx-6 mb-4 px-4 sm:px-6 py-2.5 bg-apple-gray-50/95 dark:bg-apple-gray-900/95 backdrop-blur-md border-b border-apple-gray-200/60 dark:border-apple-gray-800/60">
-        <div className="flex gap-1.5 overflow-x-auto scrollbar-thin [-webkit-overflow-scrolling:touch]">
+        <div
+          ref={mobileTabsRef}
+          className="flex gap-1.5 overflow-x-auto scroll-smooth scrollbar-thin [-webkit-overflow-scrolling:touch]"
+        >
           {tabs.map(tab => {
             const isActive = activeTab === tab.id
             return (
               <button
                 key={tab.id}
+                data-mtab={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
                   isActive
                     ? 'bg-brand-green text-white shadow-sm'
                     : 'bg-white dark:bg-apple-gray-800 text-apple-gray-500 dark:text-apple-gray-400 hover:text-apple-gray-700 dark:hover:text-apple-gray-200'
@@ -2918,18 +2934,6 @@ export default function PlayerDetailPage() {
               </svg>
               Video Wyscout
             </a>
-          )}
-        </div>
-        {/* Estado Doble G + seguimiento */}
-        <div className="bg-white dark:bg-apple-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark p-2">
-          <DobleGWidget player={player} apiPlayerId={apiIdParam ? Number(apiIdParam) : null} />
-          {source !== 'interno' && (
-            <TrackingWidget
-              playerName={player.Jugador}
-              playerDbId={player.id || null}
-              playerClub={player.Equipo || undefined}
-              playerPosition={player['Posición'] || undefined}
-            />
           )}
         </div>
       </div>
