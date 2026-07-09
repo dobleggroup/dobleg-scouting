@@ -419,6 +419,19 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
           </div>
         </div>
       )}
+
+      {/* Referencias de los puntitos de frescura de video (solo interno) */}
+      {source === 'interno' && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1 pt-3 mt-1 border-t border-apple-gray-100 dark:border-apple-gray-800 text-xs text-apple-gray-500 dark:text-apple-gray-400">
+          <span className="font-medium text-apple-gray-600 dark:text-apple-gray-300">Videos:</span>
+          {(['green', 'amber', 'red', 'none'] as VideoFreshness[]).map(fr => (
+            <span key={fr} className="inline-flex items-center gap-1.5">
+              <span className={`inline-block w-2.5 h-2.5 rounded-full ${FRESH_DOT[fr]}`} />
+              {FRESH_LABEL[fr]}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

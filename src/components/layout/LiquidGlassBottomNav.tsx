@@ -44,7 +44,7 @@ export default function LiquidGlassBottomNav({ visible }: { visible: boolean }) 
       }`}
     >
       <nav
-        className="pointer-events-auto mx-3 mb-2 flex items-stretch justify-between gap-1 rounded-2xl border border-white/40 dark:border-white/10 bg-white/70 dark:bg-apple-gray-900/60 px-2 py-1.5 shadow-lg shadow-black/10 backdrop-blur-xl"
+        className="pointer-events-auto mx-3 mb-4 flex items-stretch justify-between gap-1 rounded-2xl border border-white/40 dark:border-white/10 bg-white/70 dark:bg-apple-gray-900/60 px-2 py-1.5 shadow-lg shadow-black/10 backdrop-blur-xl"
         aria-label="Navegación principal"
       >
         {BOTTOM_NAV_ITEMS.map(item => {
