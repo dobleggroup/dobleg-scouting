@@ -503,13 +503,13 @@ function ComparisonContent({ players }: { players: PlayerWithScore[] }) {
             const maxAbs = presentVals.length ? Math.max(...presentVals.map(Math.abs)) || 1 : 1
 
             return (
-              <div key={key} className="px-5 py-3 flex items-center gap-4 hover:bg-apple-gray-50/50 dark:hover:bg-apple-gray-800/30 transition-colors">
-                <div className="w-44 flex-shrink-0">
+              <div key={key} className="px-3 sm:px-5 py-3 flex items-center gap-2 sm:gap-4 hover:bg-apple-gray-50/50 dark:hover:bg-apple-gray-800/30 transition-colors">
+                <div className="w-24 sm:w-44 flex-shrink-0">
                   <span className="text-xs font-medium text-apple-gray-600 dark:text-apple-gray-400">
                     {meta?.label ?? key}
                   </span>
                 </div>
-                <div className={`flex-1 grid gap-4 ${players.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                <div className={`flex-1 min-w-0 grid gap-2 sm:gap-4 ${players.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
                   {rawVals.map((v, i) => {
                     const isWinner = v !== null && v === best && presentVals.filter(x => x === best).length === 1
                     const barWidth = v !== null ? (v / maxAbs) * 100 : 0
@@ -607,9 +607,9 @@ export default function ComparisonPage() {
       </div>
 
       {/* Player selectors */}
-      <div className="card-apple p-6 mb-6">
-        <div className="flex flex-wrap items-start gap-5">
-          <div className="flex-1 min-w-[240px]">
+      <div className="card-apple p-4 sm:p-6 mb-6">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-start gap-4 sm:gap-5">
+          <div className="w-full sm:flex-1 sm:min-w-[240px]">
             <PlayerSearch
               players={allPlayers}
               selected={playerA}
@@ -618,8 +618,8 @@ export default function ComparisonPage() {
               label="Jugador A"
             />
           </div>
-          <div className="flex-shrink-0 text-2xl font-bold text-apple-gray-300 dark:text-apple-gray-600 pt-8">VS</div>
-          <div className="flex-1 min-w-[240px]">
+          <div className="flex-shrink-0 text-center text-xl sm:text-2xl font-bold text-apple-gray-300 dark:text-apple-gray-600 sm:pt-8">VS</div>
+          <div className="w-full sm:flex-1 sm:min-w-[240px]">
             <PlayerSearch
               players={allPlayers}
               selected={playerB}
@@ -630,8 +630,8 @@ export default function ComparisonPage() {
           </div>
           {showC && (
             <>
-              <div className="flex-shrink-0 text-2xl font-bold text-apple-gray-300 dark:text-apple-gray-600 pt-8">VS</div>
-              <div className="flex-1 min-w-[240px]">
+              <div className="flex-shrink-0 text-center text-xl sm:text-2xl font-bold text-apple-gray-300 dark:text-apple-gray-600 sm:pt-8">VS</div>
+              <div className="w-full sm:flex-1 sm:min-w-[240px]">
                 <PlayerSearch
                   players={allPlayers}
                   selected={playerC}
@@ -642,7 +642,7 @@ export default function ComparisonPage() {
               </div>
             </>
           )}
-          <div className="flex flex-col gap-2 pt-8">
+          <div className="flex flex-col gap-2 w-full sm:w-auto sm:pt-8">
             {!showC && (
               <button
                 onClick={() => setShowC(true)}
