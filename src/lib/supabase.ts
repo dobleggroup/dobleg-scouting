@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { Capacitor } from '@capacitor/core'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -10,15 +11,38 @@ if (!supabaseUrl || !supabaseAnonKey) {
   )
 }
 
+const isNative = Capacitor.isNativePlatform()
+
+// En la app nativa guardamos la sesión en el storage nativo (Capacitor Preferences)
+// en vez del localStorage del WebView (que el SO puede limpiar). Con esto + el
+// autoRefresh, el login persiste ~indefinido: no vuelve a pedir credenciales.
+// En web NO se pasa `storage` → se usa el localStorage por defecto (sin cambios).
+const nativeSessionStorage = {
+  getItem: async (key: string): Promise<string | null> => {
+    const { Preferences } = await import('@capacitor/preferences')
+    const { value } = await Preferences.get({ key })
+    return value ?? null
+  },
+  setItem: async (key: string, value: string): Promise<void> => {
+    const { Preferences } = await import('@capacitor/preferences')
+    await Preferences.set({ key, value })
+  },
+  removeItem: async (key: string): Promise<void> => {
+    const { Preferences } = await import('@capacitor/preferences')
+    await Preferences.remove({ key })
+  },
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    // Persist session in localStorage for 30 days
+    // Persist session (localStorage en web, Preferences nativo en la app)
     persistSession: true,
     storageKey: 'scout-platform-auth',
     // Auto refresh token before expiry
     autoRefreshToken: true,
-    // Detect session from URL (for OAuth redirects)
-    detectSessionInUrl: true,
+    // En web detecta la sesión desde la URL (OAuth redirects); en la app no aplica.
+    detectSessionInUrl: !isNative,
+    ...(isNative ? { storage: nativeSessionStorage } : {}),
   }
 })
 

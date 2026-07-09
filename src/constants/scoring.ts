@@ -1,11 +1,23 @@
+import { Capacitor } from '@capacitor/core'
+
 // ─── GOOGLE SHEETS CSV URLS ───────────────────────────────────────────────────
 
 // Google Sheets base URLs
 const GOOGLE_BASE = 'https://docs.google.com'
 
-// Helper to build URLs - in production uses serverless proxy, in dev uses Vite proxy
+// Origen de producción (Netlify) donde vive el proxy serverless de CSV con CORS.
+const PROD_ORIGIN = 'https://dobleg-scouting.netlify.app'
+
+// Helper to build URLs:
+// - App nativa (Capacitor): las rutas relativas /.netlify/... no existen dentro de
+//   la app, así que apuntamos al proxy YA deployado (manda Access-Control-Allow-Origin *).
+// - Dev (web): proxy de Vite.
+// - Producción (web): proxy serverless relativo del mismo dominio.
 function buildSheetUrl(path: string): string {
   const fullUrl = `${GOOGLE_BASE}${path}`
+  if (Capacitor.isNativePlatform()) {
+    return `${PROD_ORIGIN}/.netlify/functions/sheets?url=${encodeURIComponent(fullUrl)}`
+  }
   if (import.meta.env.DEV) {
     return `/sheets-proxy${path}`
   }
