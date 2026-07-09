@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePlayersList } from '@/hooks/usePlayerStats'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import MobileFilterPanel, { MobileFilterButton } from '@/components/filters/MobileFilterPanel'
 import { getScoreColorClass, getScoreBgClass } from '@/components/ui/ScoreBar'
 import { displayPosition } from '@/types/scoring'
 import {
@@ -110,6 +111,7 @@ export default function OpportunitiesPage() {
   const [minValue, setMinValue] = useState<number>(0)
   const [maxValue, setMaxValue] = useState<number>(10_000_000)
   const [maxContract, setMaxContract] = useState<number | null>(null)
+  const [showFilters, setShowFilters] = useState(false)
 
   const opportunities = useMemo(() => buildOpportunities(players), [players])
 
@@ -186,6 +188,163 @@ export default function OpportunitiesPage() {
     [opportunities],
   )
 
+  const activeCount = [
+    typeFilter !== 'all',
+    positionFilter !== 'all',
+    minAge !== 15 || maxAge !== 35,
+    minValue !== 0 || maxValue !== 10_000_000,
+    maxContract !== null,
+  ].filter(Boolean).length
+
+  // Contenido de filtros — mobile-first; bajo `lg:` reproduce la fila horizontal
+  // del desktop. Se usa en la card de desktop y en el bottom-sheet de mobile.
+  const renderFilters = () => (
+    <div className="space-y-4">
+      {/* Tipo (presets) */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mr-2">
+          Tipo:
+        </span>
+        <button
+          onClick={() => setTypeFilter('all')}
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+            typeFilter === 'all'
+              ? 'bg-apple-gray-800 dark:bg-white text-white dark:text-apple-gray-800'
+              : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600'
+          }`}
+        >
+          Todas ({counts.all})
+        </button>
+        {(['young_talent', 'undervalued', 'contract', 'bargain'] as const).map(type => (
+          <button
+            key={type}
+            onClick={() => setTypeFilter(type)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              typeFilter === type
+                ? 'bg-apple-gray-800 dark:bg-white text-white dark:text-apple-gray-800'
+                : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600'
+            }`}
+          >
+            {TYPE_LABELS[type]} ({counts[type]})
+          </button>
+        ))}
+      </div>
+
+      {/* Filtros principales */}
+      <div className="flex flex-col gap-5 lg:flex-row lg:flex-wrap lg:items-end lg:gap-6">
+        {/* Edad */}
+        <div className="w-full lg:w-auto lg:min-w-[200px]">
+          <label className="block text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mb-2">
+            Edad:{' '}
+            <span className="text-brand-green font-semibold">
+              {minAge} - {maxAge} años
+            </span>
+          </label>
+          <div className="space-y-2">
+            <input
+              type="range"
+              min="15"
+              max="35"
+              value={minAge}
+              onChange={e => setMinAge(Math.min(Number(e.target.value), maxAge - 1))}
+              className="w-full h-1.5 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-lg appearance-none cursor-pointer accent-brand-green"
+            />
+            <input
+              type="range"
+              min="15"
+              max="35"
+              value={maxAge}
+              onChange={e => setMaxAge(Math.max(Number(e.target.value), minAge + 1))}
+              className="w-full h-1.5 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-lg appearance-none cursor-pointer accent-brand-green"
+            />
+          </div>
+        </div>
+
+        {/* Valor de mercado */}
+        <div className="w-full lg:w-auto lg:min-w-[220px]">
+          <label className="block text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mb-2">
+            Valor:{' '}
+            <span className="text-brand-green font-semibold">
+              €{(minValue / 1_000_000).toFixed(1)}M - €{(maxValue / 1_000_000).toFixed(1)}M
+            </span>
+          </label>
+          <div className="space-y-2">
+            <input
+              type="range"
+              min="0"
+              max="10000000"
+              step="100000"
+              value={minValue}
+              onChange={e => setMinValue(Math.min(Number(e.target.value), maxValue - 100000))}
+              className="w-full h-1.5 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-lg appearance-none cursor-pointer accent-brand-green"
+            />
+            <input
+              type="range"
+              min="0"
+              max="10000000"
+              step="100000"
+              value={maxValue}
+              onChange={e => setMaxValue(Math.max(Number(e.target.value), minValue + 100000))}
+              className="w-full h-1.5 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-lg appearance-none cursor-pointer accent-brand-green"
+            />
+          </div>
+        </div>
+
+        {/* Contrato */}
+        <div className="w-full lg:w-auto lg:min-w-[140px]">
+          <label className="block text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mb-1">
+            Contrato (meses)
+          </label>
+          <select
+            value={maxContract ?? 'all'}
+            onChange={e =>
+              setMaxContract(e.target.value === 'all' ? null : Number(e.target.value))
+            }
+            className="w-full px-3 py-2 lg:py-1.5 rounded-lg text-sm bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-700 dark:text-apple-gray-200 border-0 focus:ring-2 focus:ring-brand-green"
+          >
+            <option value="all">Cualquiera</option>
+            <option value="6">≤ 6 meses</option>
+            <option value="12">≤ 12 meses</option>
+            <option value="18">≤ 18 meses</option>
+            <option value="24">≤ 24 meses</option>
+          </select>
+        </div>
+
+        {/* Posición */}
+        <div className="w-full lg:w-auto lg:min-w-[160px]">
+          <label className="block text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mb-1">
+            Posición
+          </label>
+          <select
+            value={positionFilter}
+            onChange={e => setPositionFilter(e.target.value)}
+            className="w-full px-3 py-2 lg:py-1.5 rounded-lg text-sm bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-700 dark:text-apple-gray-200 border-0 focus:ring-2 focus:ring-brand-green"
+          >
+            <option value="all">Todas</option>
+            {positions.map(pos => (
+              <option key={pos} value={pos}>
+                {displayPosition(pos)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Limpiar */}
+        {hasActiveFilters && (
+          <button
+            onClick={clearAllFilters}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 lg:py-1.5 text-sm font-medium text-apple-gray-500 dark:text-apple-gray-400 hover:text-red-500 dark:hover:text-red-400 bg-apple-gray-100 dark:bg-apple-gray-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            Limpiar
+          </button>
+        )}
+      </div>
+    </div>
+  )
+
   if (loading) return <LoadingSpinner fullScreen message="Analizando oportunidades..." />
 
   return (
@@ -200,156 +359,22 @@ export default function OpportunitiesPage() {
         </p>
       </div>
 
-      {/* Filters */}
-      <div className="card-apple p-4 mb-6 space-y-4">
-        {/* Type preset row */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mr-2">
-            Tipo:
-          </span>
-          <button
-            onClick={() => setTypeFilter('all')}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-              typeFilter === 'all'
-                ? 'bg-apple-gray-800 dark:bg-white text-white dark:text-apple-gray-800'
-                : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600'
-            }`}
-          >
-            Todas ({counts.all})
-          </button>
-          {(['young_talent', 'undervalued', 'contract', 'bargain'] as const).map(type => (
-            <button
-              key={type}
-              onClick={() => setTypeFilter(type)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                typeFilter === type
-                  ? 'bg-apple-gray-800 dark:bg-white text-white dark:text-apple-gray-800'
-                  : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600'
-              }`}
-            >
-              {TYPE_LABELS[type]} ({counts[type]})
-            </button>
-          ))}
-        </div>
-
-        {/* Main filters row */}
-        <div className="flex flex-wrap items-end gap-6">
-          {/* Age filter - slider */}
-          <div className="min-w-[200px]">
-            <label className="block text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mb-2">
-              Edad:{' '}
-              <span className="text-brand-green font-semibold">
-                {minAge} - {maxAge} años
-              </span>
-            </label>
-            <div className="space-y-2">
-              <input
-                type="range"
-                min="15"
-                max="35"
-                value={minAge}
-                onChange={e => setMinAge(Math.min(Number(e.target.value), maxAge - 1))}
-                className="w-full h-1.5 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-lg appearance-none cursor-pointer accent-brand-green"
-              />
-              <input
-                type="range"
-                min="15"
-                max="35"
-                value={maxAge}
-                onChange={e => setMaxAge(Math.max(Number(e.target.value), minAge + 1))}
-                className="w-full h-1.5 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-lg appearance-none cursor-pointer accent-brand-green"
-              />
-            </div>
-          </div>
-
-          {/* Market value filter - slider */}
-          <div className="min-w-[220px]">
-            <label className="block text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mb-2">
-              Valor:{' '}
-              <span className="text-brand-green font-semibold">
-                €{(minValue / 1_000_000).toFixed(1)}M - €{(maxValue / 1_000_000).toFixed(1)}M
-              </span>
-            </label>
-            <div className="space-y-2">
-              <input
-                type="range"
-                min="0"
-                max="10000000"
-                step="100000"
-                value={minValue}
-                onChange={e => setMinValue(Math.min(Number(e.target.value), maxValue - 100000))}
-                className="w-full h-1.5 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-lg appearance-none cursor-pointer accent-brand-green"
-              />
-              <input
-                type="range"
-                min="0"
-                max="10000000"
-                step="100000"
-                value={maxValue}
-                onChange={e => setMaxValue(Math.max(Number(e.target.value), minValue + 100000))}
-                className="w-full h-1.5 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-lg appearance-none cursor-pointer accent-brand-green"
-              />
-            </div>
-          </div>
-
-          {/* Contract filter */}
-          <div className="min-w-[140px]">
-            <label className="block text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mb-1">
-              Contrato (meses)
-            </label>
-            <select
-              value={maxContract ?? 'all'}
-              onChange={e =>
-                setMaxContract(e.target.value === 'all' ? null : Number(e.target.value))
-              }
-              className="w-full px-3 py-1.5 rounded-lg text-sm bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-700 dark:text-apple-gray-200 border-0 focus:ring-2 focus:ring-brand-green"
-            >
-              <option value="all">Cualquiera</option>
-              <option value="6">≤ 6 meses</option>
-              <option value="12">≤ 12 meses</option>
-              <option value="18">≤ 18 meses</option>
-              <option value="24">≤ 24 meses</option>
-            </select>
-          </div>
-
-          {/* Position filter */}
-          <div className="min-w-[160px]">
-            <label className="block text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mb-1">
-              Posición
-            </label>
-            <select
-              value={positionFilter}
-              onChange={e => setPositionFilter(e.target.value)}
-              className="w-full px-3 py-1.5 rounded-lg text-sm bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-700 dark:text-apple-gray-200 border-0 focus:ring-2 focus:ring-brand-green"
-            >
-              <option value="all">Todas</option>
-              {positions.map(pos => (
-                <option key={pos} value={pos}>
-                  {displayPosition(pos)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Clear filters */}
-          {hasActiveFilters && (
-            <button
-              onClick={clearAllFilters}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-apple-gray-500 dark:text-apple-gray-400 hover:text-red-500 dark:hover:text-red-400 bg-apple-gray-100 dark:bg-apple-gray-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-              Limpiar
-            </button>
-          )}
-        </div>
+      {/* Filtros — desktop (en mobile van al bottom-sheet) */}
+      <div className="hidden lg:block card-apple p-4 mb-6">
+        {renderFilters()}
       </div>
+
+      {/* Filtros — mobile: FAB + bottom-sheet */}
+      <MobileFilterButton onClick={() => setShowFilters(true)} activeCount={activeCount} />
+      <MobileFilterPanel isOpen={showFilters} onClose={() => setShowFilters(false)} activeCount={activeCount}>
+        {renderFilters()}
+        <button
+          onClick={() => setShowFilters(false)}
+          className="mt-6 w-full py-3 rounded-xl text-sm font-semibold text-gray-900 bg-brand-green hover:bg-emerald-500 transition-colors"
+        >
+          Ver {filteredOpportunities.length} resultados
+        </button>
+      </MobileFilterPanel>
 
       {/* Opportunities grid */}
       {filteredOpportunities.length === 0 ? (
