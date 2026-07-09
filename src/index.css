@@ -236,6 +236,9 @@
   .pl-safe { padding-left: env(safe-area-inset-left); }
   .pr-safe { padding-right: env(safe-area-inset-right); }
   /* Espacio inferior para que el contenido no quede tapado por la barra flotante
-     (alto de la barra ~4.5rem + safe-area). Sólo se usa en mobile. */
-  .pb-bottomnav { padding-bottom: calc(env(safe-area-inset-bottom) + 4.75rem); }
+     (alto de la barra ~4.5rem + safe-area). Scopeado a mobile (< lg 1024px) para
+     que en desktop NO reserve nada, sin depender del orden de emisión de Tailwind. */
+  @media (max-width: 1023.98px) {
+    .pb-bottomnav { padding-bottom: calc(env(safe-area-inset-bottom) + 4.75rem); }
+  }
 }
