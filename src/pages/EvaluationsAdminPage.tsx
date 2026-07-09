@@ -158,10 +158,10 @@ export default function EvaluationsAdminPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-10">
-      <div className="flex items-center justify-between mb-8">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-apple-gray-900 dark:text-white mb-2">
+          <h1 className="text-2xl sm:text-3xl font-bold text-apple-gray-900 dark:text-white mb-2">
             Evaluaciones de Scouts
           </h1>
           <p className="text-apple-gray-500 dark:text-apple-gray-400">
@@ -170,7 +170,7 @@ export default function EvaluationsAdminPage() {
         </div>
 
         {/* Filter tabs */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-shrink-0">
           <button
             onClick={() => setFilter('unmatched')}
             className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
@@ -205,6 +205,9 @@ export default function EvaluationsAdminPage() {
             </p>
           </div>
         ) : (
+          <>
+          {/* Desktop table */}
+          <div className="hidden lg:block overflow-x-auto">
           <table className="w-full">
             <thead className="bg-apple-gray-50 dark:bg-apple-gray-700/50">
               <tr>
@@ -309,6 +312,64 @@ export default function EvaluationsAdminPage() {
               ))}
             </tbody>
           </table>
+          </div>
+
+          {/* Mobile cards */}
+          <div className="lg:hidden divide-y divide-apple-gray-100 dark:divide-apple-gray-700">
+            {filteredEvaluations.map(ev => (
+              <div key={ev.id} className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium text-apple-gray-900 dark:text-white truncate">
+                      {ev.player_name}
+                    </div>
+                    <div className="text-xs text-apple-gray-500 truncate">
+                      {ev.position}{ev.team ? ` · ${ev.team}` : ''}
+                    </div>
+                  </div>
+                  {ev.technical_score != null && (
+                    <span className={`text-xl font-bold flex-shrink-0 ${
+                      ev.technical_score >= 8 ? 'text-brand-green'
+                        : ev.technical_score >= 6 ? 'text-emerald-500'
+                        : ev.technical_score >= 4 ? 'text-amber-500'
+                        : 'text-red-500'
+                    }`}>
+                      {ev.technical_score}
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-apple-gray-500 mt-1.5">
+                  vs {ev.rival} · {new Date(ev.match_date).toLocaleDateString('es-AR')} · {ev.scout_name}
+                </div>
+                <div className="flex items-center justify-between gap-3 mt-3">
+                  {ev.player_id ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-brand-green/10 text-brand-green text-xs font-medium">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Vinculado
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-500/10 text-amber-500 text-xs font-medium">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Pendiente
+                    </span>
+                  )}
+                  {!ev.player_id && (
+                    <button
+                      onClick={() => { setSelectedEval(ev); setMatchSearch('') }}
+                      className="px-3 py-1.5 rounded-lg bg-brand-green text-white text-sm font-medium hover:bg-emerald-600 transition-colors flex-shrink-0"
+                    >
+                      Vincular
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          </>
         )}
       </div>
 
