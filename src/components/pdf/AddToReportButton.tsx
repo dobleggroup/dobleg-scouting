@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react'
 import { usePDFBuilder, type PDFElement } from '@/context/PDFBuilderContext'
 
+// Constructor de PDF deshabilitado por ahora (pedido: sacar el PDF de toda la
+// plataforma). Poné true para reactivar TODOS los botones del constructor.
+const PDF_BUILDER_ENABLED = false
+
 interface AddToReportButtonProps {
   type: PDFElement['type']
   title: string
@@ -29,6 +33,8 @@ export default function AddToReportButton({
   const { addElement } = usePDFBuilder()
   const [adding, setAdding] = useState(false)
   const [added, setAdded] = useState(false)
+
+  if (!PDF_BUILDER_ENABLED) return null
 
   const handleAdd = async () => {
     setAdding(true)
@@ -241,6 +247,8 @@ export function PDFBuilderFloatingButton() {
     }
   }, [showAddedNotification])
 
+  if (!PDF_BUILDER_ENABLED) return null
+
   return (
     <div className="relative">
       <button
@@ -270,6 +278,7 @@ export function PDFBuilderFloatingButton() {
 export function PDFAddedToast() {
   const { showAddedNotification, lastAddedElement, openBuilder } = usePDFBuilder()
 
+  if (!PDF_BUILDER_ENABLED) return null
   if (!showAddedNotification || !lastAddedElement) return null
 
   return (
