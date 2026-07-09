@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { supabase } from '@/lib/supabase'
+import { FUNCTIONS_BASE } from '@/lib/apiBase'
 import type { User, Session } from '@supabase/supabase-js'
 
 interface AuthState {
@@ -9,7 +10,10 @@ interface AuthState {
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>
   signInWithGoogle: () => Promise<{ error: Error | null }>
+  signInWithApple: () => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
+  /** Elimina la cuenta del usuario y su sesión (requisito de Apple/Google). */
+  deleteAccount: () => Promise<{ error: Error | null }>
   userDisplayName: string
 }
 
@@ -69,15 +73,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error as Error | null }
   }
 
+  const signInWithApple = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'apple',
+      options: {
+        redirectTo: window.location.origin,
+      }
+    })
+    return { error: error as Error | null }
+  }
+
   const signOut = async () => {
     await supabase.auth.signOut()
+  }
+
+  // Elimina la cuenta vía función serverless (usa service role para borrar el
+  // usuario de Supabase Auth) y cierra sesión. Requisito de las tiendas.
+  const deleteAccount = async (): Promise<{ error: Error | null }> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) return { error: new Error('No hay sesión activa') }
+
+      const res = await fetch(`${FUNCTIONS_BASE}/delete-account`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({} as { error?: string }))
+        return { error: new Error(body.error || 'No se pudo eliminar la cuenta') }
+      }
+
+      await supabase.auth.signOut()
+      return { error: null }
+    } catch (e) {
+      return { error: e as Error }
+    }
   }
 
   // Get display name from user metadata or email
   const userDisplayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || ''
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signIn, signUp, signInWithGoogle, signOut, userDisplayName }}>
+    <AuthContext.Provider value={{ user, session, loading, signIn, signUp, signInWithGoogle, signInWithApple, signOut, deleteAccount, userDisplayName }}>
       {children}
     </AuthContext.Provider>
   )
