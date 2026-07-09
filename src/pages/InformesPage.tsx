@@ -87,7 +87,7 @@ export default function InformesPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-apple-gray-900 dark:text-white tracking-tight">Informes</h1>

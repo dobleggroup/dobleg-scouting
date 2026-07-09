@@ -685,11 +685,11 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
 
       <div className="relative z-10 p-4 sm:p-6 space-y-4">
         {/* ── Barra de acciones ── */}
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <button type="button" onClick={onBack} className="px-4 py-2.5 rounded-xl border text-sm font-semibold transition-colors" style={{ borderColor: DG.border, color: DG.muted }} onMouseEnter={e => { e.currentTarget.style.color = DG.text; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.16)' }} onMouseLeave={e => { e.currentTarget.style.color = DG.muted; e.currentTarget.style.borderColor = DG.border }}>
             ← Editar
           </button>
-          <div className="flex-1" />
+          <div className="hidden sm:block flex-1" />
           {/* Selector de idioma (sutil) */}
           <div className="flex items-center gap-1.5 rounded-xl border px-2 py-1.5" style={{ borderColor: DG.border }}>
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke={DG.muted} strokeWidth={1.6}>
