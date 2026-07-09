@@ -5,6 +5,7 @@ import { useAuth } from '@/context/AuthContext'
 import ThemeToggle from './ThemeToggle'
 import AuthModal from '@/components/auth/AuthModal'
 import { PDFBuilderFloatingButton } from '@/components/pdf/AddToReportButton'
+import { useSwipeToClose } from '@/hooks/useSwipeToClose'
 
 // ─── Navigation structure ────────────────────────────────────────────────────
 
@@ -218,6 +219,9 @@ export default function Navbar() {
   const isSeguimientoRoute = seguimientoGroup.items.some(l => location.pathname === l.to)
   const isTalentRoute = talentGroup.items.some(l => location.pathname === l.to)
 
+  // Swipe-to-close for the mobile drawer (swipe right closes it)
+  const swipe = useSwipeToClose(() => setIsOpen(false))
+
   return (
     <>
       <header className="sticky top-0 z-50 bg-white/90 dark:bg-apple-gray-900/90 backdrop-blur-xl border-b border-apple-gray-200/50 dark:border-apple-gray-800/50">
@@ -398,9 +402,10 @@ export default function Navbar() {
 
       {/* Mobile menu panel */}
       <div
-        className={`fixed top-14 right-0 bottom-0 z-40 w-72 bg-white dark:bg-apple-gray-900 shadow-2xl transform transition-transform duration-300 ease-out lg:hidden ${
+        className={`fixed top-14 right-0 bottom-0 z-40 w-72 bg-white dark:bg-apple-gray-900 shadow-2xl transform transition-transform duration-300 ease-out lg:hidden pb-safe ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
+        {...swipe}
       >
         <nav className="h-full overflow-y-auto py-4 px-3">
           <div className="space-y-1">
