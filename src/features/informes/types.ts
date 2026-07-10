@@ -69,6 +69,7 @@ export interface Informe {
   fotoDataUrl: string | null
   protagonistIndex: number            // índice de la fila protagonista en rows
   comparePlayerIndices?: number[]     // índices de jugadores a comparar en el radar (máx 2)
+  evolutionCharts?: string[]          // metric keys Wyscout (máx 8); solo jugadores internos
   dbPlayerId?: number                 // id del jugador en la DB (Supabase) si se linkeó en el paso 1
   dbPlayerName?: string               // nombre del jugador en la DB (para match por nombre: GPS/valor histórico)
   dbPosition?: string                 // posición primaria en la DB (param de historial de partidos)

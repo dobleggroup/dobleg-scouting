@@ -1,8 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { MetricStat, ChartAssignments, ScatterAssignment } from '@/features/informes/types'
 import { normalizeForSearch } from '@/lib/search'
 import { suggestAxisFloor } from '@/features/informes/chartData'
+import { loadWyscoutEvolution } from '@/services/wyscoutEvolutionService'
+import type { WyscoutEvolutionData } from '@/services/wyscoutEvolutionService'
+
+const MAX_EVOLUTION_CHARTS = 8
 
 // Colores de comparación del radar (deben coincidir con COMPARE_COLORS en chartData.ts)
 const COMPARE_COLORS = ['#F5C451', '#38BDF8']
@@ -300,6 +304,96 @@ function ScatterSection({ stats, scatters, onChange, matrix }: ScatterSectionPro
   )
 }
 
+// ─── Métricas evolutivas (Wyscout) ──────────────────────────────────────────
+
+interface EvolutionSectionProps {
+  dbPlayerName?: string
+  evolutionCharts: string[]
+  onChange: (keys: string[]) => void
+}
+
+/**
+ * Solo se muestra cuando el protagonista está linkeado a un jugador interno
+ * (`dbPlayerName`) que además existe en la planilla Wyscout (`hasPlayer`).
+ * Los externos no tienen `dbPlayerName`, así que la sección nunca aparece.
+ */
+function EvolutionChartsSection({ dbPlayerName, evolutionCharts, onChange }: EvolutionSectionProps) {
+  const [wyscout, setWyscout] = useState<WyscoutEvolutionData | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    setWyscout(null)
+    if (!dbPlayerName) return
+    loadWyscoutEvolution()
+      .then(w => { if (alive && w.hasPlayer(dbPlayerName)) setWyscout(w) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [dbPlayerName])
+
+  if (!wyscout || wyscout.metrics.length === 0) return null
+
+  const selected = evolutionCharts
+  const canAdd = selected.length < MAX_EVOLUTION_CHARTS
+
+  function updateAt(idx: number, key: string) {
+    onChange(selected.map((k, i) => (i === idx ? key : k)))
+  }
+  function removeAt(idx: number) {
+    onChange(selected.filter((_, i) => i !== idx))
+  }
+  function add() {
+    if (!canAdd) return
+    onChange([...selected, wyscout!.metrics[0].key])
+  }
+
+  return (
+    <div className="rounded-2xl border border-apple-gray-200 dark:border-apple-gray-800 bg-white dark:bg-apple-gray-900 p-5">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-sm font-semibold text-apple-gray-900 dark:text-white">Métricas evolutivas</h3>
+        <span className="text-xs text-apple-gray-400 dark:text-apple-gray-500">Wyscout · máx {MAX_EVOLUTION_CHARTS}</span>
+      </div>
+      <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mb-3">
+        Gráficos de evolución por partido. Si no agregás ninguno, la pestaña no aparece en el informe.
+      </p>
+      {selected.length > 0 && (
+        <div className="space-y-2 mb-3">
+          {selected.map((key, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <select
+                value={key}
+                onChange={e => updateAt(idx, e.target.value)}
+                className="flex-1 px-3 py-2 rounded-xl text-xs border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-700 dark:text-apple-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green font-medium"
+              >
+                {wyscout.metrics.map(m => (
+                  <option key={m.key} value={m.key}>{m.label}{m.unit === '%' ? ' (%)' : ''}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => removeAt(idx)}
+                className="text-apple-gray-400 hover:text-brand-green transition-colors flex-shrink-0"
+                aria-label="Quitar gráfico"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={add}
+        disabled={!canAdd}
+        className="w-full py-2 rounded-xl text-xs font-medium border-2 border-dashed border-apple-gray-300 dark:border-apple-gray-600 text-apple-gray-500 dark:text-apple-gray-400 hover:border-brand-green hover:text-brand-green transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        + Agregar gráfico
+      </button>
+    </div>
+  )
+}
+
 // ─── Main component ─────────────────────────────────────────────────────────
 
 interface Step2MetricasProps {
@@ -310,6 +404,9 @@ interface Step2MetricasProps {
   compareIndices: number[]
   onChangeCompare: (idxs: number[]) => void
   matrix: Record<string, (number | null)[]>
+  dbPlayerName?: string
+  evolutionCharts: string[]
+  onChangeEvolutionCharts: (keys: string[]) => void
   onBack: () => void
   onNext: () => void
 }
@@ -322,6 +419,9 @@ export default function Step2Metricas({
   compareIndices,
   onChangeCompare,
   matrix,
+  dbPlayerName,
+  evolutionCharts,
+  onChangeEvolutionCharts,
   onBack,
   onNext,
 }: Step2MetricasProps) {
@@ -480,6 +580,12 @@ export default function Step2Metricas({
             onChange={onChangeCompare}
           />
         </div>
+
+        <EvolutionChartsSection
+          dbPlayerName={dbPlayerName}
+          evolutionCharts={evolutionCharts}
+          onChange={onChangeEvolutionCharts}
+        />
 
         <div className="flex items-center gap-3">
           <button
