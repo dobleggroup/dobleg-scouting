@@ -909,9 +909,9 @@ export default function PlayerDetailPage() {
   // Tab configuration with icons
   const tabsConfig = [
     { id: 'General', label: 'General', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z', internal: false },
+    { id: 'Rendimiento evolutivo', label: 'Rendimiento', icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6', internal: true },
     { id: 'Métricas', label: 'Métricas', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', internal: false },
     { id: 'Valor', label: 'Valor', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', internal: true },
-    { id: 'Rendimiento evolutivo', label: 'Rendimiento', icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6', internal: true },
     { id: 'Físico', label: 'Físico', icon: 'M13 10V3L4 14h7v7l9-11h-7z', internal: true },
     { id: 'Salud', label: 'Salud', icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z', internal: true },
     { id: 'Fisioterapia', label: 'Fisioterapia', icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z', internal: true },
