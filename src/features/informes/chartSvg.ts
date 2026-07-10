@@ -607,6 +607,48 @@ export function lineChartSvg(opts: {
 }
 
 // ---------------------------------------------------------------------------
+// lineSvg (evolución por partido de una métrica Wyscout — compacto, sin ejes)
+// ---------------------------------------------------------------------------
+
+/**
+ * Línea compacta de una métrica evolutiva (Wyscout) por partido, pensada para el
+ * export HTML/PDF de Informes. Sin ticks ni labels de eje (el título de la métrica
+ * va afuera); dibuja la serie, un punto por dato y la línea de promedio punteada.
+ * Para métricas `%` el eje Y se fija en 0..100; para simples se ajusta al rango.
+ */
+export function lineSvg(opts: {
+  points: { label: string; value: number }[]
+  unit: '%' | ''
+  width?: number
+  height?: number
+}): string {
+  const W = opts.width ?? 520
+  const H = opts.height ?? 180
+  const padL = 34, padR = 12, padT = 12, padB = 24
+  const pts = opts.points
+  if (pts.length === 0) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"></svg>`
+  }
+  const vals = pts.map(p => p.value)
+  const min = opts.unit === '%' ? 0 : Math.min(...vals)
+  const max = opts.unit === '%' ? 100 : Math.max(...vals)
+  const rng = max - min || 1
+  const plotW = W - padL - padR
+  const plotH = H - padT - padB
+  const x = (i: number) => padL + (pts.length === 1 ? plotW / 2 : (i / (pts.length - 1)) * plotW)
+  const y = (v: number) => padT + plotH - ((v - min) / rng) * plotH
+  const avg = vals.reduce((a, b) => a + b, 0) / vals.length
+  const poly = pts.map((p, i) => `${round2(x(i))},${round2(y(p.value))}`).join(' ')
+  const dots = pts.map((p, i) => `<circle cx="${round2(x(i))}" cy="${round2(y(p.value))}" r="2.5" fill="${COLOR_GREEN}"/>`).join('')
+  const avgY = round2(y(avg))
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <line x1="${padL}" y1="${avgY}" x2="${W - padR}" y2="${avgY}" stroke="${COLOR_AVG_MARK}" stroke-width="1" stroke-dasharray="4 4"/>
+    <polyline points="${poly}" fill="none" stroke="${COLOR_GREEN}" stroke-width="2"/>
+    ${dots}
+  </svg>`
+}
+
+// ---------------------------------------------------------------------------
 // scatterSvg
 // ---------------------------------------------------------------------------
 

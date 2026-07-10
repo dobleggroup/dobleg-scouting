@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Informe, InformeContent, MetricStat, MetricDef, ScatterAssignment } from '@/features/informes/types'
 import { exportInformePDF } from '@/features/informes/exportInformePDF'
-import { exportInformeHTML, buildInformeHtml } from '@/features/informes/exportInformeHTML'
+import { exportInformeHTML, buildInformeHtml, type EvolutionChartExport } from '@/features/informes/exportInformeHTML'
 import { uploadInformeHtml } from '@/features/informes/shareInforme'
+import MetricEvolutionChart from '@/components/charts/MetricEvolutionChart'
+import { lineSvg } from '@/features/informes/chartSvg'
+import type { WyscoutPoint } from '@/services/wyscoutEvolutionService'
 import InformeRadar from './charts/InformeRadar'
 import InformeComparisonRadar from './charts/InformeComparisonRadar'
 import InformeRatingGauge from './charts/InformeRatingGauge'
@@ -52,8 +55,29 @@ function initials(name: string): string {
   return parts.join('') || '?'
 }
 
-const TAB_IDS = ['general', 'radar', 'bars', 'scatter', 'fisico', 'video', 'carrera', 'comparaciones'] as const
+const TAB_IDS = ['general', 'radar', 'bars', 'scatter', 'fisico', 'evolutivas', 'video', 'carrera', 'comparaciones'] as const
 type TabId = typeof TAB_IDS[number]
+
+// Serie Wyscout ya resuelta para una métrica del informe (label/unidad + puntos).
+interface EvoChart { key: string; label: string; unit: '%' | ''; series: WyscoutPoint[] }
+
+/** Fecha corta "3 May" para el eje X del gráfico exportado (mismo criterio que MetricEvolutionChart). */
+function evoShortDate(d: string): string {
+  const dt = new Date(d)
+  const m = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+  return isNaN(dt.getTime()) ? d : `${dt.getDate()} ${m[dt.getMonth()]}`
+}
+
+/** Mapea las series resueltas al formato que consume el export HTML/PDF (`lineSvg`). */
+function evoToExport(charts: EvoChart[]): EvolutionChartExport[] {
+  return charts.map(ec => ({
+    label: ec.label,
+    unit: ec.unit,
+    points: ec.series
+      .filter(s => s.value !== null)
+      .map(s => ({ label: evoShortDate(s.date), value: s.value as number })),
+  }))
+}
 
 // ─── Doble G dark theme primitives ─────────────────────────────────────────
 
@@ -219,6 +243,34 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
   const showFisico = enrichment.hasPhysical && !content.hideFisicoTab
   const showMarketEvo = enrichment.marketEvolution.length >= 2
 
+  // ── Métricas evolutivas (Wyscout) — solo internos con jugador en la planilla ──
+  const [evoCharts, setEvoCharts] = useState<EvoChart[]>([])
+  const showEvolutivas = evoCharts.length > 0
+  const evoKeysSig = JSON.stringify(informe.evolutionCharts ?? [])
+  useEffect(() => {
+    const keys = informe.evolutionCharts
+    const name = informe.dbPlayerName
+    if (!keys?.length || !name) { setEvoCharts([]); return }
+    let alive = true
+    import('@/services/wyscoutEvolutionService')
+      .then(m => m.loadWyscoutEvolution())
+      .then(w => {
+        if (!alive) return
+        if (!w.hasPlayer(name)) { setEvoCharts([]); return }
+        const resolved = keys
+          .map(k => {
+            const def = w.metrics.find(mm => mm.key === k)
+            if (!def) return null
+            return { key: k, label: def.label, unit: def.unit, series: w.getSeries(name, k) } as EvoChart
+          })
+          .filter((c): c is EvoChart => c !== null)
+        setEvoCharts(resolved)
+      })
+      .catch(() => { if (alive) setEvoCharts([]) })
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [evoKeysSig, informe.dbPlayerName])
+
   useEffect(() => () => { if (exportMsgTimer.current) clearTimeout(exportMsgTimer.current) }, [])
 
   function showExportMsg(msg: { ok: boolean; text: string }) {
@@ -230,7 +282,9 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
   const matches = content.ultimos5.filter(m => m.rival || m.resultado || m.rating || m.minutos)
   const comparables = content.comparables.filter(c => c.jugador || c.club || c.rating || c.delta)
 
-  const visibleTabs = TAB_IDS.filter(id => (id === 'fisico' ? showFisico : true))
+  const visibleTabs = TAB_IDS.filter(id =>
+    id === 'fisico' ? showFisico : id === 'evolutivas' ? showEvolutivas : true,
+  )
 
   // ── Renders ──
 
@@ -463,6 +517,40 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
     )
   }
 
+  // Métricas evolutivas Wyscout. En pantalla usa MetricEvolutionChart (Recharts);
+  // en el contenedor oculto del PDF usa el SVG puro `lineSvg` (Recharts no mide
+  // ancho fuera de pantalla), igual que el resto de gráficos del export.
+  function renderEvolutivas(print = false) {
+    if (evoCharts.length === 0) return null
+    return (
+      <div className="space-y-6">
+        <div data-informe-section={print ? '' : undefined}>
+          <SectionTitle>{t(lang, 't_evolutivas')}</SectionTitle>
+          <p className="text-xs mb-4" style={{ color: DG.muted }}>{t(lang, 'm_evolutivas_sub')}</p>
+        </div>
+        {evoCharts.map(ec => (
+          <div key={ec.key} data-informe-section={print ? '' : undefined}>
+            <h4 className="text-[11px] font-bold uppercase mb-3" style={{ letterSpacing: '0.12em', color: DG.muted }}>
+              {ec.label}{ec.unit === '%' ? ' (%)' : ''}
+            </h4>
+            {print ? (
+              <div
+                dangerouslySetInnerHTML={{
+                  __html: lineSvg({
+                    points: ec.series.filter(s => s.value !== null).map(s => ({ label: evoShortDate(s.date), value: s.value as number })),
+                    unit: ec.unit,
+                  }),
+                }}
+              />
+            ) : (
+              <MetricEvolutionChart series={ec.series} unit={ec.unit} label={ec.label} />
+            )}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   function renderComparisonSummary() {
     if ((informe.comparePlayerIndices?.length ?? 0) === 0) return null
     const table = comparisonTable(informe, matrix, defs)
@@ -603,6 +691,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
           </div>
         )
       case 'fisico': return renderFisico()
+      case 'evolutivas': return renderEvolutivas()
       case 'video':
         return (
           <div>
@@ -648,7 +737,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
     setSharing(true)
     try {
       const logoDataUrl = await loadLogoDataUrl('/brand/logo-white.png')
-      exportInformeHTML({ informe, stats, matrix, defs, logoDataUrl, enrichment })
+      exportInformeHTML({ informe, stats, matrix, defs, logoDataUrl, enrichment, evolution: evoToExport(evoCharts) })
       showExportMsg({ ok: true, text: 'HTML descargado ✓ (se abre sin internet)' })
     } catch (e) {
       console.error('Export HTML error:', e)
@@ -665,7 +754,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
     setSharing(true)
     try {
       const logoDataUrl = await loadLogoDataUrl('/brand/logo-white.png')
-      const html = buildInformeHtml({ informe, stats, matrix, defs, logoDataUrl, enrichment })
+      const html = buildInformeHtml({ informe, stats, matrix, defs, logoDataUrl, enrichment, evolution: evoToExport(evoCharts) })
       const url = await uploadInformeHtml(html, informe.id, content.nombre || 'informe')
       setShareUrl(url)
       try { await navigator.clipboard.writeText(url) } catch { /* el portapapeles puede fallar sin https/gesto */ }
@@ -786,6 +875,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
             </div>
           )}
           {showFisico && renderFisico()}
+          {showEvolutivas && renderEvolutivas(true)}
           {renderCarrera()}
           {renderComparaciones()}
         </div>

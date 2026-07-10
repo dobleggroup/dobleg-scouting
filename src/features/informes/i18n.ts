@@ -34,6 +34,7 @@ const S: Record<string, Six> = {
   tab_video: ['Video', 'Video', 'Vídeo', 'فيديو', 'Video', 'Vidéo'],
   tab_carrera: ['Carrera', 'Career', 'Carreira', 'المسيرة', 'Carriera', 'Carrière'],
   tab_comparaciones: ['Comparaciones', 'Comparison', 'Comparações', 'مقارنات', 'Confronti', 'Comparaisons'],
+  tab_evolutivas: ['Evolutivas', 'Trends', 'Evolutivas', 'التطور', 'Evolutive', 'Évolutives'],
   // Section titles
   t_radar: ['Radar comparativo', 'Comparative radar', 'Radar comparativo', 'رادار مقارن', 'Radar comparativo', 'Radar comparatif'],
   t_bars: ['Barras comparativas', 'Comparative bars', 'Barras comparativas', 'أعمدة مقارنة', 'Barre comparative', 'Barres comparatives'],
@@ -42,6 +43,8 @@ const S: Record<string, Six> = {
   t_phys_intensity: ['Intensidad por partido (mts/min)', 'Intensity per match (m/min)', 'Intensidade por jogo (m/min)', 'الشدة لكل مباراة (م/د)', 'Intensità per partita (m/min)', 'Intensité par match (m/min)'],
   t_levelEvo: ['Evolución de nivel (Score GG)', 'Level evolution (GG Score)', 'Evolução de nível (Score GG)', 'تطور المستوى (Score GG)', 'Evoluzione del livello (Score GG)', 'Évolution du niveau (Score GG)'],
   t_marketEvo: ['Evolución de valor de mercado', 'Market value evolution', 'Evolução do valor de mercado', 'تطور القيمة السوقية', 'Evoluzione del valore di mercato', 'Évolution de la valeur marchande'],
+  t_evolutivas: ['Métricas evolutivas (Wyscout)', 'Metric trends (Wyscout)', 'Métricas evolutivas (Wyscout)', 'تطور المقاييس (Wyscout)', 'Metriche evolutive (Wyscout)', 'Évolution des métriques (Wyscout)'],
+  m_evolutivas_sub: ['Por partido · la línea punteada indica el promedio', 'Per match · the dashed line marks the average', 'Por jogo · a linha tracejada indica a média', 'لكل مباراة · الخط المتقطع يمثل المتوسط', 'Per partita · la linea tratteggiata indica la media', 'Par match · la ligne pointillée indique la moyenne'],
   t_last5: ['Últimos 5 partidos', 'Last 5 matches', 'Últimos 5 jogos', 'آخر 5 مباريات', 'Ultime 5 partite', '5 derniers matchs'],
   t_comparables: ['Comparables', 'Comparables', 'Comparáveis', 'لاعبون مشابهون', 'Comparabili', 'Comparables'],
   t_detail: ['Detalle por métrica', 'Detail by metric', 'Detalhe por métrica', 'التفاصيل حسب المقياس', 'Dettaglio per metrica', 'Détail par métrique'],

@@ -8,6 +8,7 @@ import {
   scatterSvg,
   gaugeSvg,
   lineChartSvg,
+  lineSvg,
 } from './chartSvg'
 
 describe('polarPoint', () => {
@@ -232,5 +233,16 @@ describe('smoke tests de ensamblado SVG', () => {
     })
     // solo un circulo protagonista + eventualmente ninguno de pool
     expect(svg).toContain('<svg')
+  })
+})
+
+describe('lineSvg', () => {
+  it('genera un polyline con un punto por dato', () => {
+    const svg = lineSvg({ points: [{ label: 'A', value: 50 }, { label: 'B', value: 80 }], unit: '%' })
+    expect(svg).toContain('<polyline')
+    expect(svg).toMatch(/<svg/)
+  })
+  it('serie vacía no rompe', () => {
+    expect(() => lineSvg({ points: [], unit: '' })).not.toThrow()
   })
 })

@@ -1,4 +1,4 @@
-import { radarSvg, barsSvg, scatterSvg, gaugeSvg, lineChartSvg } from './chartSvg'
+import { radarSvg, barsSvg, scatterSvg, gaugeSvg, lineChartSvg, lineSvg } from './chartSvg'
 import { radarData, radarComparisonData, barsData, scatterData, comparisonTable, comparisonWinCounts, parseRating, ratingMax } from './chartData'
 import { t, translateMetric, translateInjury, isRtl } from './i18n'
 import type { Informe, MetricStat, MetricDef } from './types'
@@ -69,6 +69,17 @@ function safeHexColor(color: string | null | undefined, fallback: string): strin
 }
 
 // ---------------------------------------------------------------------------
+// Métricas evolutivas (Wyscout): la data se resuelve en el llamador (async) y se
+// pasa ya calculada, para mantener este módulo síncrono y puro.
+// ---------------------------------------------------------------------------
+
+export interface EvolutionChartExport {
+  label: string
+  unit: '%' | ''
+  points: { label: string; value: number }[]
+}
+
+// ---------------------------------------------------------------------------
 // buildInformeHtml: construye el string HTML completo (puro, testeable)
 // ---------------------------------------------------------------------------
 
@@ -79,6 +90,7 @@ export function buildInformeHtml(opts: {
   defs: MetricDef[]
   logoDataUrl?: string
   enrichment?: InformeEnrichment
+  evolution?: EvolutionChartExport[]
 }): string {
   const { informe, stats, matrix, defs, enrichment } = opts
   const { content } = informe
@@ -495,12 +507,29 @@ export function buildInformeHtml(opts: {
       }
     </div>`
 
+  // ── Métricas evolutivas (Wyscout) — solo si el llamador resolvió la data ──
+  const evolution = opts.evolution ?? []
+  const showEvolutivas = evolution.length > 0
+  const evolutivasPanel = showEvolutivas
+    ? `<div class="dg-panel-inner">
+         <h3 class="dg-panel-title">${escapeHtml(t(lang, 't_evolutivas'))}</h3>
+         <p class="dg-muted dg-subtitle">${escapeHtml(t(lang, 'm_evolutivas_sub'))}</p>
+         ${evolution
+           .map(
+             ec =>
+               `<h4 class="dg-panel-title dg-mt">${escapeHtml(ec.label)}${ec.unit === '%' ? ' (%)' : ''}</h4><div class="dg-chart">${lineSvg({ points: ec.points, unit: ec.unit })}</div>`,
+           )
+           .join('')}
+       </div>`
+    : ''
+
   const tabs = [
     ...(showGeneral ? [{ id: 'general', html: generalPanel }] : []),
     { id: 'radar', html: radarPanel },
     { id: 'bars', html: barsPanel },
     { id: 'scatter', html: scatterPanel },
     ...(showFisico ? [{ id: 'fisico', html: fisicoPanel }] : []),
+    ...(showEvolutivas ? [{ id: 'evolutivas', html: evolutivasPanel }] : []),
     { id: 'video', html: videoPanel },
     { id: 'carrera', html: carreraPanel },
     { id: 'comparaciones', html: comparacionesPanel },
@@ -1092,6 +1121,7 @@ export function exportInformeHTML(opts: {
   defs: MetricDef[]
   logoDataUrl?: string
   enrichment?: InformeEnrichment
+  evolution?: EvolutionChartExport[]
 }): void {
   const html = buildInformeHtml(opts)
   const nombre = opts.informe.content.nombre || 'informe'
