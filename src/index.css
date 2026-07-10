@@ -239,9 +239,9 @@
      (alto de la barra ~4.5rem + safe-area). Scopeado a mobile (< lg 1024px) para
      que en desktop NO reserve nada, sin depender del orden de emisión de Tailwind. */
   @media (max-width: 1023.98px) {
-    .pb-bottomnav { padding-bottom: calc(env(safe-area-inset-bottom) + 6.5rem); }
+    .pb-bottomnav { padding-bottom: calc(env(safe-area-inset-bottom) + 5.5rem); }
     /* FABs (ej: botón Filtros) que deben quedar POR ENCIMA de la barra flotante,
        con aire suficiente para no encimarse con ella (nav ~4.5rem + gap). */
-    .above-bottomnav { bottom: calc(env(safe-area-inset-bottom) + 6.25rem); }
+    .above-bottomnav { bottom: calc(env(safe-area-inset-bottom) + 5rem); }
   }
 }
