@@ -143,10 +143,6 @@ export default function InformesPage() {
               dbPlayerName={informe.dbPlayerName}
               evolutionCharts={informe.evolutionCharts ?? []}
               onChangeEvolutionCharts={keys => setInforme({ ...informe, evolutionCharts: keys })}
-              ratingMetrics={informe.informeRatingMetrics ?? []}
-              onChangeRatingMetrics={keys => setInforme({ ...informe, informeRatingMetrics: keys })}
-              hideRating={informe.hideInformeRating ?? false}
-              onChangeHideRating={v => setInforme({ ...informe, hideInformeRating: v })}
               onBack={() => setStep(0)}
               onNext={() => setStep(2)}
             />

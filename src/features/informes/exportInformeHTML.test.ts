@@ -1,15 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { buildInformeHtml, informeRating } from './exportInformeHTML'
+import { buildInformeHtml, ratingColor } from './exportInformeHTML'
+import { translateTransferType } from './i18n'
 import type { Informe, MetricDef, MetricStat } from './types'
 import type { InformeEnrichment } from './useInformeEnrichment'
 import type { PlayerTransfer } from '@/services/footballApiService'
-
-function makeStat(percentile: number | null, key = 'k'): MetricStat {
-  return {
-    def: { key, label: key, short: key, unit: '', higherIsBetter: true },
-    value: 1, avg: 1, percentile, avgPercentile: 50, color: 'neutral', rank: 1, total: 10,
-  }
-}
 
 const emptyEnrichment: InformeEnrichment = {
   isInternal: false, hasPhysical: false, physicalTiles: [], physicalMatches: 0,
@@ -219,50 +213,33 @@ describe('buildInformeHtml', () => {
     expect(html).toContain('Sin traspasos registrados')
   })
 
-  it('muestra el "Rating del informe" solo si hay métricas elegidas y no está oculto', () => {
-    const stats = [makeStat(80, 'a'), makeStat(60, 'b')]
-    const withRating = buildInformeHtml({
-      informe: makeInforme({ informeRatingMetrics: ['a', 'b'] }),
-      stats, matrix: emptyMatrix, defs: emptyDefs,
-    })
-    expect(withRating).toContain('class="dg-inf-rating"')
-    expect(withRating).toContain('Rating del informe')
-    expect(withRating).toContain('7.0') // promedio 70 => nota 7.0
-    expect(withRating).toContain('Contexto de prueba')
-
-    // Sin métricas elegidas: no aparece.
-    const noMetrics = buildInformeHtml({ informe: makeInforme(), stats, matrix: emptyMatrix, defs: emptyDefs })
-    expect(noMetrics).not.toContain('class="dg-inf-rating"')
-
-    // Oculto explícitamente: no aparece aunque haya métricas.
-    const hidden = buildInformeHtml({
-      informe: makeInforme({ informeRatingMetrics: ['a', 'b'], hideInformeRating: true }),
-      stats, matrix: emptyMatrix, defs: emptyDefs,
-    })
-    expect(hidden).not.toContain('class="dg-inf-rating"')
+  it('muestra la línea de contexto de comparación cerca del gauge (sin card de rating)', () => {
+    const html = buildInformeHtml({ informe: makeInforme(), stats: emptyStats, matrix: emptyMatrix, defs: emptyDefs })
+    expect(html).toContain('Comparado vs Contexto de prueba')
+    expect(html).not.toContain('class="dg-inf-rating"')
   })
 })
 
-describe('informeRating', () => {
-  it('convierte el promedio de percentiles a nota 1..10 con 1 decimal', () => {
-    expect(informeRating([makeStat(70, 'a'), makeStat(90, 'b')], ['a', 'b'])).toBe(8)
-    expect(informeRating([makeStat(73, 'a')], ['a'])).toBe(7.3)
+describe('ratingColor', () => {
+  it('mapea el rating de la API a color por umbral', () => {
+    expect(ratingColor(8)).toBe('#22C55E')
+    expect(ratingColor(9.1)).toBe('#22C55E')
+    expect(ratingColor(6.5)).toBe('#4ADE80')
+    expect(ratingColor(7.9)).toBe('#4ADE80')
+    expect(ratingColor(4)).toBe('#F59E0B')
+    expect(ratingColor(6.49)).toBe('#F59E0B')
+    expect(ratingColor(3.9)).toBe('#EF4444')
+    expect(ratingColor(null)).toBe('')
   })
-  it('solo considera las métricas elegidas', () => {
-    // Elige solo 'a' (percentil 40 => 4.0); ignora 'b' (percentil 90).
-    expect(informeRating([makeStat(40, 'a'), makeStat(90, 'b')], ['a'])).toBe(4)
-  })
-  it('clampa a [1, 10]', () => {
-    expect(informeRating([makeStat(0, 'a')], ['a'])).toBe(1)
-    expect(informeRating([makeStat(100, 'a')], ['a'])).toBe(10)
-  })
-  it('devuelve null sin métricas elegidas', () => {
-    expect(informeRating([makeStat(80, 'a')], undefined)).toBeNull()
-    expect(informeRating([makeStat(80, 'a')], [])).toBeNull()
-  })
-  it('devuelve null si las métricas elegidas no tienen percentil', () => {
-    expect(informeRating([makeStat(null, 'a')], ['a'])).toBeNull()
-    // Métrica elegida inexistente en stats => null.
-    expect(informeRating([makeStat(80, 'a')], ['zzz'])).toBeNull()
+})
+
+describe('translateTransferType', () => {
+  it('traduce free/loan/transfer y respeta fee y N/A', () => {
+    expect(translateTransferType('Free', 'es')).toBe('Libre')
+    expect(translateTransferType('Loan', 'it')).toBe('Prestito')
+    expect(translateTransferType('Transfer', 'pt')).toBe('Transferência')
+    expect(translateTransferType('€ 5M', 'es')).toBe('€ 5M')
+    expect(translateTransferType('N/A', 'es')).toBe('—')
+    expect(translateTransferType('', 'en')).toBe('—')
   })
 })

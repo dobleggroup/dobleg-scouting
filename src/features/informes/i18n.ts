@@ -198,8 +198,7 @@ const S: Record<string, Six> = {
     'Meglio del {pct}% dei {pos} in {league}',
     'Meilleur que {pct}% des {pos} en {league}',
   ],
-  t_informeRating: ['Rating del informe', 'Report rating', 'Rating do relatório', 'تقييم التقرير', 'Rating del report', 'Note du rapport'],
-  m_informeRatingVs: ['vs {context}', 'vs {context}', 'vs {context}', 'مقابل {context}', 'vs {context}', 'vs {context}'],
+  m_comparedVs: ['Comparado vs {context}', 'Compared vs {context}', 'Comparado vs {context}', 'مقارنةً بـ {context}', 'Confrontato con {context}', 'Comparé à {context}'],
   m_playedMoreThan: [
     'Jugó más minutos que el {pct}% del resto de los jugadores',
     'Played more minutes than {pct}% of the other players',
@@ -321,4 +320,24 @@ export function translateInjury(type: string, lang: Lang): string {
     if (keys.some(k => s.includes(k))) return six[IDX[lang]] || six[0]
   }
   return type
+}
+
+// ── Tipo de traspaso (API-Football /transfers) ─────────────────────────────
+// El `type` viene en inglés ("Transfer", "Free", "Loan") o como un fee ("€ 5M").
+const TR_FREE: Six = ['Libre', 'Free', 'Livre', 'مجاني', 'Svincolato', 'Libre']
+const TR_LOAN: Six = ['Préstamo', 'Loan', 'Empréstimo', 'إعارة', 'Prestito', 'Prêt']
+const TR_TRANSFER: Six = ['Traspaso', 'Transfer', 'Transferência', 'انتقال', 'Trasferimento', 'Transfert']
+
+/**
+ * Traduce el tipo de traspaso. Si es un fee (contiene € o una cifra) lo deja tal
+ * cual (es el monto); "N/A" o vacío se muestra como "—".
+ */
+export function translateTransferType(type: string, lang: Lang): string {
+  const raw = (type ?? '').trim()
+  if (!raw || /n\/?a/i.test(raw)) return '—'
+  if (/free/i.test(raw)) return TR_FREE[IDX[lang]] || TR_FREE[0]
+  if (/loan/i.test(raw)) return TR_LOAN[IDX[lang]] || TR_LOAN[0]
+  if (/€|\d/.test(raw)) return raw
+  if (/transfer/i.test(raw)) return TR_TRANSFER[IDX[lang]] || TR_TRANSFER[0]
+  return raw
 }

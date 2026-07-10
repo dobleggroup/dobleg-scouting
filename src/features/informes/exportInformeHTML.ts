@@ -1,6 +1,6 @@
 import { radarSvg, barsSvg, scatterSvg, gaugeSvg, lineChartSvg, lineSvg } from './chartSvg'
 import { radarData, radarComparisonData, barsData, scatterData, comparisonTable, comparisonWinCounts, parseRating, ratingMax } from './chartData'
-import { t, translateMetric, translateInjury, isRtl } from './i18n'
+import { t, translateMetric, translateInjury, translateTransferType, isRtl } from './i18n'
 import type { Informe, MetricStat, MetricDef } from './types'
 import type { InformeEnrichment, Last5Row } from './useInformeEnrichment'
 import type { PlayerTransfer } from '@/services/footballApiService'
@@ -59,18 +59,15 @@ function formatStatValue(stat: MetricStat): string {
 }
 
 /**
- * "Rating del informe" = nota 1..10 (1 decimal) calculada a partir del promedio de
- * los percentiles de SOLO las métricas elegidas por el usuario (`metricKeys`).
- * Percentil→nota: percentil 70 = 7.0; se clampa a [1,10].
- * Devuelve null si no hay métricas elegidas o ninguna tiene percentil.
+ * Color del Rating (nota de partido de la API) para la tabla de últimos 5.
+ * Devuelve '' si no hay valor. Puro: mismos umbrales en export y preview.
  */
-export function informeRating(stats: MetricStat[], metricKeys: string[] | undefined): number | null {
-  if (!metricKeys || metricKeys.length === 0) return null
-  const keys = new Set(metricKeys)
-  const picked = stats.filter(s => keys.has(s.def.key) && s.percentile != null)
-  if (picked.length === 0) return null
-  const avgPct = picked.reduce((a, s) => a + (s.percentile as number), 0) / picked.length
-  return Math.round(Math.min(10, Math.max(1, avgPct / 10)) * 10) / 10 // 1..10, 1 decimal
+export function ratingColor(v: number | null): string {
+  if (v == null) return ''
+  if (v >= 8) return '#22C55E'
+  if (v >= 6.5) return '#4ADE80'
+  if (v >= 4) return '#F59E0B'
+  return '#EF4444'
 }
 
 function safeDataUrl(url: string | null | undefined): string | null {
@@ -245,10 +242,11 @@ export function buildInformeHtml(opts: {
            ${last5Rows
              .map(r => {
                const col = outcomeColor(r.outcome)
+               const rc = ratingColor(parseRating(r.rating))
                return `<tr>
              <td>${escapeHtml(r.rival) || '—'}</td>
              <td style="color:${col};font-weight:600"><span class="dg-result-dot" style="background:${col}"></span>${escapeHtml(r.result)}</td>
-             <td>${escapeHtml(r.rating)}</td>
+             <td${rc ? ` style="color:${rc};font-weight:700"` : ''}>${escapeHtml(r.rating)}</td>
              <td>${escapeHtml(String(r.minutes))}</td>
            </tr>`
              })
@@ -318,17 +316,9 @@ export function buildInformeHtml(opts: {
     ? `<div class="dg-gauge">${gaugeSvg({ value: ratingVal, max: ratingMax(ratingVal), avg: ratingAvg != null ? ratingAvg : undefined, size: 200 })}<p class="dg-gauge-label">${escapeHtml(t(lang, 'm_ratingGauge'))}${ratingAvg != null ? ' · ' + escapeHtml(t(lang, 'm_avgLine')) : ''}</p>${ratingCompareHtml}</div>`
     : ''
 
-  // "Rating del informe": nota 1..10 armada con las métricas elegidas por el usuario.
-  // Tarjetita propia, clara y distinta del gauge del Score GG. Se oculta con hideInformeRating.
-  const infRating = informeRating(stats, informe.informeRatingMetrics)
-  const informeRatingHtml = !informe.hideInformeRating && infRating != null
-    ? `<div class="dg-inf-rating">
-         <span class="dg-inf-rating-value">${infRating.toFixed(1)}<span class="dg-inf-rating-max">/10</span></span>
-         <span class="dg-inf-rating-label">${escapeHtml(t(lang, 't_informeRating'))}</span>
-         ${(informe.contextoComparacion || content.liga)
-           ? `<span class="dg-inf-rating-vs">${escapeHtml(t(lang, 'm_informeRatingVs', { context: informe.contextoComparacion || content.liga }))}</span>`
-           : ''}
-       </div>`
+  // Línea breve y discreta con el contexto de comparación, cerca del gauge del Score GG.
+  const comparedVsHtml = informe.contextoComparacion
+    ? `<p class="dg-rating-cmp dg-rating-cmp-ctx">${escapeHtml(t(lang, 'm_comparedVs', { context: informe.contextoComparacion }))}</p>`
     : ''
 
   const playerRailHtml = `
@@ -341,7 +331,7 @@ export function buildInformeHtml(opts: {
         </div>
       </div>
       ${ratingGaugeHtml}
-      ${informeRatingHtml}
+      ${comparedVsHtml}
       <dl class="dg-datalist">
         ${dataRow(t(lang, 'r_club'), content.club)}
         ${dataRow(t(lang, 'r_league'), content.liga)}
@@ -460,7 +450,7 @@ export function buildInformeHtml(opts: {
         ? `<p class="dg-empty">${escapeHtml(t(lang, 'm_noTransfers'))}</p>`
         : `<div class="dg-tr-list">${transfers
             .map(tr => {
-              const meta = [tr.date, tr.type, tr.fee].filter(Boolean).map(x => escapeHtml(String(x))).join(' · ')
+              const meta = [tr.date, translateTransferType(tr.type, lang), tr.fee].filter(Boolean).map(x => escapeHtml(String(x))).join(' · ')
               return `<div class="dg-tr">
                 <span class="dg-tr-teams">${crestImg(tr.teams?.out?.logo)}${escapeHtml(tr.teams?.out?.name || '—')}<span class="dg-tr-arrow">→</span>${crestImg(tr.teams?.in?.logo)}${escapeHtml(tr.teams?.in?.name || '—')}</span>
                 <span class="dg-muted">${meta}</span>
@@ -746,15 +736,11 @@ const css = `
     color: #8A9099;
   }
   .dg-liga-crest {
-    height: 30px;
+    height: 44px;
     width: auto;
-    max-width: 46px;
     object-fit: contain;
     margin-inline-start: auto;
-    border-radius: 7px;
-    background: rgba(255,255,255,0.05);
-    padding: 3px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));
   }
   .dg-layout {
     display: grid;
@@ -993,36 +979,7 @@ const css = `
     line-height: 1.3;
     color: #22C55E;
   }
-  .dg-rating-cmp-ctx { color: #8A9099; }
-  .dg-inf-rating {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: 2px;
-    margin: 0 0 14px;
-    padding: 12px;
-    border-radius: 14px;
-    background: rgba(56,189,248,0.08);
-    border: 1px solid rgba(56,189,248,0.3);
-  }
-  .dg-inf-rating-value {
-    font-size: 30px;
-    font-weight: 800;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-    color: #38BDF8;
-  }
-  .dg-inf-rating-max { font-size: 14px; font-weight: 700; color: #8A9099; }
-  .dg-inf-rating-label {
-    margin-top: 4px;
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #C3C9D1;
-  }
-  .dg-inf-rating-vs { font-size: 11px; color: #8A9099; }
+  .dg-rating-cmp-ctx { color: #8A9099; font-weight: 500; }
   .dg-result-dot {
     display: inline-block;
     width: 8px;

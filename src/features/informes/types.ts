@@ -71,8 +71,6 @@ export interface Informe {
   protagonistIndex: number            // índice de la fila protagonista en rows
   comparePlayerIndices?: number[]     // índices de jugadores a comparar en el radar (máx 2)
   evolutionCharts?: string[]          // metric keys Wyscout (máx 8); solo jugadores internos
-  informeRatingMetrics?: string[]     // metric keys elegidas para el "Rating del informe" (1..10)
-  hideInformeRating?: boolean         // ocultar el "Rating del informe"
   dbPlayerId?: number                 // id del jugador en la DB (Supabase) si se linkeó en el paso 1
   dbPlayerName?: string               // nombre del jugador en la DB (para match por nombre: GPS/valor histórico)
   dbPosition?: string                 // posición primaria en la DB (param de historial de partidos)

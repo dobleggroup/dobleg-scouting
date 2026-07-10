@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Informe, InformeContent, MetricStat, MetricDef, ScatterAssignment } from '@/features/informes/types'
 import { exportInformePDF } from '@/features/informes/exportInformePDF'
-import { exportInformeHTML, buildInformeHtml, informeRating, type EvolutionChartExport } from '@/features/informes/exportInformeHTML'
+import { exportInformeHTML, buildInformeHtml, ratingColor, type EvolutionChartExport } from '@/features/informes/exportInformeHTML'
 import { fetchPlayerTransfers, type PlayerTransfer } from '@/services/footballApiService'
 import { uploadInformeHtml } from '@/features/informes/shareInforme'
 import MetricEvolutionChart from '@/components/charts/MetricEvolutionChart'
@@ -15,9 +15,9 @@ import InformeLineChart from './charts/InformeLineChart'
 import InformeBars from './charts/InformeBars'
 import InformeScatter from './charts/InformeScatter'
 import InformeNumberCard from './charts/InformeNumberCard'
-import { comparisonTable, comparisonWinCounts, topStrengths } from '@/features/informes/chartData'
+import { comparisonTable, comparisonWinCounts, topStrengths, parseRating } from '@/features/informes/chartData'
 import { useInformeEnrichment, type InformeEnrichment } from '@/features/informes/useInformeEnrichment'
-import { t, translateMetric, translateInjury, isRtl, LANGS, type Lang } from '@/features/informes/i18n'
+import { t, translateMetric, translateInjury, translateTransferType, isRtl, LANGS, type Lang } from '@/features/informes/i18n'
 import { normalizeForSearch } from '@/lib/search'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -104,13 +104,13 @@ function BrandLogo({ height = 22 }: { height?: number }) {
 }
 
 /** Escudo de liga subido en el paso 1. Solo renderiza data URLs de imagen (sanitizado). */
-function LigaCrest({ dataUrl, height = 30 }: { dataUrl?: string; height?: number }) {
+function LigaCrest({ dataUrl, height = 44 }: { dataUrl?: string; height?: number }) {
   if (!dataUrl || !/^data:image\//i.test(dataUrl)) return null
   return (
     <img
       src={dataUrl}
       alt="Liga"
-      style={{ height, width: 'auto', maxWidth: 46, objectFit: 'contain', borderRadius: 7, padding: 3, backgroundColor: 'rgba(255,255,255,0.05)', boxShadow: '0 2px 8px rgba(0,0,0,0.4)', flexShrink: 0 }}
+      style={{ height, width: 'auto', objectFit: 'contain', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.35))', flexShrink: 0 }}
     />
   )
 }
@@ -170,7 +170,7 @@ function renderMainStats(content: InformeContent, lang: Lang) {
   )
 }
 
-function PlayerRail({ informe, lang, infRating }: { informe: Informe; lang: Lang; infRating: number | null }) {
+function PlayerRail({ informe, lang }: { informe: Informe; lang: Lang }) {
   const { content } = informe
   const rolYPosicion = [content.posicion, content.rol].filter(Boolean).join(' · ')
   // Comparación de rating vs su posición en su liga (si hay percentil de la DB).
@@ -183,10 +183,9 @@ function PlayerRail({ informe, lang, infRating }: { informe: Informe; lang: Lang
           league: informe.dbLeagueName || content.liga || '—',
         })
       : null
-  // "Rating del informe" (nota 1..10) con las métricas elegidas. Se oculta con hideInformeRating.
-  const showInformeRating = !informe.hideInformeRating && infRating != null
-  const ratingVsContext = informe.contextoComparacion || content.liga
-    ? t(lang, 'm_informeRatingVs', { context: informe.contextoComparacion || content.liga })
+  // Línea breve y discreta con el contexto de comparación, cerca del gauge del Score GG.
+  const comparedVs = informe.contextoComparacion
+    ? t(lang, 'm_comparedVs', { context: informe.contextoComparacion })
     : null
   return (
     <div className="rounded-[18px] border p-5 space-y-4 h-fit" style={{ borderColor: DG.border, backgroundColor: DG.card }}>
@@ -213,14 +212,8 @@ function PlayerRail({ informe, lang, infRating }: { informe: Informe; lang: Lang
           )}
         </div>
       )}
-      {showInformeRating && (
-        <div className="rounded-2xl p-3 flex flex-col items-center text-center gap-0.5" style={{ backgroundColor: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.3)' }}>
-          <span className="text-3xl font-extrabold tabular-nums leading-none" style={{ color: '#38BDF8' }}>
-            {infRating!.toFixed(1)}<span className="text-sm font-bold" style={{ color: DG.muted }}>/10</span>
-          </span>
-          <span className="text-[10px] font-bold uppercase tracking-wide mt-1" style={{ color: '#C3C9D1' }}>{t(lang, 't_informeRating')}</span>
-          {ratingVsContext && <span className="text-[11px]" style={{ color: DG.muted }}>{ratingVsContext}</span>}
-        </div>
+      {comparedVs && (
+        <p className="text-[11px] text-center px-2 leading-snug font-medium" style={{ color: DG.muted }}>{comparedVs}</p>
       )}
       <dl className="text-sm">
         <DataRow label={t(lang, 'r_club')} value={content.club} />
@@ -323,8 +316,6 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
   const transfersSorted = [...transfers]
     .filter(tr => tr.teams?.in?.name || tr.teams?.out?.name)
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
-  // "Rating del informe" (nota 1..10) con las métricas elegidas por el usuario.
-  const infRating = informeRating(stats, informe.informeRatingMetrics)
 
   const visibleTabs = TAB_IDS.filter(id =>
     id === 'fisico' ? showFisico : id === 'evolutivas' ? showEvolutivas : true,
@@ -447,6 +438,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
                 <tbody>
                   {last5.map((r, idx) => {
                     const col = outcomeColor(r.outcome)
+                    const rc = ratingColor(parseRating(r.rating))
                     return (
                       <tr key={idx} className="border-b last:border-0" style={{ borderColor: DG.hairline }}>
                         <td className="py-2" style={{ color: DG.text }}>{r.rival || '—'}</td>
@@ -454,7 +446,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
                           <span className="inline-block w-2 h-2 rounded-full align-middle mr-1.5" style={{ backgroundColor: col }} />
                           {r.result}
                         </td>
-                        <td className="py-2 tabular-nums" style={{ color: DG.text }}>{r.rating}</td>
+                        <td className="py-2 tabular-nums" style={{ color: rc || DG.text, fontWeight: rc ? 700 : 400 }}>{r.rating}</td>
                         <td className="py-2 tabular-nums" style={{ color: DG.text }}>{r.minutes}</td>
                       </tr>
                     )
@@ -533,7 +525,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
           ) : (
             <div className="space-y-1.5">
               {transfersSorted.map((tr, idx) => {
-                const meta = [tr.date, tr.type, tr.fee].filter(Boolean).join(' · ')
+                const meta = [tr.date, translateTransferType(tr.type, lang), tr.fee].filter(Boolean).join(' · ')
                 const logo = (u: string | null | undefined) =>
                   u && /^https?:\/\//i.test(u) ? <img src={u} alt="" className="w-[18px] h-[18px] object-contain rounded-[3px]" loading="lazy" /> : null
                 return (
@@ -920,7 +912,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
-          <PlayerRail informe={informe} lang={lang} infRating={infRating} />
+          <PlayerRail informe={informe} lang={lang} />
 
           <div className="rounded-[18px] border p-5 min-w-0" style={{ borderColor: DG.border, backgroundColor: DG.card }}>
             {/* ── Tabs ── */}
