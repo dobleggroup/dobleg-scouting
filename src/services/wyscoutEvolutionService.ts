@@ -97,6 +97,38 @@ export function buildMetricSeries(rows: string[][], headers: string[], metricKey
     .sort((a, b) => a.date.localeCompare(b.date))
 }
 
+// Dirección de la métrica: true = MENOS es mejor (balones perdidos, faltas,
+// tarjetas, fuera de juego). El resto (goles, xG, %, duelos ganados, etc.) = más es mejor.
+// "Faltas recibidas" es la excepción: recibir faltas es bueno (te hacen falta).
+export function metricIsLowerBetter(label: string): boolean {
+  const l = label.toLowerCase()
+  if (l.includes('recib')) return false
+  return /perdid|falta|tarjeta|amarilla|roja|fuera de juego/.test(l)
+}
+
+// Agrega una serie por partido en una serie por mes (promedio). El `date` queda
+// como el 1º del mes; `matchLabel` indica cuántos partidos entraron en el promedio.
+export function aggregateByMonth(series: WyscoutPoint[]): WyscoutPoint[] {
+  const groups = new Map<string, { sum: number; count: number }>()
+  for (const p of series) {
+    if (p.value === null) continue
+    const key = (p.date ?? '').slice(0, 7) // YYYY-MM
+    if (key.length < 7) continue
+    const g = groups.get(key) ?? { sum: 0, count: 0 }
+    g.sum += p.value
+    g.count++
+    groups.set(key, g)
+  }
+  return Array.from(groups.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([key, g]) => ({
+      date: `${key}-01`,
+      matchLabel: `${g.count} ${g.count === 1 ? 'partido' : 'partidos'}`,
+      competition: '',
+      value: g.sum / g.count,
+    }))
+}
+
 export interface WyscoutEvolutionData {
   metrics: WyscoutMetric[]
   getSeries(playerName: string, metricKey: string): WyscoutPoint[]

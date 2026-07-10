@@ -12,6 +12,7 @@ import PositionBar from '@/components/ui/PositionBar'
 import ScoreEvolutionChart from '@/components/charts/ScoreEvolutionChart'
 import MetricEvolutionChart from '@/components/charts/MetricEvolutionChart'
 import { buildInsights } from '@/features/wyscout/wyscoutInsights'
+import { aggregateByMonth, metricIsLowerBetter } from '@/services/wyscoutEvolutionService'
 import type { WyscoutEvolutionData } from '@/services/wyscoutEvolutionService'
 import { usePlayerDetail, usePlayerMatchHistory, usePositionAverages, usePositionMetricAverages, useLeagues, useScoreLookup } from '@/hooks/usePlayerStats'
 import type { Position } from '@/types/scoring'
@@ -736,6 +737,7 @@ export default function PlayerDetailPage() {
   // Datos evolutivos Wyscout (solo interno)
   const [wyscout, setWyscout] = useState<WyscoutEvolutionData | null>(null)
   const [wyscoutMetric, setWyscoutMetric] = useState<string>('')
+  const [wyscoutMode, setWyscoutMode] = useState<'weekly' | 'monthly'>('weekly')
   useEffect(() => {
     if (source !== 'interno') return
     import('@/services/wyscoutEvolutionService').then(m => m.loadWyscoutEvolution()).then(setWyscout).catch(() => {})
@@ -750,10 +752,19 @@ export default function PlayerDetailPage() {
     () => wyscout?.metrics.find(m => m.key === wyscoutMetric) ?? null,
     [wyscout, wyscoutMetric],
   )
+  // Serie usada para los insights: agregada por mes cuando el modo es mensual,
+  // para que la conclusión hable "en meses" y no por partido.
+  const wyscoutInsightSeries = useMemo(
+    () => (wyscoutMode === 'monthly' ? aggregateByMonth(wyscoutSeries) : wyscoutSeries),
+    [wyscoutSeries, wyscoutMode],
+  )
   const wyscoutInsights = useMemo(() => {
     if (!wyscoutMetricDef || wyscoutSeries.length === 0) return []
-    return buildInsights(wyscoutSeries, wyscoutMetricDef)
-  }, [wyscoutSeries, wyscoutMetricDef])
+    return buildInsights(wyscoutInsightSeries, wyscoutMetricDef, {
+      mode: wyscoutMode,
+      lowerIsBetter: metricIsLowerBetter(wyscoutMetricDef.label),
+    })
+  }, [wyscoutInsightSeries, wyscoutMetricDef, wyscoutMode, wyscoutSeries.length])
 
   // setear métrica por defecto cuando cargan
   useEffect(() => {
@@ -2209,7 +2220,7 @@ export default function PlayerDetailPage() {
                       <div>
                         <div className="flex items-center justify-between mb-1 gap-3 flex-wrap">
                           <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
-                            Métricas evolutivas (Wyscout)
+                            Métricas evolutivas
                           </h3>
                           <select
                             value={wyscoutMetric}
@@ -2221,15 +2232,21 @@ export default function PlayerDetailPage() {
                             ))}
                           </select>
                         </div>
-                        <p className="text-xs text-apple-gray-400 mb-4">Por partido · la línea punteada indica el promedio</p>
+                        <p className="text-xs text-apple-gray-400 mb-4">{wyscoutMode === 'monthly' ? 'Promedio por mes' : 'Por partido'} · la línea punteada indica el promedio</p>
                         {wyscoutMetricDef && (
-                          <MetricEvolutionChart series={wyscoutSeries} unit={wyscoutMetricDef.unit} label={wyscoutMetricDef.label} />
+                          <MetricEvolutionChart series={wyscoutSeries} unit={wyscoutMetricDef.unit} label={wyscoutMetricDef.label} mode={wyscoutMode} onModeChange={setWyscoutMode} />
                         )}
                         {wyscoutInsights.length > 0 && (
                           <div className="mt-3 space-y-1.5">
-                            {wyscoutInsights.map((t, i) => (
-                              <div key={i} className="text-xs text-apple-gray-600 dark:text-apple-gray-300 bg-apple-gray-50 dark:bg-apple-gray-700/50 px-3 py-2 rounded-lg">
-                                {t}
+                            {wyscoutInsights.map((ins, i) => (
+                              <div key={i} className={`text-xs px-3 py-2 rounded-lg ${
+                                ins.tone === 'positive'
+                                  ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20'
+                                  : ins.tone === 'negative'
+                                    ? 'text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20'
+                                    : 'text-apple-gray-600 dark:text-apple-gray-300 bg-apple-gray-50 dark:bg-apple-gray-700/50'
+                              }`}>
+                                {ins.text}
                               </div>
                             ))}
                           </div>
@@ -2319,7 +2336,7 @@ export default function PlayerDetailPage() {
                       <div className="mt-8">
                         <div className="flex items-center justify-between mb-1 gap-3 flex-wrap">
                           <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
-                            Métricas evolutivas (Wyscout)
+                            Métricas evolutivas
                           </h3>
                           <select
                             value={wyscoutMetric}
@@ -2331,15 +2348,21 @@ export default function PlayerDetailPage() {
                             ))}
                           </select>
                         </div>
-                        <p className="text-xs text-apple-gray-400 mb-4">Por partido · la línea punteada indica el promedio</p>
+                        <p className="text-xs text-apple-gray-400 mb-4">{wyscoutMode === 'monthly' ? 'Promedio por mes' : 'Por partido'} · la línea punteada indica el promedio</p>
                         {wyscoutMetricDef && (
-                          <MetricEvolutionChart series={wyscoutSeries} unit={wyscoutMetricDef.unit} label={wyscoutMetricDef.label} />
+                          <MetricEvolutionChart series={wyscoutSeries} unit={wyscoutMetricDef.unit} label={wyscoutMetricDef.label} mode={wyscoutMode} onModeChange={setWyscoutMode} />
                         )}
                         {wyscoutInsights.length > 0 && (
                           <div className="mt-3 space-y-1.5">
-                            {wyscoutInsights.map((t, i) => (
-                              <div key={i} className="text-xs text-apple-gray-600 dark:text-apple-gray-300 bg-apple-gray-50 dark:bg-apple-gray-700/50 px-3 py-2 rounded-lg">
-                                {t}
+                            {wyscoutInsights.map((ins, i) => (
+                              <div key={i} className={`text-xs px-3 py-2 rounded-lg ${
+                                ins.tone === 'positive'
+                                  ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20'
+                                  : ins.tone === 'negative'
+                                    ? 'text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20'
+                                    : 'text-apple-gray-600 dark:text-apple-gray-300 bg-apple-gray-50 dark:bg-apple-gray-700/50'
+                              }`}>
+                                {ins.text}
                               </div>
                             ))}
                           </div>

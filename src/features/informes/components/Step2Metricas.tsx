@@ -350,7 +350,7 @@ function EvolutionChartsSection({ dbPlayerName, evolutionCharts, onChange }: Evo
     <div className="rounded-2xl border border-apple-gray-200 dark:border-apple-gray-800 bg-white dark:bg-apple-gray-900 p-5">
       <div className="flex items-center justify-between mb-1">
         <h3 className="text-sm font-semibold text-apple-gray-900 dark:text-white">Métricas evolutivas</h3>
-        <span className="text-xs text-apple-gray-400 dark:text-apple-gray-500">Wyscout · máx {MAX_EVOLUTION_CHARTS}</span>
+        <span className="text-xs text-apple-gray-400 dark:text-apple-gray-500">Máx {MAX_EVOLUTION_CHARTS} gráficos</span>
       </div>
       <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mb-3">
         Gráficos de evolución por partido. Si no agregás ninguno, la pestaña no aparece en el informe.

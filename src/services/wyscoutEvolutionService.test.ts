@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { parseMetricSchema, buildMetricSeries, nameKeys } from './wyscoutEvolutionService'
+import { parseMetricSchema, buildMetricSeries, nameKeys, metricIsLowerBetter, aggregateByMonth } from './wyscoutEvolutionService'
+import type { WyscoutPoint } from './wyscoutEvolutionService'
 
 // Header real: label del par ocupa 2 columnas (intentos, logrados); la 2da viene vacía.
 const HEADERS = [
@@ -47,5 +48,36 @@ describe('nameKeys (match tolerante: forma corta vs nombre completo)', () => {
   it('inicial distinta NO comparte clave (F. Paradela vs José Paradela)', () => {
     const a = new Set(nameKeys('F. Paradela'))
     expect(nameKeys('José Paradela').some(k => a.has(k))).toBe(false)
+  })
+})
+
+describe('metricIsLowerBetter', () => {
+  it('menos es mejor en pérdidas, faltas, tarjetas, fuera de juego', () => {
+    expect(metricIsLowerBetter('Balones perdidos / propia mitad')).toBe(true)
+    expect(metricIsLowerBetter('Faltas')).toBe(true)
+    expect(metricIsLowerBetter('Tarjetas amarillas')).toBe(true)
+    expect(metricIsLowerBetter('Fuera de juego')).toBe(true)
+  })
+  it('más es mejor en goles, %, recuperaciones y faltas recibidas', () => {
+    expect(metricIsLowerBetter('Goles')).toBe(false)
+    expect(metricIsLowerBetter('Pases / logrados')).toBe(false)
+    expect(metricIsLowerBetter('Balones recuperados / mitad adv.')).toBe(false)
+    expect(metricIsLowerBetter('Faltas recibidas')).toBe(false)
+  })
+})
+
+describe('aggregateByMonth', () => {
+  it('promedia por mes y ordena cronológicamente', () => {
+    const s: WyscoutPoint[] = [
+      { date: '2024-05-06', matchLabel: 'A', competition: '', value: 10 },
+      { date: '2024-05-20', matchLabel: 'B', competition: '', value: 20 },
+      { date: '2024-06-01', matchLabel: 'C', competition: '', value: 30 },
+    ]
+    const agg = aggregateByMonth(s)
+    expect(agg).toHaveLength(2)
+    expect(agg[0].value).toBe(15)          // mayo: (10+20)/2
+    expect(agg[0].matchLabel).toBe('2 partidos')
+    expect(agg[1].value).toBe(30)          // junio
+    expect(agg[0].date < agg[1].date).toBe(true)
   })
 })
