@@ -2282,6 +2282,12 @@ export default function PlayerDetailPage() {
                               const scoreHome = fixture?.score_home
                               const scoreAway = fixture?.score_away
                               const result = scoreHome != null && scoreAway != null ? `${scoreHome}-${scoreAway}` : '—'
+                              // Resultado desde la perspectiva del jugador (ganó/empató/perdió).
+                              const pg = isHome ? scoreHome : scoreAway
+                              const og = isHome ? scoreAway : scoreHome
+                              const outcome = pg != null && og != null ? (pg > og ? 'win' : pg < og ? 'loss' : 'draw') : null
+                              const outcomeCls = outcome === 'win' ? 'text-brand-green' : outcome === 'loss' ? 'text-red-500' : outcome === 'draw' ? 'text-apple-gray-400' : 'text-apple-gray-700 dark:text-apple-gray-300'
+                              const outcomeDot = outcome === 'win' ? 'bg-brand-green' : outcome === 'loss' ? 'bg-red-500' : 'bg-apple-gray-400'
                               const scoreColor = match.match_score != null
                                 ? match.match_score >= 8 ? 'text-brand-green' : match.match_score >= 6 ? 'text-emerald-500' : match.match_score >= 4.5 ? 'text-amber-500' : 'text-red-500'
                                 : ''
@@ -2293,7 +2299,12 @@ export default function PlayerDetailPage() {
                                   <td className="px-3 py-2 font-medium text-apple-gray-800 dark:text-white truncate max-w-[140px]">
                                     {rivalName ?? '—'}
                                   </td>
-                                  <td className="px-3 py-2 text-center font-semibold text-apple-gray-700 dark:text-apple-gray-300 tabular-nums">{result}</td>
+                                  <td className="px-3 py-2 text-center font-semibold tabular-nums">
+                                    <span className={`inline-flex items-center gap-1.5 ${outcomeCls}`}>
+                                      {outcome && <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${outcomeDot}`} />}
+                                      {result}
+                                    </span>
+                                  </td>
                                   <td className="px-3 py-2 text-center text-apple-gray-500 tabular-nums">{match.minutes ?? '—'}</td>
                                   <td className="px-3 py-2 text-center tabular-nums">{match.goals || '—'}</td>
                                   <td className="px-3 py-2 text-center tabular-nums">{match.assists || '—'}</td>

@@ -36,7 +36,7 @@ describe('informesStore', () => {
     const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
       throw new DOMException('quota', 'QuotaExceededError')
     })
-    expect(() => saveInforme(makeInforme('q', 'Foto'))).toThrow(/almacenamiento lleno/)
+    expect(() => saveInforme(makeInforme('q', 'Foto'))).toThrow(/demasiados informes/)
     spy.mockRestore()
   })
 })

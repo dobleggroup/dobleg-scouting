@@ -504,15 +504,16 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
             ))}
           </div>
         </div>
-        <div data-informe-section>
-          {!content.hideFisicoCharts && enrichment.physicalEvolution.length >= 2 && (
+        {!content.hideFisicoCharts && enrichment.physicalEvolution.length >= 2 && (
+          <div data-informe-section>
             <div className="mb-4">
               <h4 className="text-[11px] font-bold uppercase mb-3" style={{ letterSpacing: '0.12em', color: DG.muted }}>{t(lang, 't_phys_intensity')}</h4>
               <InformeLineChart points={enrichment.physicalEvolution} color="#38BDF8" formatValue={v => v.toFixed(0)} />
             </div>
-          )}
-          <InformeChartHelp text={t(lang, 'help_phys')} lang={lang} />
-        </div>
+            {/* El texto de ayuda habla de "la línea": solo tiene sentido si el gráfico se muestra. */}
+            <InformeChartHelp text={t(lang, 'help_phys')} lang={lang} />
+          </div>
+        )}
       </div>
     )
   }
