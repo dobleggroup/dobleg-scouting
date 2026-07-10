@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useRecentForm } from '@/hooks/usePlayerStats'
 import { marketTagsFor } from '@/utils/opportunities'
 import Sparkline from '@/components/ui/Sparkline'
@@ -33,9 +33,20 @@ export default function OpportunityHero() {
 
   return (
     <section onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
-      <h2 className="text-lg font-semibold text-apple-gray-800 dark:text-white mb-4">
-        Oportunidades de mercado
-      </h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-apple-gray-800 dark:text-white">
+          Oportunidades de mercado
+        </h2>
+        <Link
+          to="/oportunidades"
+          className="inline-flex items-center gap-1 text-sm font-medium text-brand-green hover:text-emerald-600 transition-colors"
+        >
+          Ver más oportunidades
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </Link>
+      </div>
       <div
         onClick={() => navigate(`/jugador/${encodeURIComponent(active.name)}?source=externo&apiId=${active.id}`)}
         className="cursor-pointer bg-white dark:bg-apple-gray-800/60 rounded-apple-lg border border-apple-gray-200/60 dark:border-apple-gray-700/40 p-5 hover:shadow-apple-md transition-all"

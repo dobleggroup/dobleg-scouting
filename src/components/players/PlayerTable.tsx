@@ -54,7 +54,7 @@ const BASE_COLUMNS: Column[] = [
 
 const BASE_COLUMNS_INTERNAL: Column[] = [
   { key: 'Jugador', label: 'Jugador', sortable: true, align: 'left' },
-  { key: 'videoFreshness', label: 'Video Cargado', sortable: false, align: 'center' },
+  { key: 'videoFreshness', label: 'Video Actualizado', sortable: false, align: 'center' },
   { key: 'Equipo', label: 'Equipo', sortable: true, align: 'left', className: 'hidden lg:table-cell' },
   { key: 'Posición', label: 'Pos', sortable: true, align: 'left', className: 'hidden sm:table-cell' },
   { key: 'ageNum', label: 'Edad', sortable: true, align: 'center' },
