@@ -1,23 +1,25 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { usePlayersList } from '@/hooks/usePlayerStats'
+import { useRecentForm } from '@/hooks/usePlayerStats'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import MobileFilterPanel, { MobileFilterButton } from '@/components/filters/MobileFilterPanel'
 import { getScoreColorClass, getScoreBgClass } from '@/components/ui/ScoreBar'
+import Sparkline from '@/components/ui/Sparkline'
 import { displayPosition } from '@/types/scoring'
 import {
-  detectOpportunities,
+  marketTagsFor,
   ageFromBirthDate,
   monthsToContractEnd,
+  type MarketTag,
 } from '@/utils/opportunities'
-import type { PlayerWithScore } from '@/types/scoring'
+import type { RecentFormPlayer } from '@/types/scoring'
 
-interface Opportunity {
-  player: PlayerWithScore
-  type: 'contract' | 'undervalued' | 'young_talent' | 'bargain'
-  score: number
-  reasons: string[]
-  playerScore: number
+const CHEAP_MAX = 5_000_000
+const CONTRACT_MAX = 12
+
+const TAG_LABELS: Record<MarketTag, string> = {
+  contract: 'Fin de contrato',
+  cheap: 'Precio bajo',
 }
 
 function formatValue(value: number): string {
@@ -26,83 +28,18 @@ function formatValue(value: number): string {
   return `€${value}`
 }
 
-function buildOpportunities(players: PlayerWithScore[]): Opportunity[] {
-  const { undervalued, youngTalent, expiringContract, valueForMoney } =
-    detectOpportunities(players)
-
-  const seen = new Set<number>()
-  const result: Opportunity[] = []
-
-  // 1. Expiring contracts (highest priority)
-  for (const p of expiringContract) {
-    if (seen.has(p.id)) continue
-    const m = monthsToContractEnd(p.contract_end_date) as number
-    const reasons: string[] = [`Contrato vence en ${m} meses`]
-    const score = p.primary_score ?? 0
-    let oppScore = 50
-    if (score >= 8.0) { oppScore += 20; reasons.push(`Score ${score.toFixed(1)} excepcional`) }
-    else if (score >= 7.0) { oppScore += 10; reasons.push(`Score ${score.toFixed(1)} destacado`) }
-    seen.add(p.id)
-    result.push({ player: p, type: 'contract', score: oppScore, reasons, playerScore: score })
-  }
-
-  // 2. Young talent
-  for (const p of youngTalent) {
-    if (seen.has(p.id)) continue
-    const age = ageFromBirthDate(p.birth_date) as number
-    const score = p.primary_score as number
-    const reasons: string[] = [`${age} años con score ${score.toFixed(1)}`]
-    let oppScore = 40
-    if (score >= 8.0) { oppScore += 20 }
-    else if (score >= 7.0) { oppScore += 10 }
-    if (p.market_value_eur && p.market_value_eur <= 1_000_000) {
-      reasons.push(`Valor accesible: ${formatValue(p.market_value_eur)}`)
-      oppScore += 10
-    }
-    seen.add(p.id)
-    result.push({ player: p, type: 'young_talent', score: oppScore, reasons, playerScore: score })
-  }
-
-  // 3. Undervalued
-  for (const p of undervalued) {
-    if (seen.has(p.id)) continue
-    const score = p.primary_score as number
-    const val = p.market_value_eur as number
-    const reasons: string[] = [`Score ${score.toFixed(1)} a solo ${formatValue(val)}`]
-    let oppScore = 40
-    if (score >= 8.0) { oppScore += 20 }
-    else if (score >= 7.0) { oppScore += 10 }
-    seen.add(p.id)
-    result.push({ player: p, type: 'undervalued', score: oppScore, reasons, playerScore: score })
-  }
-
-  // 4. Value for money (top ratio, not yet included)
-  for (const p of valueForMoney.slice(0, 30)) {
-    if (seen.has(p.id)) continue
-    const score = p.primary_score as number
-    const val = p.market_value_eur as number
-    const ratio = score / (val / 1_000_000)
-    const reasons: string[] = [`Relación calidad/precio: ${ratio.toFixed(1)} pts/M€`]
-    const oppScore = 35
-    seen.add(p.id)
-    result.push({ player: p, type: 'bargain', score: oppScore, reasons, playerScore: score })
-  }
-
-  return result.sort((a, b) => b.score - a.score).slice(0, 60)
-}
-
-const TYPE_LABELS: Record<string, string> = {
-  contract: 'Contrato',
-  undervalued: 'Subvalorado',
-  young_talent: 'Joven promesa',
-  bargain: 'Oportunidad',
-}
-
-type FilterType = 'all' | 'contract' | 'undervalued' | 'young_talent' | 'bargain'
+type FilterType = 'all' | 'contract' | 'cheap'
 
 export default function OpportunitiesPage() {
   const navigate = useNavigate()
-  const { players, loading } = usePlayersList({ pageSize: 500 })
+
+  const [windowMonths, setWindowMonths] = useState<number>(3)
+  const { players, loading } = useRecentForm({
+    windowMonths,
+    cheapMaxValue: CHEAP_MAX,
+    contractMaxMonths: CONTRACT_MAX,
+    limit: 200,
+  })
 
   const [typeFilter, setTypeFilter] = useState<FilterType>('all')
   const [positionFilter, setPositionFilter] = useState<string>('all')
@@ -113,50 +50,58 @@ export default function OpportunitiesPage() {
   const [maxContract, setMaxContract] = useState<number | null>(null)
   const [showFilters, setShowFilters] = useState(false)
 
-  const opportunities = useMemo(() => buildOpportunities(players), [players])
+  // Tags de mercado precalculados por jugador (el RPC ya los garantiza; acá se
+  // usan para chips, filtro por tipo y conteos).
+  const tagsById = useMemo(() => {
+    const map = new Map<number, MarketTag[]>()
+    players.forEach(p =>
+      map.set(p.id, marketTagsFor(p, { cheapMaxValue: CHEAP_MAX, contractMaxMonths: CONTRACT_MAX })),
+    )
+    return map
+  }, [players])
 
   const positions = useMemo(() => {
     const posSet = new Set<string>()
-    opportunities.forEach(o => {
-      if (o.player.primary_position) posSet.add(o.player.primary_position)
+    players.forEach(p => {
+      if (p.primary_position) posSet.add(p.primary_position)
     })
     return Array.from(posSet).sort()
-  }, [opportunities])
+  }, [players])
 
-  const filteredOpportunities = useMemo(() => {
-    let result = opportunities
+  const filteredPlayers = useMemo(() => {
+    let result = players
 
     if (typeFilter !== 'all') {
-      result = result.filter(o => o.type === typeFilter)
+      result = result.filter(p => (tagsById.get(p.id) ?? []).includes(typeFilter))
     }
 
     if (positionFilter !== 'all') {
-      result = result.filter(o => o.player.primary_position === positionFilter)
+      result = result.filter(p => p.primary_position === positionFilter)
     }
 
-    // Age filter
-    result = result.filter(o => {
-      const age = ageFromBirthDate(o.player.birth_date)
+    // Edad
+    result = result.filter(p => {
+      const age = ageFromBirthDate(p.birth_date)
       if (age == null) return true
       return age >= minAge && age <= maxAge
     })
 
-    // Market value filter
-    result = result.filter(o => {
-      const val = o.player.market_value_eur ?? 0
+    // Valor de mercado
+    result = result.filter(p => {
+      const val = p.market_value_eur ?? 0
       return val >= minValue && val <= maxValue
     })
 
-    // Contract filter
+    // Contrato
     if (maxContract !== null) {
-      result = result.filter(o => {
-        const months = monthsToContractEnd(o.player.contract_end_date)
+      result = result.filter(p => {
+        const months = monthsToContractEnd(p.contract_end_date)
         return months !== null && months >= 0 && months <= maxContract
       })
     }
 
     return result
-  }, [opportunities, typeFilter, positionFilter, minAge, maxAge, minValue, maxValue, maxContract])
+  }, [players, tagsById, typeFilter, positionFilter, minAge, maxAge, minValue, maxValue, maxContract])
 
   const hasActiveFilters =
     typeFilter !== 'all' ||
@@ -179,13 +124,11 @@ export default function OpportunitiesPage() {
 
   const counts = useMemo(
     () => ({
-      all: opportunities.length,
-      contract: opportunities.filter(o => o.type === 'contract').length,
-      undervalued: opportunities.filter(o => o.type === 'undervalued').length,
-      young_talent: opportunities.filter(o => o.type === 'young_talent').length,
-      bargain: opportunities.filter(o => o.type === 'bargain').length,
+      all: players.length,
+      contract: players.filter(p => (tagsById.get(p.id) ?? []).includes('contract')).length,
+      cheap: players.filter(p => (tagsById.get(p.id) ?? []).includes('cheap')).length,
     }),
-    [opportunities],
+    [players, tagsById],
   )
 
   const activeCount = [
@@ -200,7 +143,27 @@ export default function OpportunitiesPage() {
   // del desktop. Se usa en la card de desktop y en el bottom-sheet de mobile.
   const renderFilters = () => (
     <div className="space-y-4">
-      {/* Tipo (presets) */}
+      {/* Ventana de forma reciente */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mr-2">
+          Forma:
+        </span>
+        {[1, 3, 6, 12].map(w => (
+          <button
+            key={w}
+            onClick={() => setWindowMonths(w)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              windowMonths === w
+                ? 'bg-apple-gray-800 dark:bg-white text-white dark:text-apple-gray-800'
+                : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600'
+            }`}
+          >
+            {w === 1 ? '1 mes' : `${w} meses`}
+          </button>
+        ))}
+      </div>
+
+      {/* Tipo (tag de mercado) */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mr-2">
           Tipo:
@@ -215,7 +178,7 @@ export default function OpportunitiesPage() {
         >
           Todas ({counts.all})
         </button>
-        {(['young_talent', 'undervalued', 'contract', 'bargain'] as const).map(type => (
+        {(['contract', 'cheap'] as const).map(type => (
           <button
             key={type}
             onClick={() => setTypeFilter(type)}
@@ -225,7 +188,7 @@ export default function OpportunitiesPage() {
                 : 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-600'
             }`}
           >
-            {TYPE_LABELS[type]} ({counts[type]})
+            {TAG_LABELS[type]} ({counts[type]})
           </button>
         ))}
       </div>
@@ -355,7 +318,7 @@ export default function OpportunitiesPage() {
           Oportunidades de Mercado
         </h1>
         <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
-          {filteredOpportunities.length} oportunidades detectadas
+          {filteredPlayers.length} jugadores en alza · ranking por Score GG reciente
         </p>
       </div>
 
@@ -372,26 +335,27 @@ export default function OpportunitiesPage() {
           onClick={() => setShowFilters(false)}
           className="mt-6 w-full py-3 rounded-xl text-sm font-semibold text-gray-900 bg-brand-green hover:bg-emerald-500 transition-colors"
         >
-          Ver {filteredOpportunities.length} resultados
+          Ver {filteredPlayers.length} resultados
         </button>
       </MobileFilterPanel>
 
       {/* Opportunities grid */}
-      {filteredOpportunities.length === 0 ? (
+      {filteredPlayers.length === 0 ? (
         <div className="text-center py-12 text-apple-gray-500">
           No se encontraron oportunidades con estos filtros
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredOpportunities.map((opp, idx) => {
-            const score = opp.playerScore
+          {filteredPlayers.map((p: RecentFormPlayer) => {
+            const score = p.recent_avg
             const scoreColor = getScoreColorClass(score, '10')
             const scoreBg = getScoreBgClass(score, '10')
-            const age = ageFromBirthDate(opp.player.birth_date)
-            const contractMonths = monthsToContractEnd(opp.player.contract_end_date)
-            const teamName = opp.player.team?.name ?? ''
-            const teamLogo = opp.player.team?.logo ?? null
-            const initials = opp.player.name
+            const age = ageFromBirthDate(p.birth_date)
+            const contractMonths = monthsToContractEnd(p.contract_end_date)
+            const teamName = p.team?.name ?? ''
+            const teamLogo = p.team?.logo ?? null
+            const tags = tagsById.get(p.id) ?? []
+            const initials = p.name
               .split(' ')
               .map(n => n[0])
               .join('')
@@ -399,15 +363,15 @@ export default function OpportunitiesPage() {
 
             return (
               <div
-                key={`${opp.player.id}-${idx}`}
-                onClick={() => navigate(`/jugador/${encodeURIComponent(opp.player.name)}?source=externo&apiId=${opp.player.id}`)}
+                key={p.id}
+                onClick={() => navigate(`/jugador/${encodeURIComponent(p.name)}?source=externo&apiId=${p.id}`)}
                 className="bg-white dark:bg-apple-gray-800 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 p-4 cursor-pointer hover:shadow-lg transition-all hover:-translate-y-0.5"
               >
                 {/* Header */}
                 <div className="flex items-start gap-3 mb-3">
-                  {opp.player.photo ? (
+                  {p.photo ? (
                     <img
-                      src={opp.player.photo}
+                      src={p.photo}
                       alt=""
                       className="w-12 h-12 rounded-full object-cover"
                     />
@@ -417,43 +381,52 @@ export default function OpportunitiesPage() {
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-apple-gray-800 dark:text-white truncate">
-                      {opp.player.name}
-                    </h3>
+                    <div className="flex items-center gap-1.5">
+                      <h3 className="font-semibold text-apple-gray-800 dark:text-white truncate">
+                        {p.name}
+                      </h3>
+                      {p.on_the_rise && (
+                        <span className="text-brand-green text-sm font-semibold flex-shrink-0">▲</span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       {teamLogo && (
                         <img src={teamLogo} alt="" className="w-4 h-4 object-contain" />
                       )}
                       <p className="text-sm text-apple-gray-500 truncate">{teamName}</p>
                     </div>
-                    {opp.player.league && (
+                    {p.league_name && (
                       <p className="text-xs text-apple-gray-400 truncate">
-                        {opp.player.league.name}
+                        {p.league_name}
                       </p>
                     )}
                   </div>
-                  <span className="text-xs font-medium px-2 py-1 rounded bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300 flex-shrink-0">
-                    {TYPE_LABELS[opp.type]}
-                  </span>
+                  {/* Score GG reciente */}
+                  <div className="text-right flex-shrink-0">
+                    <span
+                      className={`inline-block px-2 py-0.5 rounded-full font-semibold text-sm ${scoreBg} ${scoreColor}`}
+                    >
+                      {score.toFixed(1)}
+                    </span>
+                    <p className="text-2xs text-apple-gray-400 mt-1">Score GG · {p.recent_matches} PJ</p>
+                  </div>
                 </div>
 
                 {/* Stats row */}
                 <div className="flex items-center gap-3 mb-3 text-sm">
-                  <span
-                    className={`px-2 py-0.5 rounded-full font-semibold ${scoreBg} ${scoreColor}`}
-                  >
-                    {score.toFixed(1)}
-                  </span>
                   {age != null && (
                     <span className="text-apple-gray-600 dark:text-apple-gray-400">
                       {age} años
                     </span>
                   )}
-                  {opp.player.primary_position && (
+                  {p.primary_position && (
                     <span className="text-apple-gray-600 dark:text-apple-gray-400">
-                      {displayPosition(opp.player.primary_position)}
+                      {displayPosition(p.primary_position)}
                     </span>
                   )}
+                  <div className="ml-auto">
+                    <Sparkline values={p.recent_scores} />
+                  </div>
                 </div>
 
                 {/* Value and contract */}
@@ -461,9 +434,7 @@ export default function OpportunitiesPage() {
                   <div>
                     <span className="text-apple-gray-400">Valor: </span>
                     <span className="font-medium text-apple-gray-700 dark:text-apple-gray-200">
-                      {opp.player.market_value_eur
-                        ? formatValue(opp.player.market_value_eur)
-                        : '—'}
+                      {p.market_value_eur ? formatValue(p.market_value_eur) : '—'}
                     </span>
                   </div>
                   {contractMonths != null && contractMonths >= 0 && (
@@ -476,31 +447,19 @@ export default function OpportunitiesPage() {
                   )}
                 </div>
 
-                {/* Reasons */}
-                <div className="space-y-1 mb-3">
-                  {opp.reasons.map((reason, i) => (
-                    <div
-                      key={i}
-                      className="text-xs text-apple-gray-600 dark:text-apple-gray-400 bg-apple-gray-50 dark:bg-apple-gray-700/50 px-2 py-1 rounded"
-                    >
-                      {reason}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Opportunity score bar */}
-                <div className="pt-3 border-t border-apple-gray-100 dark:border-apple-gray-700">
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="text-apple-gray-400">Nivel de oportunidad</span>
-                    <span className="font-semibold text-brand-green">{opp.score} pts</span>
+                {/* Market tags */}
+                {tags.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-3 border-t border-apple-gray-100 dark:border-apple-gray-700">
+                    {tags.map(t => (
+                      <span
+                        key={t}
+                        className="text-xs font-medium px-2.5 py-1 rounded-full bg-brand-green/10 text-brand-green"
+                      >
+                        {TAG_LABELS[t]}
+                      </span>
+                    ))}
                   </div>
-                  <div className="h-1.5 bg-apple-gray-200 dark:bg-apple-gray-700 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-brand-green to-green-400 rounded-full transition-all"
-                      style={{ width: `${Math.min(100, opp.score)}%` }}
-                    />
-                  </div>
-                </div>
+                )}
               </div>
             )
           })}

@@ -1,4 +1,17 @@
-import type { PlayerWithScore } from '@/types/scoring'
+import type { PlayerWithScore, RecentFormPlayer } from '@/types/scoring'
+
+export type MarketTag = 'contract' | 'cheap'
+
+export function marketTagsFor(
+  p: RecentFormPlayer,
+  opts: { cheapMaxValue: number; contractMaxMonths: number },
+): MarketTag[] {
+  const tags: MarketTag[] = []
+  const months = monthsToContractEnd(p.contract_end_date)
+  if (months !== null && months >= 0 && months <= opts.contractMaxMonths) tags.push('contract')
+  if (p.market_value_eur != null && p.market_value_eur > 0 && p.market_value_eur <= opts.cheapMaxValue) tags.push('cheap')
+  return tags
+}
 
 export function ageFromBirthDate(birth_date: string | null): number | null {
   if (!birth_date) return null
