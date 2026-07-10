@@ -2,7 +2,8 @@ import { radarSvg, barsSvg, scatterSvg, gaugeSvg, lineChartSvg, lineSvg } from '
 import { radarData, radarComparisonData, barsData, scatterData, comparisonTable, comparisonWinCounts, parseRating, ratingMax } from './chartData'
 import { t, translateMetric, translateInjury, isRtl } from './i18n'
 import type { Informe, MetricStat, MetricDef } from './types'
-import type { InformeEnrichment } from './useInformeEnrichment'
+import type { InformeEnrichment, Last5Row } from './useInformeEnrichment'
+import type { PlayerTransfer } from '@/services/footballApiService'
 
 // ---------------------------------------------------------------------------
 // Seguridad: escape de texto de usuario antes de interpolar en el HTML.
@@ -57,6 +58,17 @@ function formatStatValue(stat: MetricStat): string {
   return stat.def.unit === '%' ? `${stat.value.toFixed(0)}%` : stat.value.toFixed(2)
 }
 
+/**
+ * Percentil "vs el contexto del informe" = promedio de los percentiles de los stats
+ * con percentil disponible. Devuelve null si hay menos de 3 (no es representativo).
+ */
+export function contextPercentile(stats: MetricStat[]): number | null {
+  const withPct = stats.filter(s => s.percentile != null)
+  if (withPct.length < 3) return null
+  const sum = withPct.reduce((a, s) => a + (s.percentile as number), 0)
+  return Math.round(sum / withPct.length)
+}
+
 function safeDataUrl(url: string | null | undefined): string | null {
   if (!url) return null
   return /^data:image\//i.test(url) ? url : null
@@ -91,6 +103,7 @@ export function buildInformeHtml(opts: {
   logoDataUrl?: string
   enrichment?: InformeEnrichment
   evolution?: EvolutionChartExport[]
+  transfers?: PlayerTransfer[]
 }): string {
   const { informe, stats, matrix, defs, enrichment } = opts
   const { content } = informe
@@ -103,6 +116,7 @@ export function buildInformeHtml(opts: {
 
   const logoSafe = safeDataUrl(opts.logoDataUrl)
   const fotoSafe = safeDataUrl(informe.fotoDataUrl)
+  const crestSafe = safeDataUrl(informe.ligaCrestDataUrl)
   const transfermarktUrl = safeHttpUrl(content.transfermarktUrl)
   const youtubeId = safeYouTubeId(content.videoUrl)
 
@@ -135,7 +149,6 @@ export function buildInformeHtml(opts: {
     .map(key => stats.find(s => s.def.key === key))
     .filter((s): s is MetricStat => !!s)
 
-  const matches = content.ultimos5.filter(m => m.rival || m.resultado || m.rating || m.minutos)
   const comparables = content.comparables.filter(c => c.jugador || c.club || c.rating || c.delta)
 
   const compTable = comparisonTable(informe, matrix, defs)
@@ -152,6 +165,7 @@ export function buildInformeHtml(opts: {
   const physEvo = enrichment?.physicalEvolution ?? []
   const marketEvo = enrichment?.marketEvolution ?? []
   const continuity = enrichment?.continuity ?? null
+  const last5Rows = enrichment?.last5 ?? []
   const injuries = enrichment?.injuries ?? []
   const showFisico = hasPhysical
 
@@ -217,16 +231,40 @@ export function buildInformeHtml(opts: {
             .map(inj => `<div class="dg-inj"><span>${escapeHtml(translateInjury(inj.type, lang))}</span><span class="dg-muted">${escapeHtml(inj.start)} → ${escapeHtml(inj.end || t(lang, 'm_present'))}</span></div>`)
             .join('')}</div>`}`
     : ''
-  const showGeneral = !!(levelEvoBlock || continuityHtml || injuriesHtml)
+  // Últimos 5 partidos (API): resultado con puntito + color según el desenlace.
+  const outcomeColor = (o: Last5Row['outcome']): string => o === 'win' ? '#22C55E' : o === 'loss' ? '#EF4444' : '#8A9099'
+  const last5Html = last5Rows.length
+    ? `<h3 class="dg-panel-title${(levelEvoBlock || continuityHtml || injuriesHtml) ? ' dg-mt' : ''}">${escapeHtml(t(lang, 't_last5'))}</h3>
+       <div class="dg-table-wrap"><table class="dg-table">
+         <thead><tr><th>${escapeHtml(t(lang, 'h_opponent'))}</th><th>${escapeHtml(t(lang, 'h_result'))}</th><th>${escapeHtml(t(lang, 's_rating'))}</th><th>${escapeHtml(t(lang, 's_minutes'))}</th></tr></thead>
+         <tbody>
+           ${last5Rows
+             .map(r => {
+               const col = outcomeColor(r.outcome)
+               return `<tr>
+             <td>${escapeHtml(r.rival) || '—'}</td>
+             <td style="color:${col};font-weight:600"><span class="dg-result-dot" style="background:${col}"></span>${escapeHtml(r.result)}</td>
+             <td>${escapeHtml(r.rating)}</td>
+             <td>${escapeHtml(String(r.minutes))}</td>
+           </tr>`
+             })
+             .join('')}
+         </tbody>
+       </table></div>`
+    : ''
+  const showGeneral = !!(last5Html || levelEvoBlock || continuityHtml || injuriesHtml)
   const generalPanel = `
     <div class="dg-panel-inner">
-      ${levelEvoBlock}${continuityHtml}${injuriesHtml}
+      ${levelEvoBlock}${continuityHtml}${injuriesHtml}${last5Html}
       ${!showGeneral ? `<p class="dg-empty">${escapeHtml(t(lang, 'm_selectPlayerData'))}</p>` : ''}
     </div>`
 
-  // ── Header / logo ──
+  // ── Header / logo / escudo de liga ──
   const logoHtml = logoSafe
     ? `<img class="dg-logo" src="${logoSafe}" alt="Doble G" />`
+    : ''
+  const crestHtml = crestSafe
+    ? `<img class="dg-liga-crest" src="${crestSafe}" alt="Liga" />`
     : ''
 
   // ── Player rail (izquierda) ──
@@ -272,8 +310,14 @@ export function buildInformeHtml(opts: {
   const ratingCompareHtml = informe.dbPercentile != null
     ? `<p class="dg-rating-cmp">${escapeHtml(t(lang, 'm_ratingVsPos', { pct: Math.round(informe.dbPercentile), pos: content.posicion || '—', league: informe.dbLeagueName || content.liga || '—' }))}</p>`
     : ''
+  // Segunda comparación: promedio de percentiles de los stats vs el POOL del informe
+  // (la liga del contexto, ej. Liga MX). Solo si hay ≥3 stats con percentil.
+  const ctxPct = contextPercentile(stats)
+  const ratingVsContextHtml = ctxPct != null
+    ? `<p class="dg-rating-cmp dg-rating-cmp-ctx">${escapeHtml(t(lang, 'm_ratingVsContext', { pct: ctxPct, pos: content.posicion || '—', context: informe.contextoComparacion || content.liga || '—' }))}</p>`
+    : ''
   const ratingGaugeHtml = !content.hideRating && !content.hideRatingGauge && ratingVal != null
-    ? `<div class="dg-gauge">${gaugeSvg({ value: ratingVal, max: ratingMax(ratingVal), avg: ratingAvg != null ? ratingAvg : undefined, size: 200 })}<p class="dg-gauge-label">${escapeHtml(t(lang, 'm_ratingGauge'))}${ratingAvg != null ? ' · ' + escapeHtml(t(lang, 'm_avgLine')) : ''}</p>${ratingCompareHtml}</div>`
+    ? `<div class="dg-gauge">${gaugeSvg({ value: ratingVal, max: ratingMax(ratingVal), avg: ratingAvg != null ? ratingAvg : undefined, size: 200 })}<p class="dg-gauge-label">${escapeHtml(t(lang, 'm_ratingGauge'))}${ratingAvg != null ? ' · ' + escapeHtml(t(lang, 'm_avgLine')) : ''}</p>${ratingCompareHtml}${ratingVsContextHtml}</div>`
     : ''
 
   const playerRailHtml = `
@@ -388,32 +432,38 @@ export function buildInformeHtml(opts: {
       }
     </div>`
 
+  // Historial de traspasos (API-Football, por id). Más recientes primero. Logos
+  // externos https permitidos por el CSP del share; se validan igual que el resto.
+  const transfers = (opts.transfers ?? [])
+    .filter(tr => tr.teams?.in?.name || tr.teams?.out?.name)
+    .slice()
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+  const crestImg = (logo: string | null | undefined): string => {
+    const safe = safeHttpUrl(logo)
+    return safe ? `<img class="dg-tr-logo" src="${escapeHtml(safe)}" alt="" loading="lazy" />` : ''
+  }
+  const transfersHtml = `<h3 class="dg-panel-title dg-mt">${escapeHtml(t(lang, 't_transfers'))}</h3>
+    ${
+      transfers.length === 0
+        ? `<p class="dg-empty">${escapeHtml(t(lang, 'm_noTransfers'))}</p>`
+        : `<div class="dg-tr-list">${transfers
+            .map(tr => {
+              const meta = [tr.date, tr.type, tr.fee].filter(Boolean).map(x => escapeHtml(String(x))).join(' · ')
+              return `<div class="dg-tr">
+                <span class="dg-tr-teams">${crestImg(tr.teams?.out?.logo)}${escapeHtml(tr.teams?.out?.name || '—')}<span class="dg-tr-arrow">→</span>${crestImg(tr.teams?.in?.logo)}${escapeHtml(tr.teams?.in?.name || '—')}</span>
+                <span class="dg-muted">${meta}</span>
+              </div>`
+            })
+            .join('')}</div>`
+    }`
+
   const carreraPanel = `
     <div class="dg-panel-inner">
-      <h3 class="dg-panel-title">${escapeHtml(t(lang, 't_last5'))}</h3>
-      ${
-        matches.length === 0
-          ? `<p class="dg-empty">${escapeHtml(t(lang, 'm_noMatches'))}</p>`
-          : `<div class="dg-table-wrap"><table class="dg-table">
-              <thead><tr><th>${escapeHtml(t(lang, 'h_opponent'))}</th><th>${escapeHtml(t(lang, 'h_result'))}</th><th>${escapeHtml(t(lang, 's_rating'))}</th><th>${escapeHtml(t(lang, 's_minutes'))}</th></tr></thead>
-              <tbody>
-                ${matches
-                  .map(
-                    m => `<tr>
-                  <td>${escapeHtml(m.rival) || '—'}</td>
-                  <td>${escapeHtml(m.resultado) || '—'}</td>
-                  <td>${escapeHtml(m.rating) || '—'}</td>
-                  <td>${escapeHtml(m.minutos) || '—'}</td>
-                </tr>`,
-                  )
-                  .join('')}
-              </tbody>
-            </table></div>`
-      }
       <div class="dg-cards-2col">
         <div class="dg-info-card"><p class="dg-muted">${escapeHtml(t(lang, 'r_contract'))}</p><p class="dg-info-value">${escapeHtml(content.contrato) || '—'}</p></div>
         <div class="dg-info-card"><p class="dg-muted">${escapeHtml(t(lang, 'r_marketValue'))}</p><p class="dg-info-value">${escapeHtml(content.valorMercado) || '—'}</p></div>
       </div>
+      ${transfersHtml}
       ${marketEvoHtml
         ? `<h3 class="dg-panel-title dg-mt">${escapeHtml(t(lang, 't_marketEvo'))}</h3><div class="dg-chart">${marketEvoHtml}</div>${helpBox(t(lang, 'help_market'))}`
         : ''}
@@ -568,6 +618,7 @@ ${css}
   <header class="dg-header">
     ${logoHtml}
     <span class="dg-header-badge">${escapeHtml(t(lang, 'm_scoutingReport'))}</span>
+    ${crestHtml}
   </header>
 
   <div class="dg-layout">
@@ -681,6 +732,17 @@ const css = `
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: #8A9099;
+  }
+  .dg-liga-crest {
+    height: 30px;
+    width: auto;
+    max-width: 46px;
+    object-fit: contain;
+    margin-inline-start: auto;
+    border-radius: 7px;
+    background: rgba(255,255,255,0.05);
+    padding: 3px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
   }
   .dg-layout {
     display: grid;
@@ -919,6 +981,32 @@ const css = `
     line-height: 1.3;
     color: #22C55E;
   }
+  .dg-rating-cmp-ctx { color: #8A9099; }
+  .dg-result-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    margin-inline-end: 6px;
+    vertical-align: middle;
+  }
+  .dg-tr-list { display: flex; flex-direction: column; gap: 6px; }
+  .dg-tr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: #14171B;
+    font-size: 13px;
+    color: #F5F7FA;
+  }
+  .dg-tr-teams { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; }
+  .dg-tr-logo { width: 18px; height: 18px; object-fit: contain; border-radius: 3px; }
+  .dg-tr-arrow { color: #8A9099; margin: 0 1px; }
+  .dg-tr .dg-muted { font-size: 12px; font-variant-numeric: tabular-nums; }
   .dg-help {
     margin-top: 16px;
     border-radius: 12px;
@@ -1162,6 +1250,7 @@ export function exportInformeHTML(opts: {
   logoDataUrl?: string
   enrichment?: InformeEnrichment
   evolution?: EvolutionChartExport[]
+  transfers?: PlayerTransfer[]
 }): void {
   const html = buildInformeHtml(opts)
   const nombre = opts.informe.content.nombre || 'informe'

@@ -65,11 +65,13 @@ function CheckboxField({ label, checked, onChange }: { label: string; checked: b
 interface Step3ContenidoProps {
   content: InformeContent
   onChange: (content: InformeContent) => void
+  /** false = no se puede calcular la comparación de rating vs el contexto (faltan métricas comparables). */
+  ratingContextAvailable?: boolean
   onBack: () => void
   onNext: () => void
 }
 
-export default function Step3Contenido({ content, onChange, onBack, onNext }: Step3ContenidoProps) {
+export default function Step3Contenido({ content, onChange, ratingContextAvailable = true, onBack, onNext }: Step3ContenidoProps) {
   const set = <K extends keyof InformeContent>(key: K, value: InformeContent[K]) =>
     onChange({ ...content, [key]: value })
 
@@ -124,6 +126,14 @@ export default function Step3Contenido({ content, onChange, onBack, onNext }: St
               <Field label="Asistencias" value={content.asistencias} onChange={v => set('asistencias', v)} />
               <Field label="Prom. rating (opc.)" value={content.ratingPromedio ?? ''} onChange={v => set('ratingPromedio', v)} placeholder="marca del gauge" />
             </div>
+            {!ratingContextAvailable && (
+              <p className="mt-3 text-xs text-apple-gray-500 dark:text-apple-gray-400 flex items-start gap-1.5">
+                <svg className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Comparación vs el contexto no disponible (faltan métricas comparables).</span>
+              </p>
+            )}
             <div className="mt-3 space-y-2">
               <CheckboxField
                 label="No mostrar el rating (Score GG) en este informe"

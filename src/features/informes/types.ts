@@ -67,6 +67,7 @@ export interface Informe {
   updatedAt: string
   contextoComparacion: string
   fotoDataUrl: string | null
+  ligaCrestDataUrl?: string            // escudo de la liga (data URL), subido en el paso 1
   protagonistIndex: number            // índice de la fila protagonista en rows
   comparePlayerIndices?: number[]     // índices de jugadores a comparar en el radar (máx 2)
   evolutionCharts?: string[]          // metric keys Wyscout (máx 8); solo jugadores internos

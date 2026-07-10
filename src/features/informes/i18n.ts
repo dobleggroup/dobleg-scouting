@@ -46,6 +46,7 @@ const S: Record<string, Six> = {
   t_evolutivas: ['Métricas evolutivas', 'Metric trends', 'Métricas evolutivas', 'تطور المقاييس', 'Metriche evolutive', 'Évolution des métriques'],
   m_evolutivas_sub: ['Por partido · la línea punteada indica el promedio', 'Per match · the dashed line marks the average', 'Por jogo · a linha tracejada indica a média', 'لكل مباراة · الخط المتقطع يمثل المتوسط', 'Per partita · la linea tratteggiata indica la media', 'Par match · la ligne pointillée indique la moyenne'],
   t_last5: ['Últimos 5 partidos', 'Last 5 matches', 'Últimos 5 jogos', 'آخر 5 مباريات', 'Ultime 5 partite', '5 derniers matchs'],
+  t_transfers: ['Historial de traspasos', 'Transfer history', 'Histórico de transferências', 'سجل الانتقالات', 'Storico dei trasferimenti', 'Historique des transferts'],
   t_comparables: ['Comparables', 'Comparables', 'Comparáveis', 'لاعبون مشابهون', 'Comparabili', 'Comparables'],
   t_detail: ['Detalle por métrica', 'Detail by metric', 'Detalhe por métrica', 'التفاصيل حسب المقياس', 'Dettaglio per metrica', 'Détail par métrique'],
   t_notes: ['Notas', 'Notes', 'Notas', 'ملاحظات', 'Note', 'Notes'],
@@ -186,6 +187,7 @@ const S: Record<string, Six> = {
   m_noInjuries: ['Sin lesiones registradas.', 'No injuries on record.', 'Sem lesões registradas.', 'لا إصابات مسجلة.', 'Nessun infortunio registrato.', 'Aucune blessure enregistrée.'],
   m_noComparables: ['Sin comparables cargados.', 'No comparables added.', 'Sem comparáveis.', 'لا يوجد لاعبون مشابهون.', 'Nessun comparabile.', 'Aucun comparable.'],
   m_noMatches: ['Sin partidos cargados.', 'No matches added.', 'Sem jogos.', 'لا مباريات.', 'Nessuna partita.', 'Aucun match.'],
+  m_noTransfers: ['Sin traspasos registrados', 'No transfers on record', 'Sem transferências registradas', 'لا انتقالات مسجلة', 'Nessun trasferimento registrato', 'Aucun transfert enregistré'],
   m_ratingGauge: ['Rating', 'Rating', 'Rating', 'التقييم', 'Rating', 'Note'],
   m_avgLine: ['línea = promedio', 'line = average', 'linha = média', 'الخط = المتوسط', 'linea = media', 'ligne = moyenne'],
   m_ratingVsPos: [
@@ -195,6 +197,14 @@ const S: Record<string, Six> = {
     'أفضل من {pct}% من {pos} في {league}',
     'Meglio del {pct}% dei {pos} in {league}',
     'Meilleur que {pct}% des {pos} en {league}',
+  ],
+  m_ratingVsContext: [
+    'Mejor que el {pct}% de {pos} en {context}',
+    'Better than {pct}% of {pos} in {context}',
+    'Melhor que {pct}% dos {pos} em {context}',
+    'أفضل من {pct}% من {pos} في {context}',
+    'Meglio del {pct}% dei {pos} in {context}',
+    'Meilleur que {pct}% des {pos} en {context}',
   ],
   m_playedMoreThan: [
     'Jugó más minutos que el {pct}% del resto de los jugadores',

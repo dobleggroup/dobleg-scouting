@@ -131,8 +131,10 @@ export default function Step1Archivo({ parsed, informe, onParsed, onChange, onNe
   const [parsing, setParsing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [photoBusy, setPhotoBusy] = useState(false)
+  const [crestBusy, setCrestBusy] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
+  const crestInputRef = useRef<HTMLInputElement>(null)
 
   const [dbQuery, setDbQuery] = useState('')
   const [dbApplied, setDbApplied] = useState<{ name: string; parts: string[] } | null>(null)
@@ -183,6 +185,21 @@ export default function Step1Archivo({ parsed, informe, onParsed, onChange, onNe
       setError('No se pudo procesar la foto.')
     } finally {
       setPhotoBusy(false)
+    }
+  }
+
+  async function handleCrest(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !informe) return
+    setCrestBusy(true)
+    try {
+      const dataUrl = await resizePhoto(file, 200)
+      onChange({ ...informe, ligaCrestDataUrl: dataUrl })
+    } catch {
+      setError('No se pudo procesar el escudo de liga.')
+    } finally {
+      setCrestBusy(false)
     }
   }
 
@@ -323,6 +340,44 @@ export default function Step1Archivo({ parsed, informe, onParsed, onChange, onNe
                 {photoBusy ? 'Procesando...' : 'Subir foto'}
               </button>
               <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mt-1">Se redimensiona automáticamente</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-apple-gray-200 dark:border-apple-gray-800 bg-white dark:bg-apple-gray-900 p-5">
+          <label className="block text-sm font-semibold text-apple-gray-900 dark:text-white mb-2">Escudo de liga</label>
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-2xl overflow-hidden flex-shrink-0 bg-apple-gray-100 dark:bg-apple-gray-800 flex items-center justify-center p-2">
+              {informe?.ligaCrestDataUrl ? (
+                <img src={informe.ligaCrestDataUrl} alt="Escudo de liga" className="w-full h-full object-contain" />
+              ) : (
+                <svg className="w-6 h-6 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3l7 3v5c0 4-3 7.5-7 8.5-4-1-7-4.5-7-8.5V6l7-3z" />
+                </svg>
+              )}
+            </div>
+            <div className="flex-1">
+              <input ref={crestInputRef} type="file" accept="image/*" onChange={handleCrest} className="hidden" />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={!informe || crestBusy}
+                  onClick={() => crestInputRef.current?.click()}
+                  className="px-3 py-2 rounded-xl text-xs font-medium bg-apple-gray-100 dark:bg-apple-gray-800 text-apple-gray-700 dark:text-apple-gray-200 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {crestBusy ? 'Procesando...' : 'Subir escudo de liga'}
+                </button>
+                {informe?.ligaCrestDataUrl && (
+                  <button
+                    type="button"
+                    onClick={() => informe && onChange({ ...informe, ligaCrestDataUrl: undefined })}
+                    className="px-3 py-2 rounded-xl text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 hover:text-red-500 transition-colors"
+                  >
+                    Quitar
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mt-1">Se muestra en el encabezado del informe</p>
             </div>
           </div>
         </div>

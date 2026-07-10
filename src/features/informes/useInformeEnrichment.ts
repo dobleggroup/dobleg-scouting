@@ -21,6 +21,16 @@ export interface Continuity {
 
 export interface InjuryRow { type: string; start: string; end: string | null }
 
+// Fila de "Últimos 5 partidos" computada desde el historial de la API (por id).
+export interface Last5Row {
+  rival: string
+  result: string                       // "2-1" o "—"
+  outcome: 'win' | 'draw' | 'loss' | null
+  rating: string                       // rating de la API a 1 decimal, o "—"
+  minutes: number
+  date: string                         // fecha corta dd/mm
+}
+
 export interface InformeEnrichment {
   isInternal: boolean
   hasPhysical: boolean
@@ -33,6 +43,7 @@ export interface InformeEnrichment {
   levelByMonth: LinePoint[]
   marketEvolution: LinePoint[]
   continuity: Continuity | null
+  last5: Last5Row[]
   injuries: InjuryRow[]
   loading: boolean
 }
@@ -49,6 +60,7 @@ const EMPTY: InformeEnrichment = {
   levelByMonth: [],
   marketEvolution: [],
   continuity: null,
+  last5: [],
   injuries: [],
   loading: false,
 }
@@ -147,6 +159,29 @@ export function useInformeEnrichment(informe: Informe | null): InformeEnrichment
       .sort((a, b) => new Date(a.fixture!.date).getTime() - new Date(b.fixture!.date).getTime())
     const last5 = dated.slice(-5)
     const last10 = dated.slice(-10)
+
+    // Últimos 5 partidos desde la API (rival, resultado, outcome, rating, minutos, fecha).
+    const last5Rows: Last5Row[] = last5.map(m => {
+      const fx = m.fixture!
+      const isHome = m.team_id === fx.home_team_id
+      const rival = (isHome ? fx.away_team?.name : fx.home_team?.name) || '—'
+      const hasScore = fx.score_home != null && fx.score_away != null
+      const result = hasScore ? `${fx.score_home}-${fx.score_away}` : '—'
+      let outcome: Last5Row['outcome'] = null
+      if (hasScore) {
+        const own = isHome ? (fx.score_home as number) : (fx.score_away as number)
+        const opp = isHome ? (fx.score_away as number) : (fx.score_home as number)
+        outcome = own > opp ? 'win' : own < opp ? 'loss' : 'draw'
+      }
+      return {
+        rival,
+        result,
+        outcome,
+        rating: m.rating != null ? m.rating.toFixed(1) : '—',
+        minutes: m.minutes ?? 0,
+        date: dayMonth(new Date(fx.date)),
+      }
+    })
     const continuity: Continuity | null = dated.length
       ? {
           matches: dated.filter(m => (m.minutes ?? 0) > 0).length,
@@ -192,6 +227,7 @@ export function useInformeEnrichment(informe: Informe | null): InformeEnrichment
       levelByMonth,
       marketEvolution,
       continuity,
+      last5: last5Rows,
       injuries,
       loading: matchesLoading || mvLoading || injLoading,
     }

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Informe, InformeContent, MetricStat, MetricDef, ScatterAssignment } from '@/features/informes/types'
 import { exportInformePDF } from '@/features/informes/exportInformePDF'
-import { exportInformeHTML, buildInformeHtml, type EvolutionChartExport } from '@/features/informes/exportInformeHTML'
+import { exportInformeHTML, buildInformeHtml, contextPercentile, type EvolutionChartExport } from '@/features/informes/exportInformeHTML'
+import { fetchPlayerTransfers, type PlayerTransfer } from '@/services/footballApiService'
 import { uploadInformeHtml } from '@/features/informes/shareInforme'
 import MetricEvolutionChart from '@/components/charts/MetricEvolutionChart'
 import { lineSvg } from '@/features/informes/chartSvg'
@@ -102,6 +103,18 @@ function BrandLogo({ height = 22 }: { height?: number }) {
   )
 }
 
+/** Escudo de liga subido en el paso 1. Solo renderiza data URLs de imagen (sanitizado). */
+function LigaCrest({ dataUrl, height = 30 }: { dataUrl?: string; height?: number }) {
+  if (!dataUrl || !/^data:image\//i.test(dataUrl)) return null
+  return (
+    <img
+      src={dataUrl}
+      alt="Liga"
+      style={{ height, width: 'auto', maxWidth: 46, objectFit: 'contain', borderRadius: 7, padding: 3, backgroundColor: 'rgba(255,255,255,0.05)', boxShadow: '0 2px 8px rgba(0,0,0,0.4)', flexShrink: 0 }}
+    />
+  )
+}
+
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <div className="mb-3">
@@ -157,7 +170,7 @@ function renderMainStats(content: InformeContent, lang: Lang) {
   )
 }
 
-function PlayerRail({ informe, lang }: { informe: Informe; lang: Lang }) {
+function PlayerRail({ informe, lang, ctxPct }: { informe: Informe; lang: Lang; ctxPct: number | null }) {
   const { content } = informe
   const rolYPosicion = [content.posicion, content.rol].filter(Boolean).join(' · ')
   // Comparación de rating vs su posición en su liga (si hay percentil de la DB).
@@ -168,6 +181,15 @@ function PlayerRail({ informe, lang }: { informe: Informe; lang: Lang }) {
           pct: Math.round(pct),
           pos: content.posicion || t(lang, 'r_agent') /* fallback improbable */,
           league: informe.dbLeagueName || content.liga || '—',
+        })
+      : null
+  // Segunda comparación: vs el pool del informe (contexto, ej. Liga MX).
+  const ratingVsContext =
+    ctxPct != null
+      ? t(lang, 'm_ratingVsContext', {
+          pct: ctxPct,
+          pos: content.posicion || '—',
+          context: informe.contextoComparacion || content.liga || '—',
         })
       : null
   return (
@@ -191,6 +213,11 @@ function PlayerRail({ informe, lang }: { informe: Informe; lang: Lang }) {
           {ratingCompare && (
             <p className="text-xs text-center mt-1.5 px-2 leading-snug" style={{ color: DG.muted }}>
               <span style={{ color: DG.green, fontWeight: 600 }}>{ratingCompare}</span>
+            </p>
+          )}
+          {ratingVsContext && (
+            <p className="text-xs text-center mt-1 px-2 leading-snug" style={{ color: DG.muted, fontWeight: 600 }}>
+              {ratingVsContext}
             </p>
           )}
         </div>
@@ -271,6 +298,18 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [evoKeysSig, informe.dbPlayerName])
 
+  // ── Historial de traspasos (API-Football, por id de la DB) ──
+  const [transfers, setTransfers] = useState<PlayerTransfer[]>([])
+  useEffect(() => {
+    const id = informe.dbPlayerId
+    if (!id) { setTransfers([]); return }
+    let alive = true
+    fetchPlayerTransfers(id)
+      .then(rows => { if (alive) setTransfers(rows) })
+      .catch(() => { if (alive) setTransfers([]) })
+    return () => { alive = false }
+  }, [informe.dbPlayerId])
+
   useEffect(() => () => { if (exportMsgTimer.current) clearTimeout(exportMsgTimer.current) }, [])
 
   function showExportMsg(msg: { ok: boolean; text: string }) {
@@ -279,8 +318,13 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
     exportMsgTimer.current = setTimeout(() => setExportMsg(null), 3500)
   }
 
-  const matches = content.ultimos5.filter(m => m.rival || m.resultado || m.rating || m.minutos)
   const comparables = content.comparables.filter(c => c.jugador || c.club || c.rating || c.delta)
+  // Traspasos ordenados (más recientes primero) para la pestaña Carrera.
+  const transfersSorted = [...transfers]
+    .filter(tr => tr.teams?.in?.name || tr.teams?.out?.name)
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+  // Percentil "vs el contexto del informe" (promedio de percentiles de los stats).
+  const ctxPct = contextPercentile(stats)
 
   const visibleTabs = TAB_IDS.filter(id =>
     id === 'fisico' ? showFisico : id === 'evolutivas' ? showEvolutivas : true,
@@ -300,12 +344,13 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
             {initials(content.nombre || '?')}
           </div>
         )}
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h1 className="text-xl font-bold truncate" style={{ color: DG.text }}>{content.nombre || 'Sin nombre'}</h1>
           <p className="text-sm truncate" style={{ color: DG.muted }}>
             {[content.club, content.posicion, content.rol].filter(Boolean).join(' · ') || '—'}
           </p>
         </div>
+        <LigaCrest dataUrl={informe.ligaCrestDataUrl} />
       </div>
     )
   }
@@ -315,7 +360,9 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
     const minStat = stats.find(s => normalizeForSearch(s.def.label) === 'minutos jugados')
       ?? stats.find(s => normalizeForSearch(s.def.label).includes('minutos'))
     const minPct = minStat?.percentile ?? null
-    const hasAny = enrichment.levelEvolution.length >= 2 || !!c || enrichment.injuries.length > 0
+    const last5 = enrichment.last5
+    const outcomeColor = (o: (typeof last5)[number]['outcome']) => o === 'win' ? DG.green : o === 'loss' ? '#EF4444' : DG.muted
+    const hasAny = enrichment.levelEvolution.length >= 2 || !!c || enrichment.injuries.length > 0 || last5.length > 0
     return (
       <div className="space-y-6">
         {enrichment.levelByMatch.length >= 2 && (() => {
@@ -384,6 +431,39 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
             )}
           </div>
         )}
+        {last5.length > 0 && (
+          <div data-informe-section>
+            <SectionTitle>{t(lang, 't_last5')}</SectionTitle>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide border-b" style={{ color: DG.muted, borderColor: DG.border }}>
+                    <th className="py-2 font-medium">{t(lang, 'h_opponent')}</th>
+                    <th className="py-2 font-medium">{t(lang, 'h_result')}</th>
+                    <th className="py-2 font-medium">{t(lang, 's_rating')}</th>
+                    <th className="py-2 font-medium">{t(lang, 's_minutes')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {last5.map((r, idx) => {
+                    const col = outcomeColor(r.outcome)
+                    return (
+                      <tr key={idx} className="border-b last:border-0" style={{ borderColor: DG.hairline }}>
+                        <td className="py-2" style={{ color: DG.text }}>{r.rival || '—'}</td>
+                        <td className="py-2 font-semibold" style={{ color: col }}>
+                          <span className="inline-block w-2 h-2 rounded-full align-middle mr-1.5" style={{ backgroundColor: col }} />
+                          {r.result}
+                        </td>
+                        <td className="py-2 tabular-nums" style={{ color: DG.text }}>{r.rating}</td>
+                        <td className="py-2 tabular-nums" style={{ color: DG.text }}>{r.minutes}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
         {!hasAny && (
           <p className="text-sm italic" style={{ color: DG.muted }}>{t(lang, 'm_selectPlayerData')}</p>
         )}
@@ -436,35 +516,6 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
   function renderCarrera() {
     return (
       <div className="space-y-5">
-        <div data-informe-section>
-          <SectionTitle>{t(lang, 't_last5')}</SectionTitle>
-          {matches.length === 0 ? (
-            <p className="text-sm italic" style={{ color: DG.muted }}>{t(lang, 'm_noMatches')}</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs uppercase tracking-wide border-b" style={{ color: DG.muted, borderColor: DG.border }}>
-                    <th className="py-2 font-medium">{t(lang, 'h_opponent')}</th>
-                    <th className="py-2 font-medium">{t(lang, 'h_result')}</th>
-                    <th className="py-2 font-medium">{t(lang, 's_rating')}</th>
-                    <th className="py-2 font-medium">{t(lang, 's_minutes')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {matches.map((m, idx) => (
-                    <tr key={idx} className="border-b last:border-0" style={{ borderColor: DG.hairline }}>
-                      <td className="py-2" style={{ color: DG.text }}>{m.rival || '—'}</td>
-                      <td className="py-2" style={{ color: DG.text }}>{m.resultado || '—'}</td>
-                      <td className="py-2" style={{ color: DG.text }}>{m.rating || '—'}</td>
-                      <td className="py-2" style={{ color: DG.text }}>{m.minutos || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
         <div data-informe-section className="grid grid-cols-2 gap-3">
           <div className="rounded-xl p-3" style={{ backgroundColor: DG.cardInner }}>
             <p className="text-xs mb-1" style={{ color: DG.muted }}>{t(lang, 'r_contract')}</p>
@@ -474,6 +525,30 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
             <p className="text-xs mb-1" style={{ color: DG.muted }}>{t(lang, 'r_marketValue')}</p>
             <p className="text-sm font-semibold tabular-nums" style={{ color: DG.text }}>{content.valorMercado || '—'}</p>
           </div>
+        </div>
+        <div data-informe-section>
+          <SectionTitle>{t(lang, 't_transfers')}</SectionTitle>
+          {transfersSorted.length === 0 ? (
+            <p className="text-sm italic" style={{ color: DG.muted }}>{t(lang, 'm_noTransfers')}</p>
+          ) : (
+            <div className="space-y-1.5">
+              {transfersSorted.map((tr, idx) => {
+                const meta = [tr.date, tr.type, tr.fee].filter(Boolean).join(' · ')
+                const logo = (u: string | null | undefined) =>
+                  u && /^https?:\/\//i.test(u) ? <img src={u} alt="" className="w-[18px] h-[18px] object-contain rounded-[3px]" loading="lazy" /> : null
+                return (
+                  <div key={idx} className="flex items-center justify-between gap-3 flex-wrap rounded-lg px-3 py-2" style={{ backgroundColor: DG.cardInner }}>
+                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold" style={{ color: DG.text }}>
+                      {logo(tr.teams?.out?.logo)}{tr.teams?.out?.name || '—'}
+                      <span style={{ color: DG.muted }}>→</span>
+                      {logo(tr.teams?.in?.logo)}{tr.teams?.in?.name || '—'}
+                    </span>
+                    <span className="text-xs tabular-nums" style={{ color: DG.muted }}>{meta}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
         {showMarketEvo && (
           <div data-informe-section>
@@ -738,7 +813,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
     setSharing(true)
     try {
       const logoDataUrl = await loadLogoDataUrl('/brand/logo-white.png')
-      exportInformeHTML({ informe, stats, matrix, defs, logoDataUrl, enrichment, evolution: evoToExport(evoCharts) })
+      exportInformeHTML({ informe, stats, matrix, defs, logoDataUrl, enrichment, evolution: evoToExport(evoCharts), transfers })
       showExportMsg({ ok: true, text: 'HTML descargado ✓ (se abre sin internet)' })
     } catch (e) {
       console.error('Export HTML error:', e)
@@ -755,7 +830,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
     setSharing(true)
     try {
       const logoDataUrl = await loadLogoDataUrl('/brand/logo-white.png')
-      const html = buildInformeHtml({ informe, stats, matrix, defs, logoDataUrl, enrichment, evolution: evoToExport(evoCharts) })
+      const html = buildInformeHtml({ informe, stats, matrix, defs, logoDataUrl, enrichment, evolution: evoToExport(evoCharts), transfers })
       const url = await uploadInformeHtml(html, informe.id, content.nombre || 'informe')
       setShareUrl(url)
       try { await navigator.clipboard.writeText(url) } catch { /* el portapapeles puede fallar sin https/gesto */ }
@@ -840,11 +915,12 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
         {/* ── Banda de marca ── */}
         <div className="flex items-center gap-3 pb-4 border-b" style={{ borderColor: DG.border }}>
           <BrandLogo height={38} />
-          <span className="text-sm truncate" style={{ color: DG.muted }}>{informe.contextoComparacion || t(lang, 'm_scoutingReport')}</span>
+          <span className="text-sm truncate flex-1" style={{ color: DG.muted }}>{informe.contextoComparacion || t(lang, 'm_scoutingReport')}</span>
+          <LigaCrest dataUrl={informe.ligaCrestDataUrl} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
-          <PlayerRail informe={informe} lang={lang} />
+          <PlayerRail informe={informe} lang={lang} ctxPct={ctxPct} />
 
           <div className="rounded-[18px] border p-5 min-w-0" style={{ borderColor: DG.border, backgroundColor: DG.card }}>
             {/* ── Tabs ── */}
