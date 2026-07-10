@@ -9,12 +9,13 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
-# Informes compartibles: proxy a Supabase Storage con la marca propia.
-# status=200 = proxy real (la URL de dobleg-scouting.netlify.app queda en la barra).
+# Informes compartibles: se sirven vía una función que baja el HTML de Supabase
+# Storage y lo re-emite como text/html (Storage lo sirve como text/plain + un CSP
+# sandbox que deja la página en blanco). La URL branded /i/<slug> no cambia.
 # Debe ir ANTES del catch-all de la SPA, si no lo pisa.
 [[redirects]]
   from = "/i/*"
-  to = "https://qgwmxjjumauortbwvivu.supabase.co/storage/v1/object/public/informes-compartidos/:splat"
+  to = "/.netlify/functions/informe?key=:splat"
   status = 200
   force = true
 
