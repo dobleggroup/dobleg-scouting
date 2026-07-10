@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseMetricSchema, buildMetricSeries } from './wyscoutEvolutionService'
+import { parseMetricSchema, buildMetricSeries, nameKeys } from './wyscoutEvolutionService'
 
 // Header real: label del par ocupa 2 columnas (intentos, logrados); la 2da viene vacía.
 const HEADERS = [
@@ -31,5 +31,21 @@ describe('buildMetricSeries', () => {
   it('métrica simple devuelve el valor crudo', () => {
     const s = buildMetricSeries(rows, HEADERS, 'xg')
     expect(s[0].value).toBeCloseTo(0.06, 3)
+  })
+})
+
+describe('nameKeys (match tolerante: forma corta vs nombre completo)', () => {
+  it('la forma corta "J. Paradela" comparte clave con "José Paradela"', () => {
+    // La planilla interno usa "J. Paradela"; la Wyscout "José Paradela".
+    expect(nameKeys('J. Paradela')).toContain('j paradela')
+    expect(nameKeys('José Paradela')).toContain('j paradela')
+  })
+  it('"M. Palacios" comparte clave con "Matías Palacios"', () => {
+    expect(nameKeys('M. Palacios')).toContain('m palacios')
+    expect(nameKeys('Matías Palacios')).toContain('m palacios')
+  })
+  it('inicial distinta NO comparte clave (F. Paradela vs José Paradela)', () => {
+    const a = new Set(nameKeys('F. Paradela'))
+    expect(nameKeys('José Paradela').some(k => a.has(k))).toBe(false)
   })
 })

@@ -20,6 +20,21 @@ export interface WyscoutPoint {
 
 const CTX_COLS = new Set(['Jugador', 'Partido', 'Competition', 'Date', 'Minutos jugados'])
 
+// Claves de match para un nombre. Tolera "Nombre Apellido", "Apellido" e
+// "Inicial. Apellido" (la planilla interno usa la forma corta "J. Paradela",
+// la Wyscout el nombre completo "José Paradela"). Devuelve el nombre normalizado
+// completo y la clave inicial+apellido ("j paradela").
+export function nameKeys(name: string): string[] {
+  const norm = normalizeName(name).replace(/\./g, ' ').replace(/\s+/g, ' ').trim()
+  if (!norm) return []
+  const parts = norm.split(' ')
+  const keys = [norm]
+  if (parts.length >= 2 && parts[0].length > 0) {
+    keys.push(`${parts[0][0]} ${parts[parts.length - 1]}`)
+  }
+  return keys
+}
+
 // key derivado del "noun" (parte antes del "/") para que "Pases / logrados" => "pases".
 function slug(label: string): string {
   const noun = label.split('/')[0]
@@ -102,21 +117,36 @@ export function loadWyscoutEvolution(): Promise<WyscoutEvolutionData> {
     const metrics = parseMetricSchema(headers)
     const idxJug = headers.indexOf('Jugador')
 
-    const byPlayer = new Map<string, string[][]>()
+    // Agrupar filas por nombre crudo de la planilla.
+    const byRawName = new Map<string, string[][]>()
     for (const r of body) {
-      const key = normalizeName(idxJug >= 0 ? (r[idxJug] ?? '') : '')
-      if (!key) continue
-      if (!byPlayer.has(key)) byPlayer.set(key, [])
-      byPlayer.get(key)!.push(r)
+      const raw = idxJug >= 0 ? (r[idxJug] ?? '') : ''
+      if (!raw.trim()) continue
+      if (!byRawName.has(raw)) byRawName.set(raw, [])
+      byRawName.get(raw)!.push(r)
+    }
+
+    // Índice tolerante: cada jugador queda accesible por su nombre completo
+    // normalizado y por su clave inicial+apellido.
+    const byKey = new Map<string, string[][]>()
+    for (const [raw, rows] of byRawName) {
+      for (const k of nameKeys(raw)) {
+        if (!byKey.has(k)) byKey.set(k, rows)
+      }
+    }
+
+    const lookup = (name: string): string[][] => {
+      for (const k of nameKeys(name)) {
+        const rows = byKey.get(k)
+        if (rows) return rows
+      }
+      return []
     }
 
     return {
       metrics,
-      hasPlayer: (name: string) => byPlayer.has(normalizeName(name)),
-      getSeries: (name: string, metricKey: string) => {
-        const rows = byPlayer.get(normalizeName(name)) ?? []
-        return buildMetricSeries(rows, headers, metricKey)
-      },
+      hasPlayer: (name: string) => lookup(name).length > 0,
+      getSeries: (name: string, metricKey: string) => buildMetricSeries(lookup(name), headers, metricKey),
     }
   })()
   return cache
