@@ -54,6 +54,7 @@ const BASE_COLUMNS: Column[] = [
 
 const BASE_COLUMNS_INTERNAL: Column[] = [
   { key: 'Jugador', label: 'Jugador', sortable: true, align: 'left' },
+  { key: 'videoFreshness', label: 'Video Cargado', sortable: false, align: 'center' },
   { key: 'Equipo', label: 'Equipo', sortable: true, align: 'left', className: 'hidden lg:table-cell' },
   { key: 'Posición', label: 'Pos', sortable: true, align: 'left', className: 'hidden sm:table-cell' },
   { key: 'ageNum', label: 'Edad', sortable: true, align: 'center' },
@@ -215,18 +216,15 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
                     <span className="font-semibold text-apple-gray-800 dark:text-white text-sm truncate">{player.Jugador}</span>
                     <ScoutsGGBadge playerName={player.Jugador} />
                     <ContractBadge status={player.contractStatus} monthsRemaining={player.monthsRemaining} />
-                    {source === 'interno' && (() => {
-                      const fr: VideoFreshness = videoFreshnessByKey.get(playerVideoKey(player.Jugador)) ?? 'none'
-                      return (
-                        <span
-                          title={FRESH_LABEL[fr]}
-                          className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${FRESH_DOT[fr]}`}
-                        />
-                      )
-                    })()}
                   </div>
-                  <p className="text-xs text-apple-gray-500 truncate mt-0.5">
-                    {[player.Liga, player.Equipo, player.Edad ? `${player.Edad}a` : null].filter(Boolean).join(' · ')}
+                  <p className="text-xs text-apple-gray-500 truncate mt-0.5 flex items-center gap-1.5">
+                    <span className="truncate">{[player.Liga, player.Equipo, player.Edad ? `${player.Edad}a` : null].filter(Boolean).join(' · ')}</span>
+                    {source === 'interno' && (
+                      <span className="inline-flex items-center gap-1 text-2xs text-apple-gray-400 flex-shrink-0">
+                        Video
+                        <span className={`inline-block w-2 h-2 rounded-full ${FRESH_DOT[videoFreshnessByKey.get(playerVideoKey(player.Jugador)) ?? 'none']}`} />
+                      </span>
+                    )}
                   </p>
                 </div>
                 {/* Score */}
@@ -317,15 +315,6 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
                             status={player.contractStatus}
                             monthsRemaining={player.monthsRemaining}
                           />
-                          {source === 'interno' && (() => {
-                            const fr: VideoFreshness = videoFreshnessByKey.get(playerVideoKey(player.Jugador)) ?? 'none'
-                            return (
-                              <span
-                                title={FRESH_LABEL[fr]}
-                                className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${FRESH_DOT[fr]}`}
-                              />
-                            )
-                          })()}
                         </div>
                       </div>
                     </div>
@@ -334,6 +323,15 @@ export default function PlayerTable({ players, source, isLoading, selectedMetric
                   {source === 'externo' && (
                     <td className="px-3 py-3 hidden md:table-cell">
                       <span className="text-apple-gray-500 dark:text-apple-gray-400 text-xs">{player.Liga || '—'}</span>
+                    </td>
+                  )}
+                  {/* Video Cargado (internal only) */}
+                  {source === 'interno' && (
+                    <td className="px-3 py-3 text-center">
+                      {(() => {
+                        const fr: VideoFreshness = videoFreshnessByKey.get(playerVideoKey(player.Jugador)) ?? 'none'
+                        return <span title={FRESH_LABEL[fr]} className={`inline-block w-2.5 h-2.5 rounded-full ${FRESH_DOT[fr]}`} />
+                      })()}
                     </td>
                   )}
                   {/* Equipo */}
