@@ -70,6 +70,8 @@ export interface Informe {
   ligaCrestDataUrl?: string            // escudo de la liga (data URL), subido en el paso 1
   protagonistIndex: number            // índice de la fila protagonista en rows
   comparePlayerIndices?: number[]     // índices de jugadores a comparar en el radar (máx 2)
+  compareMetrics?: string[]           // metric keys elegidas para la 2da línea "Mejor que X%" vs otra liga
+  compareLeague?: string              // nombre de la liga de comparación de la 2da línea (ej. "Liga MX")
   evolutionCharts?: string[]          // metric keys Wyscout (máx 8); solo jugadores internos
   dbPlayerId?: number                 // id del jugador en la DB (Supabase) si se linkeó en el paso 1
   dbPlayerName?: string               // nombre del jugador en la DB (para match por nombre: GPS/valor histórico)

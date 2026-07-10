@@ -198,7 +198,6 @@ const S: Record<string, Six> = {
     'Meglio del {pct}% dei {pos} in {league}',
     'Meilleur que {pct}% des {pos} en {league}',
   ],
-  m_comparedVs: ['Comparado vs {context}', 'Compared vs {context}', 'Comparado vs {context}', 'مقارنةً بـ {context}', 'Confrontato con {context}', 'Comparé à {context}'],
   m_playedMoreThan: [
     'Jugó más minutos que el {pct}% del resto de los jugadores',
     'Played more minutes than {pct}% of the other players',

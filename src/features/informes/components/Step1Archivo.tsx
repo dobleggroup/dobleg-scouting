@@ -239,7 +239,9 @@ export default function Step1Archivo({ parsed, informe, onParsed, onChange, onNe
         posicion: p.primary_position ? displayPosition(p.primary_position) : informe.content.posicion,
         edad: edad || informe.content.edad,
         nacionalidad: p.nationality ?? informe.content.nacionalidad,
-        liga: p.league?.name ?? informe.content.liga,
+        // Auto-completa la liga real desde la DB para la 1ra línea "Mejor que X%"
+        // (evita el "en —"); no pisa la liga si el usuario ya la escribió.
+        liga: informe.content.liga || p.league?.name || '',
         contrato: p.contract_end_date ?? informe.content.contrato,
         valorMercado: mvFormatted || informe.content.valorMercado,
         transfermarktUrl: p.transfermarkt_url ?? informe.content.transfermarktUrl,

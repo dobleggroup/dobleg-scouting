@@ -5,6 +5,7 @@ import { normalizeForSearch } from '@/lib/search'
 import { suggestAxisFloor } from '@/features/informes/chartData'
 import { loadWyscoutEvolution } from '@/services/wyscoutEvolutionService'
 import type { WyscoutEvolutionData } from '@/services/wyscoutEvolutionService'
+import { comparePercentile } from '@/features/informes/exportInformeHTML'
 
 const MAX_EVOLUTION_CHARTS = 8
 
@@ -163,6 +164,98 @@ function CompareSelector({ players, compareIndices, onChange }: CompareSelectorP
           <option key={p.idx} value={p.idx}>{p.name || `Fila ${p.idx + 1}`}</option>
         ))}
       </select>
+    </div>
+  )
+}
+
+// ─── Comparación vs otra liga (2da línea "Mejor que X%") ───────────────────
+
+interface CompareLeagueSectionProps {
+  stats: MetricStat[]
+  compareLeague: string
+  compareMetrics: string[]
+  posicion: string
+  onChangeLeague: (v: string) => void
+  onChangeMetrics: (keys: string[]) => void
+}
+
+/**
+ * Arma la 2da línea del rail del informe ("Mejor que el X% de {pos} en {liga}"),
+ * comparando contra el pool del informe con las métricas elegidas (o todas si no
+ * se elige ninguna). El texto de la liga es libre (ej. "Liga MX").
+ */
+function CompareLeagueSection({ stats, compareLeague, compareMetrics, posicion, onChangeLeague, onChangeMetrics }: CompareLeagueSectionProps) {
+  const available = stats.filter(s => !compareMetrics.includes(s.def.key))
+  const pct = comparePercentile(stats, compareMetrics)
+
+  function add(key: string) {
+    if (!key || compareMetrics.includes(key)) return
+    onChangeMetrics([...compareMetrics, key])
+  }
+  function remove(key: string) {
+    onChangeMetrics(compareMetrics.filter(k => k !== key))
+  }
+
+  return (
+    <div className="rounded-2xl border border-apple-gray-200 dark:border-apple-gray-800 bg-white dark:bg-apple-gray-900 p-5">
+      <h3 className="text-sm font-semibold text-apple-gray-900 dark:text-white">Comparación vs otra liga</h3>
+      <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mt-1 mb-3">
+        Agrega una segunda línea <span className="font-medium text-apple-gray-500 dark:text-apple-gray-400">“Mejor que el X%…”</span> bajo el Score GG, comparando contra la liga que elijas.
+      </p>
+      <label className="block text-xs font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-1.5">Liga de comparación</label>
+      <input
+        type="text"
+        value={compareLeague}
+        onChange={e => onChangeLeague(e.target.value)}
+        placeholder="Ej: Liga MX"
+        className="w-full px-3 py-2.5 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-900 dark:text-white placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green text-sm mb-4"
+      />
+      <span className="block text-xs font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-1.5">Métricas para el promedio</span>
+      {compareMetrics.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {compareMetrics.map(key => (
+            <span
+              key={key}
+              className="inline-flex items-center gap-1.5 pl-3 pr-2 py-1 rounded-full bg-brand-green/10 border border-brand-green/25 text-xs font-medium text-brand-green"
+            >
+              {labelFor(stats, key)}
+              <button
+                type="button"
+                onClick={() => remove(key)}
+                className="text-brand-green/50 hover:text-brand-green transition-colors ml-0.5"
+                aria-label="Quitar métrica"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <select
+        value=""
+        onChange={e => add(e.target.value)}
+        disabled={available.length === 0}
+        className="w-full px-3 py-2 rounded-xl text-xs border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-600 dark:text-apple-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        <option value="">+ Agregar</option>
+        {available.map(s => (
+          <option key={s.def.key} value={s.def.key}>{s.def.label}</option>
+        ))}
+      </select>
+      <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mt-2">
+        Si no elegís ninguna, se usan todas las métricas comparables.
+      </p>
+      {pct != null && (
+        <div className="mt-3 rounded-xl border border-brand-green/30 bg-brand-green/5 px-3 py-2.5">
+          <p className="text-xs text-apple-gray-600 dark:text-apple-gray-300">
+            Mejor que el <span className="font-bold text-brand-green">{pct}%</span> de{' '}
+            <span className="font-medium text-apple-gray-700 dark:text-apple-gray-200">{posicion || '…'}</span> en{' '}
+            <span className="font-medium text-apple-gray-700 dark:text-apple-gray-200">{compareLeague || '—'}</span>
+          </p>
+        </div>
+      )}
     </div>
   )
 }
@@ -404,6 +497,11 @@ interface Step2MetricasProps {
   compareIndices: number[]
   onChangeCompare: (idxs: number[]) => void
   matrix: Record<string, (number | null)[]>
+  posicion: string
+  compareLeague: string
+  compareMetrics: string[]
+  onChangeCompareLeague: (v: string) => void
+  onChangeCompareMetrics: (keys: string[]) => void
   dbPlayerName?: string
   evolutionCharts: string[]
   onChangeEvolutionCharts: (keys: string[]) => void
@@ -419,6 +517,11 @@ export default function Step2Metricas({
   compareIndices,
   onChangeCompare,
   matrix,
+  posicion,
+  compareLeague,
+  compareMetrics,
+  onChangeCompareLeague,
+  onChangeCompareMetrics,
   dbPlayerName,
   evolutionCharts,
   onChangeEvolutionCharts,
@@ -580,6 +683,15 @@ export default function Step2Metricas({
             onChange={onChangeCompare}
           />
         </div>
+
+        <CompareLeagueSection
+          stats={stats}
+          compareLeague={compareLeague}
+          compareMetrics={compareMetrics}
+          posicion={posicion}
+          onChangeLeague={onChangeCompareLeague}
+          onChangeMetrics={onChangeCompareMetrics}
+        />
 
         <EvolutionChartsSection
           dbPlayerName={dbPlayerName}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildInformeHtml, ratingColor } from './exportInformeHTML'
+import { buildInformeHtml, ratingColor, comparePercentile } from './exportInformeHTML'
 import { translateTransferType } from './i18n'
 import type { Informe, MetricDef, MetricStat } from './types'
 import type { InformeEnrichment } from './useInformeEnrichment'
@@ -213,10 +213,46 @@ describe('buildInformeHtml', () => {
     expect(html).toContain('Sin traspasos registrados')
   })
 
-  it('muestra la línea de contexto de comparación cerca del gauge (sin card de rating)', () => {
+  it('no muestra la 2da línea si falta la liga o las métricas comparables', () => {
     const html = buildInformeHtml({ informe: makeInforme(), stats: emptyStats, matrix: emptyMatrix, defs: emptyDefs })
-    expect(html).toContain('Comparado vs Contexto de prueba')
+    expect(html).not.toContain('Comparado vs')
     expect(html).not.toContain('class="dg-inf-rating"')
+  })
+
+  it('muestra la 2da línea "Mejor que X%" vs la liga elegida con las métricas seleccionadas', () => {
+    const def = makeDef({ key: 'goles', label: 'Goles' })
+    const stats: MetricStat[] = [
+      { def, value: 3, avg: 1, percentile: 80, avgPercentile: 50, color: 'green', rank: 1, total: 10 },
+    ]
+    const informe = makeInforme({ compareLeague: 'Liga MX', compareMetrics: ['goles'] })
+    const html = buildInformeHtml({ informe, stats, matrix: { goles: [3] }, defs: [def] })
+    // content.posicion = 'DEL' en makeInforme(); reusa la key m_ratingVsPos.
+    expect(html).toContain('Mejor que el 80% de DEL en Liga MX')
+    expect(html).not.toContain('Comparado vs')
+  })
+})
+
+describe('comparePercentile', () => {
+  const mk = (key: string, percentile: number | null): MetricStat => ({
+    def: makeDef({ key, label: key }),
+    value: 1, avg: 1, percentile, avgPercentile: null, color: 'neutral', rank: null, total: 5,
+  })
+
+  it('promedia solo las métricas elegidas', () => {
+    const stats = [mk('a', 80), mk('b', 40), mk('c', 20)]
+    expect(comparePercentile(stats, ['a', 'b'])).toBe(60)
+  })
+
+  it('sin métricas elegidas usa todas las que tienen percentil', () => {
+    const stats = [mk('a', 90), mk('b', 30), mk('c', null)]
+    expect(comparePercentile(stats, undefined)).toBe(60) // (90 + 30) / 2
+    expect(comparePercentile(stats, [])).toBe(60)
+  })
+
+  it('devuelve null si ninguna métrica comparable tiene percentil', () => {
+    const stats = [mk('a', null), mk('b', null)]
+    expect(comparePercentile(stats, undefined)).toBeNull()
+    expect(comparePercentile(stats, ['a'])).toBeNull()
   })
 })
 

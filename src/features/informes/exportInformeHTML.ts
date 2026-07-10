@@ -53,6 +53,19 @@ function initials(name: string): string {
   return parts.join('') || '?'
 }
 
+/**
+ * Percentil promedio para la 2da línea "Mejor que X%" del rail: promedia el
+ * percentil de las métricas elegidas por el usuario (si no eligió ninguna, usa
+ * todas las que tengan percentil). Devuelve null si no hay ninguna comparable.
+ */
+export function comparePercentile(stats: MetricStat[], metricKeys: string[] | undefined): number | null {
+  const withPct = (metricKeys && metricKeys.length)
+    ? stats.filter(s => metricKeys.includes(s.def.key) && s.percentile != null)
+    : stats.filter(s => s.percentile != null) // default: todas las que tengan percentil
+  if (withPct.length === 0) return null
+  return Math.round(withPct.reduce((a, s) => a + (s.percentile as number), 0) / withPct.length)
+}
+
 function formatStatValue(stat: MetricStat): string {
   if (stat.value == null) return '—'
   return stat.def.unit === '%' ? `${stat.value.toFixed(0)}%` : stat.value.toFixed(2)
@@ -316,9 +329,11 @@ export function buildInformeHtml(opts: {
     ? `<div class="dg-gauge">${gaugeSvg({ value: ratingVal, max: ratingMax(ratingVal), avg: ratingAvg != null ? ratingAvg : undefined, size: 200 })}<p class="dg-gauge-label">${escapeHtml(t(lang, 'm_ratingGauge'))}${ratingAvg != null ? ' · ' + escapeHtml(t(lang, 'm_avgLine')) : ''}</p>${ratingCompareHtml}</div>`
     : ''
 
-  // Línea breve y discreta con el contexto de comparación, cerca del gauge del Score GG.
-  const comparedVsHtml = informe.contextoComparacion
-    ? `<p class="dg-rating-cmp dg-rating-cmp-ctx">${escapeHtml(t(lang, 'm_comparedVs', { context: informe.contextoComparacion }))}</p>`
+  // 2da línea "Mejor que X%" bajo el gauge: percentil promedio de las métricas
+  // elegidas vs el pool del informe, rotulado con la liga que el usuario escribió.
+  const cmpPct = comparePercentile(stats, informe.compareMetrics)
+  const compareLeagueHtml = cmpPct != null && informe.compareLeague
+    ? `<p class="dg-rating-cmp">${escapeHtml(t(lang, 'm_ratingVsPos', { pct: cmpPct, pos: content.posicion || '—', league: informe.compareLeague }))}</p>`
     : ''
 
   const playerRailHtml = `
@@ -331,7 +346,7 @@ export function buildInformeHtml(opts: {
         </div>
       </div>
       ${ratingGaugeHtml}
-      ${comparedVsHtml}
+      ${compareLeagueHtml}
       <dl class="dg-datalist">
         ${dataRow(t(lang, 'r_club'), content.club)}
         ${dataRow(t(lang, 'r_league'), content.liga)}
@@ -979,7 +994,6 @@ const css = `
     line-height: 1.3;
     color: #22C55E;
   }
-  .dg-rating-cmp-ctx { color: #8A9099; font-weight: 500; }
   .dg-result-dot {
     display: inline-block;
     width: 8px;

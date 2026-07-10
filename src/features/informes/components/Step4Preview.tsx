@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Informe, InformeContent, MetricStat, MetricDef, ScatterAssignment } from '@/features/informes/types'
 import { exportInformePDF } from '@/features/informes/exportInformePDF'
-import { exportInformeHTML, buildInformeHtml, ratingColor, type EvolutionChartExport } from '@/features/informes/exportInformeHTML'
+import { exportInformeHTML, buildInformeHtml, ratingColor, comparePercentile, type EvolutionChartExport } from '@/features/informes/exportInformeHTML'
 import { fetchPlayerTransfers, type PlayerTransfer } from '@/services/footballApiService'
 import { uploadInformeHtml } from '@/features/informes/shareInforme'
 import MetricEvolutionChart from '@/components/charts/MetricEvolutionChart'
@@ -170,10 +170,10 @@ function renderMainStats(content: InformeContent, lang: Lang) {
   )
 }
 
-function PlayerRail({ informe, lang }: { informe: Informe; lang: Lang }) {
+function PlayerRail({ informe, lang, stats }: { informe: Informe; lang: Lang; stats: MetricStat[] }) {
   const { content } = informe
   const rolYPosicion = [content.posicion, content.rol].filter(Boolean).join(' · ')
-  // Comparación de rating vs su posición en su liga (si hay percentil de la DB).
+  // Línea 1: rating vs su posición en su liga REAL (si hay percentil de la DB).
   const pct = informe.dbPercentile
   const ratingCompare =
     pct != null
@@ -183,10 +183,12 @@ function PlayerRail({ informe, lang }: { informe: Informe; lang: Lang }) {
           league: informe.dbLeagueName || content.liga || '—',
         })
       : null
-  // Línea breve y discreta con el contexto de comparación, cerca del gauge del Score GG.
-  const comparedVs = informe.contextoComparacion
-    ? t(lang, 'm_comparedVs', { context: informe.contextoComparacion })
-    : null
+  // Línea 2: "Mejor que X%" con las métricas elegidas vs la liga que el usuario escribió.
+  const cmpPct = comparePercentile(stats, informe.compareMetrics)
+  const compareLeagueLine =
+    cmpPct != null && informe.compareLeague
+      ? t(lang, 'm_ratingVsPos', { pct: cmpPct, pos: content.posicion || '—', league: informe.compareLeague })
+      : null
   return (
     <div className="rounded-[18px] border p-5 space-y-4 h-fit" style={{ borderColor: DG.border, backgroundColor: DG.card }}>
       <div className="flex flex-col items-center text-center gap-3">
@@ -212,8 +214,10 @@ function PlayerRail({ informe, lang }: { informe: Informe; lang: Lang }) {
           )}
         </div>
       )}
-      {comparedVs && (
-        <p className="text-[11px] text-center px-2 leading-snug font-medium" style={{ color: DG.muted }}>{comparedVs}</p>
+      {compareLeagueLine && (
+        <p className="text-xs text-center px-2 leading-snug" style={{ color: DG.muted }}>
+          <span style={{ color: DG.green, fontWeight: 600 }}>{compareLeagueLine}</span>
+        </p>
       )}
       <dl className="text-sm">
         <DataRow label={t(lang, 'r_club')} value={content.club} />
@@ -912,7 +916,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
-          <PlayerRail informe={informe} lang={lang} />
+          <PlayerRail informe={informe} lang={lang} stats={stats} />
 
           <div className="rounded-[18px] border p-5 min-w-0" style={{ borderColor: DG.border, backgroundColor: DG.card }}>
             {/* ── Tabs ── */}

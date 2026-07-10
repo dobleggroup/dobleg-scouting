@@ -140,6 +140,11 @@ export default function InformesPage() {
               compareIndices={informe.comparePlayerIndices ?? []}
               onChangeCompare={idxs => setInforme({ ...informe, comparePlayerIndices: idxs })}
               matrix={derived?.matrix ?? {}}
+              posicion={informe.content.posicion}
+              compareLeague={informe.compareLeague ?? ''}
+              compareMetrics={informe.compareMetrics ?? []}
+              onChangeCompareLeague={v => setInforme({ ...informe, compareLeague: v })}
+              onChangeCompareMetrics={keys => setInforme({ ...informe, compareMetrics: keys })}
               dbPlayerName={informe.dbPlayerName}
               evolutionCharts={informe.evolutionCharts ?? []}
               onChangeEvolutionCharts={keys => setInforme({ ...informe, evolutionCharts: keys })}
