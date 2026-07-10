@@ -7,6 +7,7 @@ import type {
   PositionMetricAverages,
   Position,
   LeagueInfo,
+  RecentFormPlayer,
 } from '@/types/scoring';
 
 function currentSeasons(): number[] {
@@ -290,6 +291,30 @@ export async function fetchPositionMetricAverages(
 
   if (error) throw error;
   return data ?? [];
+}
+
+export async function fetchRecentForm(opts: {
+  windowMonths: number;
+  minMatches?: number;
+  fallbackMonths?: number;
+  fallbackLimit?: number;
+  cheapMaxValue?: number | null;
+  contractMaxMonths?: number | null;
+  positions?: string[];
+  limit?: number;
+}): Promise<RecentFormPlayer[]> {
+  const { data, error } = await supabase.rpc('fetch_recent_form', {
+    p_window_months: opts.windowMonths,
+    p_min_matches: opts.minMatches ?? 3,
+    p_fallback_months: opts.fallbackMonths ?? 6,
+    p_fallback_limit: opts.fallbackLimit ?? 5,
+    p_cheap_max_value: opts.cheapMaxValue ?? null,
+    p_contract_max_months: opts.contractMaxMonths ?? null,
+    p_positions: opts.positions?.length ? opts.positions : null,
+    p_limit: opts.limit ?? 200,
+  });
+  if (error) throw error;
+  return (data ?? []) as RecentFormPlayer[];
 }
 
 export interface MarketValueHistoryRow {

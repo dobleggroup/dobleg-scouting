@@ -9,10 +9,11 @@ import {
   fetchPlayerMatchHistory,
   fetchScoreLookup,
   fetchMarketValueHistory,
+  fetchRecentForm,
   type ScoreLookupEntry,
   type MarketValueHistoryRow,
 } from '@/services/playerStatsService';
-import type { PlayerWithScore, PlayerMatchStat, PositionAverage, PositionMetricAverages, LeagueInfo, Position } from '@/types/scoring';
+import type { PlayerWithScore, PlayerMatchStat, PositionAverage, PositionMetricAverages, LeagueInfo, Position, RecentFormPlayer } from '@/types/scoring';
 
 const cache = new Map<string, { data: any; timestamp: number }>();
 
@@ -197,6 +198,24 @@ export function usePlayerMatchHistory(playerId: number | null, position?: Positi
   }, [playerId, position]);
 
   return { matches, loading };
+}
+
+export function useRecentForm(opts: Parameters<typeof fetchRecentForm>[0]) {
+  const [players, setPlayers] = useState<RecentFormPlayer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const key = JSON.stringify(opts);
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    fetchRecentForm(opts)
+      .then(p => { if (alive) { setPlayers(p); setError(null); } })
+      .catch(e => { if (alive) setError(e.message ?? 'Error'); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return { players, loading, error };
 }
 
 export function useMarketValueHistory(playerId: number | null) {

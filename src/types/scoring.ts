@@ -164,3 +164,23 @@ export interface PositionMetricAverages {
   clean_sheet_pct: number;
   player_count: number;
 }
+
+export interface RecentFormPlayer {
+  id: number;
+  name: string;
+  photo: string | null;
+  // Mismo shape que PlayerProfile.team (TeamInfo vive en playerStatsService.ts,
+  // que importa de este archivo; se usa el shape inline para evitar el ciclo).
+  team: { id: number; name: string; logo: string | null; league_id: number | null } | null;
+  league_name: string | null;
+  primary_position: string | null;
+  birth_date: string | null;
+  market_value_eur: number | null;
+  contract_end_date: string | null;
+  primary_score: number | null;
+  recent_avg: number;
+  recent_matches: number;
+  recent_scores: number[];
+  on_the_rise: boolean;
+  window_used: 'window' | 'fallback';
+}
