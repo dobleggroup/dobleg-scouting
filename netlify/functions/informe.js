@@ -21,8 +21,21 @@ const CSP = [
   "base-uri 'none'",
 ].join('; ')
 
+function extractKey(event) {
+  // Preferimos el path (/.netlify/functions/informe/<key>), con fallbacks.
+  const path = event.path || ''
+  const m = path.match(/\/informe\/(.+)$/)
+  let key = m ? m[1] : (event.queryStringParameters && event.queryStringParameters.key)
+  if (!key && event.rawUrl) {
+    const m2 = event.rawUrl.match(/\/i\/([^?#]+)/)
+    if (m2) key = m2[1]
+  }
+  try { key = decodeURIComponent(key || '') } catch { /* deja el crudo */ }
+  return key
+}
+
 exports.handler = async function (event) {
-  const key = event.queryStringParameters && event.queryStringParameters.key
+  const key = extractKey(event)
   if (!key || /[\r\n]/.test(key)) {
     return { statusCode: 400, headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: 'Falta el identificador del informe.' }
   }

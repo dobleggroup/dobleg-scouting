@@ -15,7 +15,7 @@
 # Debe ir ANTES del catch-all de la SPA, si no lo pisa.
 [[redirects]]
   from = "/i/*"
-  to = "/.netlify/functions/informe?key=:splat"
+  to = "/.netlify/functions/informe/:splat"
   status = 200
   force = true
 
