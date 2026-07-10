@@ -10,6 +10,9 @@ import MarketValueChart from '@/components/charts/MarketValueChart'
 import GaugeScore from '@/components/charts/GaugeScore'
 import PositionBar from '@/components/ui/PositionBar'
 import ScoreEvolutionChart from '@/components/charts/ScoreEvolutionChart'
+import MetricEvolutionChart from '@/components/charts/MetricEvolutionChart'
+import { buildInsights } from '@/features/wyscout/wyscoutInsights'
+import type { WyscoutEvolutionData } from '@/services/wyscoutEvolutionService'
 import { usePlayerDetail, usePlayerMatchHistory, usePositionAverages, usePositionMetricAverages, useLeagues, useScoreLookup } from '@/hooks/usePlayerStats'
 import type { Position } from '@/types/scoring'
 import { displayPosition as formatPosition } from '@/types/scoring'
@@ -729,6 +732,33 @@ export default function PlayerDetailPage() {
     apiPlayerId,
     selectedPosition ?? supabaseDetail?.player?.primary_position ?? undefined
   )
+
+  // Datos evolutivos Wyscout (solo interno)
+  const [wyscout, setWyscout] = useState<WyscoutEvolutionData | null>(null)
+  const [wyscoutMetric, setWyscoutMetric] = useState<string>('')
+  useEffect(() => {
+    if (source !== 'interno') return
+    import('@/services/wyscoutEvolutionService').then(m => m.loadWyscoutEvolution()).then(setWyscout).catch(() => {})
+  }, [source])
+
+  const wyscoutSeries = useMemo(() => {
+    if (!wyscout || !player || !wyscoutMetric) return []
+    return wyscout.getSeries(player.Jugador, wyscoutMetric)
+  }, [wyscout, player, wyscoutMetric])
+
+  const wyscoutMetricDef = useMemo(
+    () => wyscout?.metrics.find(m => m.key === wyscoutMetric) ?? null,
+    [wyscout, wyscoutMetric],
+  )
+  const wyscoutInsights = useMemo(() => {
+    if (!wyscoutMetricDef || wyscoutSeries.length === 0) return []
+    return buildInsights(wyscoutSeries, wyscoutMetricDef)
+  }, [wyscoutSeries, wyscoutMetricDef])
+
+  // setear métrica por defecto cuando cargan
+  useEffect(() => {
+    if (wyscout && !wyscoutMetric && wyscout.metrics.length) setWyscoutMetric(wyscout.metrics[0].key)
+  }, [wyscout, wyscoutMetric])
   const { averages: positionAverages } = usePositionAverages()
   const { apiPlayerId: resolvedApiId } = useApiFootballPlayerId(
     source === 'interno' ? player?.Jugador ?? null : null,
@@ -2175,6 +2205,38 @@ export default function PlayerDetailPage() {
                       />
                     </div>
 
+                    {wyscout && player && wyscout.hasPlayer(player.Jugador) && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1 gap-3 flex-wrap">
+                          <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
+                            Métricas evolutivas (Wyscout)
+                          </h3>
+                          <select
+                            value={wyscoutMetric}
+                            onChange={e => setWyscoutMetric(e.target.value)}
+                            className="px-3 py-1.5 rounded-lg text-sm bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-700 dark:text-apple-gray-200 border-0 focus:ring-2 focus:ring-brand-green"
+                          >
+                            {wyscout.metrics.map(m => (
+                              <option key={m.key} value={m.key}>{m.label}{m.unit === '%' ? ' (%)' : ''}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <p className="text-xs text-apple-gray-400 mb-4">Por partido · la línea punteada indica el promedio</p>
+                        {wyscoutMetricDef && (
+                          <MetricEvolutionChart series={wyscoutSeries} unit={wyscoutMetricDef.unit} label={wyscoutMetricDef.label} />
+                        )}
+                        {wyscoutInsights.length > 0 && (
+                          <div className="mt-3 space-y-1.5">
+                            {wyscoutInsights.map((t, i) => (
+                              <div key={i} className="text-xs text-apple-gray-600 dark:text-apple-gray-300 bg-apple-gray-50 dark:bg-apple-gray-700/50 px-3 py-2 rounded-lg">
+                                {t}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Match history table */}
                     <div>
                       <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-3">
@@ -2251,6 +2313,38 @@ export default function PlayerDetailPage() {
                         description="No se encontraron datos de evolución para este jugador."
                         icon="search"
                       />
+                    )}
+
+                    {wyscout && player && wyscout.hasPlayer(player.Jugador) && (
+                      <div className="mt-8">
+                        <div className="flex items-center justify-between mb-1 gap-3 flex-wrap">
+                          <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
+                            Métricas evolutivas (Wyscout)
+                          </h3>
+                          <select
+                            value={wyscoutMetric}
+                            onChange={e => setWyscoutMetric(e.target.value)}
+                            className="px-3 py-1.5 rounded-lg text-sm bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-700 dark:text-apple-gray-200 border-0 focus:ring-2 focus:ring-brand-green"
+                          >
+                            {wyscout.metrics.map(m => (
+                              <option key={m.key} value={m.key}>{m.label}{m.unit === '%' ? ' (%)' : ''}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <p className="text-xs text-apple-gray-400 mb-4">Por partido · la línea punteada indica el promedio</p>
+                        {wyscoutMetricDef && (
+                          <MetricEvolutionChart series={wyscoutSeries} unit={wyscoutMetricDef.unit} label={wyscoutMetricDef.label} />
+                        )}
+                        {wyscoutInsights.length > 0 && (
+                          <div className="mt-3 space-y-1.5">
+                            {wyscoutInsights.map((t, i) => (
+                              <div key={i} className="text-xs text-apple-gray-600 dark:text-apple-gray-300 bg-apple-gray-50 dark:bg-apple-gray-700/50 px-3 py-2 rounded-lg">
+                                {t}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </>
                 )}
