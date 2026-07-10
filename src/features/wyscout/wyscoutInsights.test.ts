@@ -16,8 +16,15 @@ describe('buildInsights', () => {
 
   it('detecta racha sin marcar en métrica de conteo (tono negativo)', () => {
     const out = buildInsights(pts([1, 0, 0, 0, 0]), goles, weekly)
-    expect(text(out)).toMatch(/Hace 4 partidos que no/i)
+    expect(text(out)).toMatch(/Hace 4 partidos sin registrar goles/i)
     expect(out.find(i => /Hace 4/.test(i.text))!.tone).toBe('negative')
+  })
+
+  it('ratio redacta "eficacia en <base>" con concordancia (Su …)', () => {
+    const duelos = { key: 'duelos', label: 'Duelos / ganados', type: 'ratio', unit: '%', attemptsIdx: 5, achievedIdx: 6 } as const
+    const out = buildInsights(pts([55, 54, 45, 43]), duelos, weekly)
+    expect(text(out)).toMatch(/Su eficacia en duelos totales/i)
+    expect(text(out)).not.toMatch(/Su duelos/i)
   })
 
   it('caída de un % (más es mejor) => tono negativo', () => {

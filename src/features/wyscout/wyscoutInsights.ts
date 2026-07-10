@@ -10,13 +10,32 @@ function fmt(v: number, unit: string): string {
   return unit === '%' ? `${Math.round(v)}%` : (Math.round(v * 100) / 100).toString()
 }
 
+// Overrides de nombre para que la frase quede clara y desambiguada.
+// "Duelos" (el genérico) convive con "Duelos aéreos/defensivos/ofensivos".
+const BASE_OVERRIDES: Record<string, string> = {
+  duelos: 'duelos totales',
+}
+
+// Base legible de la métrica: la parte antes del "/", en minúscula.
+function metricBase(metric: WyscoutMetric): string {
+  const raw = metric.label.split('/')[0].trim().toLowerCase()
+  return BASE_OVERRIDES[raw] ?? raw
+}
+
+// Sujeto singular para armar frases naturales ("Su ___ subió/bajó…"):
+// ratio → "eficacia en duelos totales"; conteo → "promedio de goles".
+function metricSubject(metric: WyscoutMetric): string {
+  const base = metricBase(metric)
+  return metric.type === 'ratio' ? `eficacia en ${base}` : `promedio de ${base}`
+}
+
 /**
- * Genera hasta 4 conclusiones cortas sobre la serie de una métrica.
+ * Genera hasta 4 conclusiones cortas y bien redactadas sobre la serie.
  * - `mode`: 'weekly' (por partido) o 'monthly' (por mes) → cambia la redacción.
  * - `lowerIsBetter`: si MENOS es mejor (ej. balones perdidos), invierte el tono.
  *
- * Cada insight trae `tone`: 'positive' (verde) si el movimiento es a favor del
- * jugador, 'negative' (rojo) si es en contra, 'neutral' si no aplica.
+ * Cada insight trae `tone`: 'positive' (verde) si es a favor del jugador,
+ * 'negative' (rojo) si es en contra.
  */
 export function buildInsights(
   series: WyscoutPoint[],
@@ -28,13 +47,13 @@ export function buildInsights(
   if (vals.length < 3) return out
 
   const { mode, lowerIsBetter } = opts
-  const noun = metric.label.split('/')[0].trim().toLowerCase()
+  const base = metricBase(metric)
+  const subject = metricSubject(metric)
   const U = metric.unit
   const sing = mode === 'monthly' ? 'mes' : 'partido'
   const plur = mode === 'monthly' ? 'meses' : 'partidos'
   const lastN = (n: number) => `últimos ${n} ${plur}`
 
-  // ¿El cambio `diff` es una mejora para el jugador?
   const improved = (diff: number) => (lowerIsBetter ? diff < 0 : diff > 0)
   const toneFor = (diff: number): InsightTone =>
     diff === 0 ? 'neutral' : improved(diff) ? 'positive' : 'negative'
@@ -52,7 +71,7 @@ export function buildInsights(
       const arrow = diff < 0 ? '▼' : '▲'
       const verb = diff < 0 ? 'bajó' : 'subió'
       out.push({
-        text: `${arrow} Su ${noun} ${verb} de ${fmt(b, U)} a ${fmt(a, U)} en los ${lastN(win)}`,
+        text: `${arrow} Su ${subject} ${verb} de ${fmt(b, U)} a ${fmt(a, U)} en los ${lastN(win)}`,
         tone: toneFor(diff),
       })
     }
@@ -64,17 +83,14 @@ export function buildInsights(
     const prev = vals.slice(0, -1)
     const prevMax = Math.max(...prev)
     const prevMin = Math.min(...prev)
-    if (last > prevMax) {
-      const good = !lowerIsBetter
+    let hit: { arrow: string; good: boolean } | null = null
+    if (last > prevMax) hit = { arrow: '▲', good: !lowerIsBetter }
+    else if (last < prevMin) hit = { arrow: '▼', good: lowerIsBetter }
+    if (hit) {
+      const noun = metric.type === 'ratio' ? `eficacia en ${base}` : `registro de ${base}`
       out.push({
-        text: `▲ ${good ? 'Mejor' : 'Peor'} ${noun} del período (${fmt(last, U)}), el último ${sing}`,
-        tone: good ? 'positive' : 'negative',
-      })
-    } else if (last < prevMin) {
-      const good = lowerIsBetter
-      out.push({
-        text: `▼ ${good ? 'Mejor' : 'Peor'} ${noun} del período (${fmt(last, U)}), el último ${sing}`,
-        tone: good ? 'positive' : 'negative',
+        text: `${hit.arrow} Su ${hit.good ? 'mejor' : 'peor'} ${noun} del período: ${fmt(last, U)}, el último ${sing}`,
+        tone: hit.good ? 'positive' : 'negative',
       })
     }
   }
@@ -84,15 +100,14 @@ export function buildInsights(
     const avg = vals.reduce((s, v) => s + v, 0) / vals.length
     const k = Math.min(3, vals.length - 1)
     const lastK = vals.slice(-k)
-    if (lastK.every(v => v > avg)) {
+    let dir: 'encima' | 'debajo' | null = null
+    if (lastK.every(v => v > avg)) dir = 'encima'
+    else if (lastK.every(v => v < avg)) dir = 'debajo'
+    if (dir) {
+      const good = dir === 'encima' ? !lowerIsBetter : lowerIsBetter
       out.push({
-        text: `Sus ${lastN(k)} por encima de su promedio (${fmt(avg, U)})`,
-        tone: lowerIsBetter ? 'negative' : 'positive',
-      })
-    } else if (lastK.every(v => v < avg)) {
-      out.push({
-        text: `Sus ${lastN(k)} por debajo de su promedio (${fmt(avg, U)})`,
-        tone: lowerIsBetter ? 'positive' : 'negative',
+        text: `En los ${lastN(k)}, su ${subject} estuvo por ${dir} de lo habitual (${fmt(avg, U)})`,
+        tone: good ? 'positive' : 'negative',
       })
     }
   }
@@ -104,8 +119,8 @@ export function buildInsights(
     if (streak >= 3) {
       out.push(
         lowerIsBetter
-          ? { text: `Racha de ${streak} ${plur} sin ${noun}`, tone: 'positive' }
-          : { text: `Hace ${streak} ${plur} que no registra ${noun}`, tone: 'negative' },
+          ? { text: `Lleva ${streak} ${plur} sin ${base}`, tone: 'positive' }
+          : { text: `Hace ${streak} ${plur} sin registrar ${base}`, tone: 'negative' },
       )
     }
   }
