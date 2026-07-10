@@ -377,7 +377,10 @@ export function buildInformeHtml(opts: {
       <h3 class="dg-panel-title">${escapeHtml(t(lang, 'tab_video'))}</h3>
       ${
         youtubeId
-          ? `<div class="dg-video-wrap"><iframe src="https://www.youtube.com/embed/${youtubeId}" title="Video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>
+          ? `<div class="dg-video-wrap" data-yt="${youtubeId}" role="button" tabindex="0" aria-label="Reproducir video">
+               <img class="dg-video-poster" src="https://i.ytimg.com/vi/${youtubeId}/maxresdefault.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg'" />
+               <span class="dg-video-play" aria-hidden="true"></span>
+             </div>
              <a class="dg-video-link" href="https://www.youtube.com/watch?v=${youtubeId}" target="_blank" rel="noopener noreferrer">▶ ${escapeHtml(t(lang, 'v_youtube'))}</a>`
           : rawVideoUrl
             ? `<a class="dg-video-link" href="${rawVideoUrl}" target="_blank" rel="noopener noreferrer">▶ ${escapeHtml(t(lang, 'v_watch'))}</a>`
@@ -690,11 +693,21 @@ const css = `
     .dg-layout { grid-template-columns: 1fr; }
     .dg-rail { width: 100%; max-width: 560px; margin: 0 auto; }
   }
+  /* Celular/tablet en HORIZONTAL: usa dos columnas a lo ancho de la pantalla,
+     como en desktop (no la vista angosta apilada). Va DESPUÉS del bloque 900px
+     para ganarle cuando ambos aplican. */
+  @media (orientation: landscape) and (min-width: 640px) and (max-width: 1024px) {
+    .dg-layout { grid-template-columns: 232px 1fr; }
+    .dg-rail { width: auto; max-width: none; margin: 0; }
+  }
   /* Mobile: menos padding, tipografía y tabs más compactas, tarjetas en 1 columna. */
   @media (max-width: 560px) {
+    body { font-size: 14px; }
     .dg-container { padding: 16px 14px 40px; }
     .dg-panel-card { padding: 16px 14px; }
     .dg-rail { padding: 16px; }
+    .dg-rail-head h2 { font-size: 15.5px; }
+    .dg-photo-fallback { font-size: 22px; }
     .dg-header { margin-bottom: 14px; gap: 10px; }
     .dg-tabbar { margin-bottom: 16px; }
     .dg-tab { padding: 8px 10px; font-size: 12px; }
@@ -1032,6 +1045,22 @@ const css = `
     height: 100%;
     border: 0;
   }
+  .dg-video-wrap[data-yt] { cursor: pointer; }
+  .dg-video-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+  .dg-video-play {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 64px; height: 64px; border-radius: 50%;
+    background: rgba(0,0,0,0.5); border: 2px solid rgba(255,255,255,0.9);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+  .dg-video-wrap[data-yt]:hover .dg-video-play { transform: translate(-50%, -50%) scale(1.08); background: rgba(0,0,0,0.65); }
+  .dg-video-play::after {
+    content: ''; margin-left: 4px;
+    border-style: solid; border-width: 10px 0 10px 17px;
+    border-color: transparent transparent transparent #fff;
+  }
   .dg-video-link {
     display: inline-flex;
     align-items: center;
@@ -1094,6 +1123,17 @@ const script = `
       var panel = document.querySelector('.dg-panel[data-panel="' + id + '"]');
       if (panel) panel.classList.add('active');
     });
+  });
+
+  // Portada de video: al tocar, reemplaza el thumbnail por el reproductor.
+  document.querySelectorAll('.dg-video-wrap[data-yt]').forEach(function (w) {
+    function play() {
+      var id = w.getAttribute('data-yt');
+      w.innerHTML = '<iframe src="https://www.youtube.com/embed/' + id + '?autoplay=1" title="Video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>';
+      w.removeAttribute('data-yt');
+    }
+    w.addEventListener('click', play);
+    w.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play(); } });
   });
 
   // Toggle Partido / Semanal / Mensual del gráfico de evolución de nivel.

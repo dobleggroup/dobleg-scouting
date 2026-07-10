@@ -109,7 +109,9 @@ describe('buildInformeHtml', () => {
       matrix: emptyMatrix,
       defs: emptyDefs,
     })
-    expect(htmlValid).toContain('https://www.youtube.com/embed/abc12345')
+    // El id validado se embebe en el facade (data-yt) y en la portada; el reproductor
+    // se arma al tocar. Basta con que el id aparezca como atributo controlado.
+    expect(htmlValid).toContain('data-yt="abc12345"')
 
     const withInvalid = makeInforme({
       content: { ...makeInforme().content, videoUrl: 'not-a-video-url' },
@@ -120,7 +122,8 @@ describe('buildInformeHtml', () => {
       matrix: emptyMatrix,
       defs: emptyDefs,
     })
-    expect(htmlInvalid).not.toContain('youtube.com/embed')
+    // URL inválida => no se renderiza el facade de video.
+    expect(htmlInvalid).not.toContain('data-yt=')
   })
 
   it('renderiza el nombre de una métrica del radar', () => {
