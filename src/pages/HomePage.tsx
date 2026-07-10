@@ -5,6 +5,7 @@ import { fetchAllAgencyFixtures, getFixturesForDate, groupFixturesByDate, toArDa
 import { fetchManualFixtures, manualToAgencyFixtures } from '@/services/agencyManualFixturesService'
 import { useAuth } from '@/context/AuthContext'
 import type { AgencyFixture } from '@/types/footballApi'
+import OpportunityHero from '@/components/dashboard/OpportunityHero'
 
 const DAYS_ES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const DAYS_SHORT = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB']
@@ -289,32 +290,6 @@ export default function HomePage() {
     }
     return trips.sort((a, b) => a.timestamp - b.timestamp)
   }, [today, fixturesByDate])
-
-  const weekActivity = useMemo(() => {
-    const playerGames = new Map<string, number>()
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(today)
-      d.setDate(today.getDate() + i)
-      const key = toArDateKey(d)
-      const dayFixtures = fixturesByDate.get(key) || []
-      for (const f of dayFixtures) {
-        for (const p of f.players) {
-          playerGames.set(p.fullName, (playerGames.get(p.fullName) || 0) + 1)
-        }
-      }
-    }
-    return playerGames
-  }, [today, fixturesByDate])
-
-  const activePlayers = useMemo(
-    () => AGENCY_PLAYERS.filter(p => !p.isReserve && weekActivity.has(p.fullName)),
-    [weekActivity]
-  )
-
-  const inactivePlayers = useMemo(
-    () => AGENCY_PLAYERS.filter(p => !p.isReserve && !weekActivity.has(p.fullName)),
-    [weekActivity]
-  )
 
   const expiringContracts = useMemo(() => {
     return getExpiringContracts(8).sort((a, b) => {
@@ -622,45 +597,8 @@ export default function HomePage() {
         )}
       </div>
 
-      {/* ── Week Activity ──────────────────────────────────── */}
-      {!loading && (
-        <section>
-          <h2 className="text-lg font-semibold text-apple-gray-800 dark:text-white mb-4">
-            Actividad de la semana
-          </h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="bg-white dark:bg-apple-gray-800/40 rounded-apple-lg border border-apple-gray-200/50 dark:border-apple-gray-700/30 p-5">
-              <p className="text-xs font-semibold text-brand-green uppercase tracking-wider mb-3">
-                Juegan esta semana ({activePlayers.length})
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {activePlayers.map(p => (
-                  <div key={p.fullName} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-green/5 dark:bg-brand-green/10">
-                    {p.image && <img src={p.image} alt="" className="w-5 h-5 rounded-full object-cover" />}
-                    <span className="text-sm text-apple-gray-700 dark:text-apple-gray-300">{p.shortName}</span>
-                    <span className="text-2xs text-brand-green font-semibold">{weekActivity.get(p.fullName)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-apple-gray-800/40 rounded-apple-lg border border-apple-gray-200/50 dark:border-apple-gray-700/30 p-5">
-              <p className="text-xs font-semibold text-apple-gray-400 uppercase tracking-wider mb-3">
-                Sin partidos esta semana ({inactivePlayers.length})
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {inactivePlayers.map(p => (
-                  <div key={p.fullName} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-apple-gray-50 dark:bg-apple-gray-800/60">
-                    {p.image && <img src={p.image} alt="" className="w-5 h-5 rounded-full object-cover opacity-50" />}
-                    <span className="text-sm text-apple-gray-400">{p.shortName}</span>
-                    <span className="text-2xs text-apple-gray-300 dark:text-apple-gray-600">{p.team}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
+      {/* ── Oportunidades de mercado ────────────────────────── */}
+      <OpportunityHero />
     </div>
   )
 }
