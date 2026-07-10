@@ -10,7 +10,6 @@ import { buildColumnMap } from '@/features/informes/metricRegistry'
 import { buildMatrix, computeStats } from '@/features/informes/computeStats'
 import { saveInforme, loadInforme } from '@/features/informes/informesStore'
 import { getRowName } from '@/features/informes/chartData'
-import { contextPercentile } from '@/features/informes/exportInformeHTML'
 
 type View = 'list' | 'wizard'
 type SaveFeedback = { type: 'success' | 'error'; message: string }
@@ -144,6 +143,10 @@ export default function InformesPage() {
               dbPlayerName={informe.dbPlayerName}
               evolutionCharts={informe.evolutionCharts ?? []}
               onChangeEvolutionCharts={keys => setInforme({ ...informe, evolutionCharts: keys })}
+              ratingMetrics={informe.informeRatingMetrics ?? []}
+              onChangeRatingMetrics={keys => setInforme({ ...informe, informeRatingMetrics: keys })}
+              hideRating={informe.hideInformeRating ?? false}
+              onChangeHideRating={v => setInforme({ ...informe, hideInformeRating: v })}
               onBack={() => setStep(0)}
               onNext={() => setStep(2)}
             />
@@ -152,7 +155,6 @@ export default function InformesPage() {
             <Step3Contenido
               content={informe.content}
               onChange={(c) => setInforme({ ...informe, content: c })}
-              ratingContextAvailable={contextPercentile(stats) != null}
               onBack={() => setStep(1)}
               onNext={() => setStep(3)}
             />

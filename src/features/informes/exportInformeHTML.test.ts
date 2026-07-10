@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { buildInformeHtml, contextPercentile } from './exportInformeHTML'
+import { buildInformeHtml, informeRating } from './exportInformeHTML'
 import type { Informe, MetricDef, MetricStat } from './types'
 import type { InformeEnrichment } from './useInformeEnrichment'
 import type { PlayerTransfer } from '@/services/footballApiService'
 
-function makeStat(percentile: number | null): MetricStat {
+function makeStat(percentile: number | null, key = 'k'): MetricStat {
   return {
-    def: { key: 'k', label: 'k', short: 'k', unit: '', higherIsBetter: true },
+    def: { key, label: key, short: key, unit: '', higherIsBetter: true },
     value: 1, avg: 1, percentile, avgPercentile: 50, color: 'neutral', rank: 1, total: 10,
   }
 }
@@ -219,24 +219,50 @@ describe('buildInformeHtml', () => {
     expect(html).toContain('Sin traspasos registrados')
   })
 
-  it('agrega la segunda línea de rating vs contexto solo con ≥3 percentiles', () => {
-    const stats3 = [makeStat(80), makeStat(60), makeStat(40)]
-    const withCtx = buildInformeHtml({ informe: makeInforme(), stats: stats3, matrix: emptyMatrix, defs: emptyDefs })
-    expect(withCtx).toContain('class="dg-rating-cmp dg-rating-cmp-ctx"')
-    expect(withCtx).toContain('Contexto de prueba')
+  it('muestra el "Rating del informe" solo si hay métricas elegidas y no está oculto', () => {
+    const stats = [makeStat(80, 'a'), makeStat(60, 'b')]
+    const withRating = buildInformeHtml({
+      informe: makeInforme({ informeRatingMetrics: ['a', 'b'] }),
+      stats, matrix: emptyMatrix, defs: emptyDefs,
+    })
+    expect(withRating).toContain('class="dg-inf-rating"')
+    expect(withRating).toContain('Rating del informe')
+    expect(withRating).toContain('7.0') // promedio 70 => nota 7.0
+    expect(withRating).toContain('Contexto de prueba')
 
-    const stats2 = [makeStat(80), makeStat(60), makeStat(null)]
-    const noCtx = buildInformeHtml({ informe: makeInforme(), stats: stats2, matrix: emptyMatrix, defs: emptyDefs })
-    expect(noCtx).not.toContain('class="dg-rating-cmp dg-rating-cmp-ctx"')
+    // Sin métricas elegidas: no aparece.
+    const noMetrics = buildInformeHtml({ informe: makeInforme(), stats, matrix: emptyMatrix, defs: emptyDefs })
+    expect(noMetrics).not.toContain('class="dg-inf-rating"')
+
+    // Oculto explícitamente: no aparece aunque haya métricas.
+    const hidden = buildInformeHtml({
+      informe: makeInforme({ informeRatingMetrics: ['a', 'b'], hideInformeRating: true }),
+      stats, matrix: emptyMatrix, defs: emptyDefs,
+    })
+    expect(hidden).not.toContain('class="dg-inf-rating"')
   })
 })
 
-describe('contextPercentile', () => {
-  it('promedia los percentiles disponibles cuando hay al menos 3', () => {
-    expect(contextPercentile([makeStat(90), makeStat(60), makeStat(30)])).toBe(60)
+describe('informeRating', () => {
+  it('convierte el promedio de percentiles a nota 1..10 con 1 decimal', () => {
+    expect(informeRating([makeStat(70, 'a'), makeStat(90, 'b')], ['a', 'b'])).toBe(8)
+    expect(informeRating([makeStat(73, 'a')], ['a'])).toBe(7.3)
   })
-  it('devuelve null con menos de 3 percentiles', () => {
-    expect(contextPercentile([makeStat(90), makeStat(60), makeStat(null)])).toBeNull()
-    expect(contextPercentile([])).toBeNull()
+  it('solo considera las métricas elegidas', () => {
+    // Elige solo 'a' (percentil 40 => 4.0); ignora 'b' (percentil 90).
+    expect(informeRating([makeStat(40, 'a'), makeStat(90, 'b')], ['a'])).toBe(4)
+  })
+  it('clampa a [1, 10]', () => {
+    expect(informeRating([makeStat(0, 'a')], ['a'])).toBe(1)
+    expect(informeRating([makeStat(100, 'a')], ['a'])).toBe(10)
+  })
+  it('devuelve null sin métricas elegidas', () => {
+    expect(informeRating([makeStat(80, 'a')], undefined)).toBeNull()
+    expect(informeRating([makeStat(80, 'a')], [])).toBeNull()
+  })
+  it('devuelve null si las métricas elegidas no tienen percentil', () => {
+    expect(informeRating([makeStat(null, 'a')], ['a'])).toBeNull()
+    // Métrica elegida inexistente en stats => null.
+    expect(informeRating([makeStat(80, 'a')], ['zzz'])).toBeNull()
   })
 })

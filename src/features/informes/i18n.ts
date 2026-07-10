@@ -198,14 +198,8 @@ const S: Record<string, Six> = {
     'Meglio del {pct}% dei {pos} in {league}',
     'Meilleur que {pct}% des {pos} en {league}',
   ],
-  m_ratingVsContext: [
-    'Mejor que el {pct}% de {pos} en {context}',
-    'Better than {pct}% of {pos} in {context}',
-    'Melhor que {pct}% dos {pos} em {context}',
-    'أفضل من {pct}% من {pos} في {context}',
-    'Meglio del {pct}% dei {pos} in {context}',
-    'Meilleur que {pct}% des {pos} en {context}',
-  ],
+  t_informeRating: ['Rating del informe', 'Report rating', 'Rating do relatório', 'تقييم التقرير', 'Rating del report', 'Note du rapport'],
+  m_informeRatingVs: ['vs {context}', 'vs {context}', 'vs {context}', 'مقابل {context}', 'vs {context}', 'vs {context}'],
   m_playedMoreThan: [
     'Jugó más minutos que el {pct}% del resto de los jugadores',
     'Played more minutes than {pct}% of the other players',

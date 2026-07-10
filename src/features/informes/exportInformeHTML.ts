@@ -59,14 +59,18 @@ function formatStatValue(stat: MetricStat): string {
 }
 
 /**
- * Percentil "vs el contexto del informe" = promedio de los percentiles de los stats
- * con percentil disponible. Devuelve null si hay menos de 3 (no es representativo).
+ * "Rating del informe" = nota 1..10 (1 decimal) calculada a partir del promedio de
+ * los percentiles de SOLO las métricas elegidas por el usuario (`metricKeys`).
+ * Percentil→nota: percentil 70 = 7.0; se clampa a [1,10].
+ * Devuelve null si no hay métricas elegidas o ninguna tiene percentil.
  */
-export function contextPercentile(stats: MetricStat[]): number | null {
-  const withPct = stats.filter(s => s.percentile != null)
-  if (withPct.length < 3) return null
-  const sum = withPct.reduce((a, s) => a + (s.percentile as number), 0)
-  return Math.round(sum / withPct.length)
+export function informeRating(stats: MetricStat[], metricKeys: string[] | undefined): number | null {
+  if (!metricKeys || metricKeys.length === 0) return null
+  const keys = new Set(metricKeys)
+  const picked = stats.filter(s => keys.has(s.def.key) && s.percentile != null)
+  if (picked.length === 0) return null
+  const avgPct = picked.reduce((a, s) => a + (s.percentile as number), 0) / picked.length
+  return Math.round(Math.min(10, Math.max(1, avgPct / 10)) * 10) / 10 // 1..10, 1 decimal
 }
 
 function safeDataUrl(url: string | null | undefined): string | null {
@@ -310,14 +314,21 @@ export function buildInformeHtml(opts: {
   const ratingCompareHtml = informe.dbPercentile != null
     ? `<p class="dg-rating-cmp">${escapeHtml(t(lang, 'm_ratingVsPos', { pct: Math.round(informe.dbPercentile), pos: content.posicion || '—', league: informe.dbLeagueName || content.liga || '—' }))}</p>`
     : ''
-  // Segunda comparación: promedio de percentiles de los stats vs el POOL del informe
-  // (la liga del contexto, ej. Liga MX). Solo si hay ≥3 stats con percentil.
-  const ctxPct = contextPercentile(stats)
-  const ratingVsContextHtml = ctxPct != null
-    ? `<p class="dg-rating-cmp dg-rating-cmp-ctx">${escapeHtml(t(lang, 'm_ratingVsContext', { pct: ctxPct, pos: content.posicion || '—', context: informe.contextoComparacion || content.liga || '—' }))}</p>`
-    : ''
   const ratingGaugeHtml = !content.hideRating && !content.hideRatingGauge && ratingVal != null
-    ? `<div class="dg-gauge">${gaugeSvg({ value: ratingVal, max: ratingMax(ratingVal), avg: ratingAvg != null ? ratingAvg : undefined, size: 200 })}<p class="dg-gauge-label">${escapeHtml(t(lang, 'm_ratingGauge'))}${ratingAvg != null ? ' · ' + escapeHtml(t(lang, 'm_avgLine')) : ''}</p>${ratingCompareHtml}${ratingVsContextHtml}</div>`
+    ? `<div class="dg-gauge">${gaugeSvg({ value: ratingVal, max: ratingMax(ratingVal), avg: ratingAvg != null ? ratingAvg : undefined, size: 200 })}<p class="dg-gauge-label">${escapeHtml(t(lang, 'm_ratingGauge'))}${ratingAvg != null ? ' · ' + escapeHtml(t(lang, 'm_avgLine')) : ''}</p>${ratingCompareHtml}</div>`
+    : ''
+
+  // "Rating del informe": nota 1..10 armada con las métricas elegidas por el usuario.
+  // Tarjetita propia, clara y distinta del gauge del Score GG. Se oculta con hideInformeRating.
+  const infRating = informeRating(stats, informe.informeRatingMetrics)
+  const informeRatingHtml = !informe.hideInformeRating && infRating != null
+    ? `<div class="dg-inf-rating">
+         <span class="dg-inf-rating-value">${infRating.toFixed(1)}<span class="dg-inf-rating-max">/10</span></span>
+         <span class="dg-inf-rating-label">${escapeHtml(t(lang, 't_informeRating'))}</span>
+         ${(informe.contextoComparacion || content.liga)
+           ? `<span class="dg-inf-rating-vs">${escapeHtml(t(lang, 'm_informeRatingVs', { context: informe.contextoComparacion || content.liga }))}</span>`
+           : ''}
+       </div>`
     : ''
 
   const playerRailHtml = `
@@ -330,6 +341,7 @@ export function buildInformeHtml(opts: {
         </div>
       </div>
       ${ratingGaugeHtml}
+      ${informeRatingHtml}
       <dl class="dg-datalist">
         ${dataRow(t(lang, 'r_club'), content.club)}
         ${dataRow(t(lang, 'r_league'), content.liga)}
@@ -982,6 +994,35 @@ const css = `
     color: #22C55E;
   }
   .dg-rating-cmp-ctx { color: #8A9099; }
+  .dg-inf-rating {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 2px;
+    margin: 0 0 14px;
+    padding: 12px;
+    border-radius: 14px;
+    background: rgba(56,189,248,0.08);
+    border: 1px solid rgba(56,189,248,0.3);
+  }
+  .dg-inf-rating-value {
+    font-size: 30px;
+    font-weight: 800;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: #38BDF8;
+  }
+  .dg-inf-rating-max { font-size: 14px; font-weight: 700; color: #8A9099; }
+  .dg-inf-rating-label {
+    margin-top: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #C3C9D1;
+  }
+  .dg-inf-rating-vs { font-size: 11px; color: #8A9099; }
   .dg-result-dot {
     display: inline-block;
     width: 8px;

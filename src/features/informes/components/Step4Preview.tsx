@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Informe, InformeContent, MetricStat, MetricDef, ScatterAssignment } from '@/features/informes/types'
 import { exportInformePDF } from '@/features/informes/exportInformePDF'
-import { exportInformeHTML, buildInformeHtml, contextPercentile, type EvolutionChartExport } from '@/features/informes/exportInformeHTML'
+import { exportInformeHTML, buildInformeHtml, informeRating, type EvolutionChartExport } from '@/features/informes/exportInformeHTML'
 import { fetchPlayerTransfers, type PlayerTransfer } from '@/services/footballApiService'
 import { uploadInformeHtml } from '@/features/informes/shareInforme'
 import MetricEvolutionChart from '@/components/charts/MetricEvolutionChart'
@@ -170,7 +170,7 @@ function renderMainStats(content: InformeContent, lang: Lang) {
   )
 }
 
-function PlayerRail({ informe, lang, ctxPct }: { informe: Informe; lang: Lang; ctxPct: number | null }) {
+function PlayerRail({ informe, lang, infRating }: { informe: Informe; lang: Lang; infRating: number | null }) {
   const { content } = informe
   const rolYPosicion = [content.posicion, content.rol].filter(Boolean).join(' · ')
   // Comparación de rating vs su posición en su liga (si hay percentil de la DB).
@@ -183,15 +183,11 @@ function PlayerRail({ informe, lang, ctxPct }: { informe: Informe; lang: Lang; c
           league: informe.dbLeagueName || content.liga || '—',
         })
       : null
-  // Segunda comparación: vs el pool del informe (contexto, ej. Liga MX).
-  const ratingVsContext =
-    ctxPct != null
-      ? t(lang, 'm_ratingVsContext', {
-          pct: ctxPct,
-          pos: content.posicion || '—',
-          context: informe.contextoComparacion || content.liga || '—',
-        })
-      : null
+  // "Rating del informe" (nota 1..10) con las métricas elegidas. Se oculta con hideInformeRating.
+  const showInformeRating = !informe.hideInformeRating && infRating != null
+  const ratingVsContext = informe.contextoComparacion || content.liga
+    ? t(lang, 'm_informeRatingVs', { context: informe.contextoComparacion || content.liga })
+    : null
   return (
     <div className="rounded-[18px] border p-5 space-y-4 h-fit" style={{ borderColor: DG.border, backgroundColor: DG.card }}>
       <div className="flex flex-col items-center text-center gap-3">
@@ -215,11 +211,15 @@ function PlayerRail({ informe, lang, ctxPct }: { informe: Informe; lang: Lang; c
               <span style={{ color: DG.green, fontWeight: 600 }}>{ratingCompare}</span>
             </p>
           )}
-          {ratingVsContext && (
-            <p className="text-xs text-center mt-1 px-2 leading-snug" style={{ color: DG.muted, fontWeight: 600 }}>
-              {ratingVsContext}
-            </p>
-          )}
+        </div>
+      )}
+      {showInformeRating && (
+        <div className="rounded-2xl p-3 flex flex-col items-center text-center gap-0.5" style={{ backgroundColor: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.3)' }}>
+          <span className="text-3xl font-extrabold tabular-nums leading-none" style={{ color: '#38BDF8' }}>
+            {infRating!.toFixed(1)}<span className="text-sm font-bold" style={{ color: DG.muted }}>/10</span>
+          </span>
+          <span className="text-[10px] font-bold uppercase tracking-wide mt-1" style={{ color: '#C3C9D1' }}>{t(lang, 't_informeRating')}</span>
+          {ratingVsContext && <span className="text-[11px]" style={{ color: DG.muted }}>{ratingVsContext}</span>}
         </div>
       )}
       <dl className="text-sm">
@@ -323,8 +323,8 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
   const transfersSorted = [...transfers]
     .filter(tr => tr.teams?.in?.name || tr.teams?.out?.name)
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
-  // Percentil "vs el contexto del informe" (promedio de percentiles de los stats).
-  const ctxPct = contextPercentile(stats)
+  // "Rating del informe" (nota 1..10) con las métricas elegidas por el usuario.
+  const infRating = informeRating(stats, informe.informeRatingMetrics)
 
   const visibleTabs = TAB_IDS.filter(id =>
     id === 'fisico' ? showFisico : id === 'evolutivas' ? showEvolutivas : true,
@@ -920,7 +920,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
-          <PlayerRail informe={informe} lang={lang} ctxPct={ctxPct} />
+          <PlayerRail informe={informe} lang={lang} infRating={infRating} />
 
           <div className="rounded-[18px] border p-5 min-w-0" style={{ borderColor: DG.border, backgroundColor: DG.card }}>
             {/* ── Tabs ── */}

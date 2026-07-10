@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import type { MetricStat, ChartAssignments, ScatterAssignment } from '@/features/informes/types'
 import { normalizeForSearch } from '@/lib/search'
 import { suggestAxisFloor } from '@/features/informes/chartData'
+import { informeRating } from '@/features/informes/exportInformeHTML'
 import { loadWyscoutEvolution } from '@/services/wyscoutEvolutionService'
 import type { WyscoutEvolutionData } from '@/services/wyscoutEvolutionService'
 
@@ -394,6 +395,98 @@ function EvolutionChartsSection({ dbPlayerName, evolutionCharts, onChange }: Evo
   )
 }
 
+// ─── Rating del informe ─────────────────────────────────────────────────────
+
+interface RatingSectionProps {
+  stats: MetricStat[]
+  selected: string[]
+  onChange: (keys: string[]) => void
+  hidden: boolean
+  onChangeHidden: (v: boolean) => void
+}
+
+/**
+ * Elige qué métricas alimentan el "Rating del informe" (nota 1..10, promedio de
+ * sus percentiles). Muestra un preview en vivo del número calculado.
+ */
+function RatingSection({ stats, selected, onChange, hidden, onChangeHidden }: RatingSectionProps) {
+  const available = stats.filter(s => !selected.includes(s.def.key))
+  const preview = informeRating(stats, selected)
+
+  function add(key: string) {
+    if (!key || selected.includes(key)) return
+    onChange([...selected, key])
+  }
+  function remove(key: string) {
+    onChange(selected.filter(k => k !== key))
+  }
+
+  return (
+    <div className="rounded-2xl border border-apple-gray-200 dark:border-apple-gray-800 bg-white dark:bg-apple-gray-900 p-5">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-sm font-semibold text-apple-gray-900 dark:text-white">Rating del informe</h3>
+        <span className="text-xs text-apple-gray-400 dark:text-apple-gray-500">nota 1–10</span>
+      </div>
+      <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mb-3">
+        Elegí qué métricas entran a la nota. Se calcula sola con el promedio de sus percentiles.
+      </p>
+
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {selected.map(key => (
+            <span
+              key={key}
+              className="inline-flex items-center gap-1.5 pl-3 pr-2 py-1 rounded-full bg-sky-400/10 border border-sky-400/30 text-xs font-medium text-sky-500 dark:text-sky-400"
+            >
+              {labelFor(stats, key)}
+              <button
+                type="button"
+                onClick={() => remove(key)}
+                className="text-sky-400/60 hover:text-sky-500 transition-colors ml-0.5"
+                aria-label="Quitar métrica del rating"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center gap-3">
+        <select
+          value=""
+          onChange={e => add(e.target.value)}
+          disabled={available.length === 0}
+          className="flex-1 px-3 py-2 rounded-xl text-xs border border-apple-gray-200 dark:border-apple-gray-700 bg-apple-gray-50 dark:bg-apple-gray-800 text-apple-gray-600 dark:text-apple-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-green/40 focus:border-brand-green font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <option value="">+ Agregar métrica al rating</option>
+          {available.map(s => (
+            <option key={s.def.key} value={s.def.key}>{s.def.label}</option>
+          ))}
+        </select>
+        <div className="flex flex-col items-center flex-shrink-0 w-16">
+          <span className="text-xl font-bold tabular-nums text-sky-500 dark:text-sky-400 leading-none">
+            {preview != null ? preview.toFixed(1) : '—'}
+          </span>
+          <span className="text-[10px] uppercase tracking-wide text-apple-gray-400 dark:text-apple-gray-500">/10</span>
+        </div>
+      </div>
+
+      <label className="flex items-center gap-2 mt-3 text-sm text-apple-gray-700 dark:text-apple-gray-200 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={hidden}
+          onChange={e => onChangeHidden(e.target.checked)}
+          className="rounded border-apple-gray-300 dark:border-apple-gray-600 text-brand-green focus:ring-brand-green/40"
+        />
+        No mostrar el rating del informe
+      </label>
+    </div>
+  )
+}
+
 // ─── Main component ─────────────────────────────────────────────────────────
 
 interface Step2MetricasProps {
@@ -407,6 +500,10 @@ interface Step2MetricasProps {
   dbPlayerName?: string
   evolutionCharts: string[]
   onChangeEvolutionCharts: (keys: string[]) => void
+  ratingMetrics: string[]
+  onChangeRatingMetrics: (keys: string[]) => void
+  hideRating: boolean
+  onChangeHideRating: (v: boolean) => void
   onBack: () => void
   onNext: () => void
 }
@@ -422,6 +519,10 @@ export default function Step2Metricas({
   dbPlayerName,
   evolutionCharts,
   onChangeEvolutionCharts,
+  ratingMetrics,
+  onChangeRatingMetrics,
+  hideRating,
+  onChangeHideRating,
   onBack,
   onNext,
 }: Step2MetricasProps) {
@@ -564,6 +665,14 @@ export default function Step2Metricas({
           stats={stats}
           selected={charts.numbers}
           onChange={keys => onChangeCharts({ ...charts, numbers: keys })}
+        />
+
+        <RatingSection
+          stats={stats}
+          selected={ratingMetrics}
+          onChange={onChangeRatingMetrics}
+          hidden={hideRating}
+          onChangeHidden={onChangeHideRating}
         />
 
         {/* El radar y las barras comparan contra el promedio del pool. Esta
