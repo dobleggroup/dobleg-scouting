@@ -21,7 +21,7 @@ export const BASE_AGENCY_PLAYERS: AgencyPlayer[] = [
   { shortName: 'M. Carabajal', fullName: 'Mateo Carabajal', image: 'https://img.a.transfermarkt.technology/portrait/header/578757-1739213760.png?lm=1', contractEnd: '31/12/2027', marketValue: '€700k', team: 'Independiente del Valle', apiTeamId: 1153, isReserve: false },
   { shortName: 'M. Vera', fullName: 'Mauricio Vera', image: 'https://encrypted-tbn2.gstatic.com/images?q=tbn:ANd9GcSHFjZ591GzSnBG525pUcTExQgvHYyltJKa_nRsLERsiHgtlw', contractEnd: '31/12/2026', marketValue: '€600k', team: 'Nacional', apiTeamId: 2356, isReserve: false },
   { shortName: 'F. Watson', fullName: 'Franco Watson', image: 'https://img.a.transfermarkt.technology/portrait/header/654733-1677162423.JPG?lm=1', contractEnd: '31/12/2027', marketValue: '€600k', team: 'Lanús', apiTeamId: 446, isReserve: false },
-  { shortName: 'M. Espindola', fullName: 'Matías Espíndola', image: 'https://encrypted-tbn1.gstatic.com/images?q=tbn:ANd9GcS1N9vJgD-2W3N7xXyVN_vQzc1kald8Fj2FKbMCF9lZT0psjQ', contractEnd: '31/12/2026', marketValue: '€500k', team: 'Deportivo Maldonado', apiTeamId: 2370, isReserve: false },
+  { shortName: 'M. Espindola', fullName: 'Matías Espíndola', image: 'https://encrypted-tbn1.gstatic.com/images?q=tbn:ANd9GcS1N9vJgD-2W3N7xXyVN_vQzc1kald8Fj2FKbMCF9lZT0psjQ', contractEnd: '30/06/2030', marketValue: '€1.00m', team: 'Necaxa', apiTeamId: 2288, isReserve: false },
   { shortName: 'P. Guajardo', fullName: 'Paolo Guajardo', image: 'https://img.a.transfermarkt.technology/portrait/header/882846-1773086173.jpg?lm=1', contractEnd: '31/12/2027', marketValue: '€500k', team: 'Audax Italiano', apiTeamId: 2329, isReserve: false },
   { shortName: 'J. Díaz', fullName: 'Juan Ignacio Díaz', image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSMMbiNBpx9abyfSTWqxKbpFPpPUh-kumH4y96vBvgUxWpvxA', contractEnd: null, marketValue: '€450k', team: 'Universidad Católica', apiTeamId: 2994, isReserve: false },
   { shortName: 'Á. López', fullName: 'Álvaro López', image: 'https://img.a.transfermarkt.technology/portrait/header/683807-1776452426.jpeg?lm=1', contractEnd: '31/12/2026', marketValue: '€450k', team: 'Albion', apiTeamId: 2378, isReserve: false },
@@ -45,7 +45,7 @@ export const BASE_AGENCY_PLAYERS: AgencyPlayer[] = [
   { shortName: 'L. Minniti', fullName: 'Luciano Minniti', image: null, contractEnd: '31/12/2028', marketValue: null, team: 'Tigre', apiTeamId: 452, isReserve: true },
   { shortName: 'A. Melano', fullName: 'Agustín Melano', image: 'https://encrypted-tbn3.gstatic.com/images?q=tbn:ANd9GcQI0lcQIHGis9Sa6VDh2h8FANIarYviSQSNpUcOLYYuPpzl2w', contractEnd: '31/12/2026', marketValue: null, team: 'Belgrano', apiTeamId: 440, isReserve: true },
   { shortName: 'F. Paradela', fullName: 'Francesco Paradela', image: null, contractEnd: null, marketValue: null, team: 'Gimnasia La Plata', apiTeamId: 434, isReserve: true },
-  { shortName: 'M. Isopi', fullName: 'Mauro Isopi', image: null, contractEnd: null, marketValue: null, team: 'Platense', apiTeamId: 1064, isReserve: true },
+  { shortName: 'M. Isopi', fullName: 'Mauro Isopi', image: null, contractEnd: '30/06/2027', marketValue: null, team: 'Santo Domingo', apiTeamId: null, isReserve: false },
   { shortName: 'T. Valdecantos Valle', fullName: 'Tomás Valdecantos', image: 'https://encrypted-tbn1.gstatic.com/images?q=tbn:ANd9GcR40YiqK6AdAQ-O3cU6kajD5P8SZGbDdGbF7kU1f7KuCUzxOw', contractEnd: null, marketValue: null, team: 'Al Ain', apiTeamId: 2865, isReserve: true },
 ]
 
@@ -63,6 +63,8 @@ export interface AgencyOverride {
 export const AGENCY_OVERRIDES: AgencyOverride[] = [
   { name: 'Juan Farías', team: 'Unión Magdalena' },
   { name: 'Alexis Steimbach', contractEnd: '31/12/2028' },
+  { name: 'Matías Espíndola', team: 'Necaxa', contractEnd: '30/06/2030' },
+  { name: 'Mauro Isopi', team: 'Santo Domingo', contractEnd: '30/06/2027' },
 ]
 
 // ─── Runtime list (base + overlay de Supabase) ─────────────────────────────────
