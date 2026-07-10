@@ -35,6 +35,7 @@ export const SHEET_URLS = {
   metricas: buildSheetUrl('/spreadsheets/d/e/2PACX-1vS7cuAywNQtcMc1R7Nzai9vUHHv8ZK09fTcm5GbwWD2_u0pRUeBRsVu_6SjLbdnMIL5SAJy-Liwn1yd/pub?gid=2041650226&single=true&output=csv'),
   valorMercadoHistorico: buildSheetUrl('/spreadsheets/d/e/2PACX-1vSneBjGlw2I3SyXV-uw1V8Cs_O4lbiQw39melKEZJNhunpshakPrn7AZQBN2L8N9Yw_HA-EeVOt3qvf/pub?gid=1121324076&single=true&output=csv'),
   gps: buildSheetUrl('/spreadsheets/d/e/2PACX-1vSneBjGlw2I3SyXV-uw1V8Cs_O4lbiQw39melKEZJNhunpshakPrn7AZQBN2L8N9Yw_HA-EeVOt3qvf/pub?gid=1233910424&single=true&output=csv'),
+  wyscoutEvolucion: buildSheetUrl('/spreadsheets/d/1gXhmqIc_joFkiQ1brie4-xHX43W8fqn2f6tqV04rx9s/export?format=csv&gid=284673441'),
 } as const
 
 // ─── COLUMN ALIASES ───────────────────────────────────────────────────────────
