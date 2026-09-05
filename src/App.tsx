@@ -31,6 +31,7 @@ const EvaluationsAdminPage = lazy(() => import('@/pages/EvaluationsAdminPage'))
 const RadarAnalysisPage = lazy(() => import('@/pages/RadarAnalysisPage'))
 const ScoutTrackingGGPage = lazy(() => import('@/pages/ScoutTrackingGGPage'))
 const BusquedaPage = lazy(() => import('@/pages/BusquedaPage'))
+const DebutantesPage = lazy(() => import('@/pages/DebutantesPage'))
 const InformesPage = lazy(() => import('@/pages/InformesPage'))
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'))
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'))
@@ -64,6 +65,7 @@ export default function App() {
             <Route path="/panel-interno" element={<DashboardPage />} />
             <Route path="/seguimiento-datos" element={<MonitoringPage />} />
             <Route path="/oportunidades" element={<OpportunitiesPage />} />
+            <Route path="/debutantes" element={<DebutantesPage />} />
             <Route path="/entrenadores" element={<CoachesListPage />} />
             <Route path="/entrenadores/:coachKey" element={<CoachDetailPage />} />
             <Route path="/entrenadores/:coachKey/partido/:fixtureId" element={<CoachMatchDetailPage />} />

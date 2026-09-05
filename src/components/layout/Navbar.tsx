@@ -71,6 +71,7 @@ const talentGroup: NavGroup = {
     { to: '/informes', labelKey: 'nav.informes', icon: 'clipboard' },
     { to: '/analisis-completo', labelKey: 'nav.analisisCompleto', icon: 'search' },
     { to: '/oportunidades', labelKey: 'nav.oportunidades', icon: 'star' },
+    { to: '/debutantes', labelKey: 'nav.debutantes', icon: 'star' },
     { to: '/similares', labelKey: 'nav.similares', icon: 'search' },
     { to: '/comparacion', labelKey: 'nav.comparaciones', icon: 'compare' },
     { to: '/formacion', labelKey: 'nav.formaciones', icon: 'layout' },
