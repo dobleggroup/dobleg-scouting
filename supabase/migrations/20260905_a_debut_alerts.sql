@@ -23,6 +23,13 @@ values
   (299, 'Primera Division', 'Venezuela', 2026, true, true)
 on conflict (id) do update set has_player_stats = true, track_debuts = true;
 
+-- Sin este indice, detect_debut_alerts() hace un seq scan de player_match_stats
+-- por cada fila candidata (el NOT EXISTS de "aparicion anterior") -- con el
+-- historial completo cargado (14 competencias, varios anios) eso da timeout.
+create index if not exists idx_pms_player_id_minutes
+  on public.player_match_stats(player_id)
+  where minutes > 0;
+
 create table public.debut_alerts (
   player_id     integer primary key references public.players(id),
   fixture_id    integer not null references public.fixtures(id),
