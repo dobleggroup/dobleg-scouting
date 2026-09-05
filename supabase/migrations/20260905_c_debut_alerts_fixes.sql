@@ -32,6 +32,8 @@
 
 alter table public.debut_alerts add column if not exists team_id integer references public.teams(id);
 
+drop function if exists public.detect_debut_alerts();
+
 create or replace function public.detect_debut_alerts()
 returns integer
 language plpgsql
