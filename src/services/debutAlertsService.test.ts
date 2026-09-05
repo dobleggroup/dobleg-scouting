@@ -11,8 +11,8 @@ function chain(result: { data: unknown; error: unknown }) {
   const builder: Record<string, unknown> = {}
   const self = () => builder
   builder.select = vi.fn(self)
-  builder.order = vi.fn(() => Promise.resolve(result))
-  builder.in = vi.fn(() => Promise.resolve(result))
+  builder.order = vi.fn(self)
+  builder.limit = vi.fn(() => Promise.resolve(result))
   return builder
 }
 
@@ -21,28 +21,19 @@ beforeEach(() => {
 })
 
 describe('fetchDebutAlerts', () => {
-  it('arma un DebutAlert por cada fila, cruzando jugador/equipo/liga', async () => {
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'debut_alerts') {
-        return chain({
-          data: [{ player_id: 1, league_id: 128, age_at_debut: 17, minutes: 23, debut_date: '2026-08-01' }],
-          error: null,
-        })
-      }
-      if (table === 'players') {
-        return chain({
-          data: [{ id: 1, name: 'Juan Perez', photo: 'foto.png', primary_position: 'DEL', current_team_id: 50 }],
-          error: null,
-        })
-      }
-      if (table === 'teams') {
-        return chain({ data: [{ id: 50, name: 'Boca Juniors', logo: 'boca.png' }], error: null })
-      }
-      if (table === 'leagues') {
-        return chain({ data: [{ id: 128, name: 'Liga Profesional' }], error: null })
-      }
-      return chain({ data: [], error: null })
-    })
+  it('arma un DebutAlert por cada fila, con los datos embebidos de jugador/equipo/liga', async () => {
+    mockFrom.mockReturnValue(chain({
+      data: [{
+        player_id: 1,
+        age_at_debut: 17,
+        minutes: 23,
+        debut_date: '2026-08-01',
+        player: { name: 'Juan Perez', photo: 'foto.png', primary_position: 'DEL' },
+        team: { name: 'Boca Juniors', logo: 'boca.png' },
+        league: { name: 'Liga Profesional' },
+      }],
+      error: null,
+    }))
 
     const result = await fetchDebutAlerts()
 
@@ -60,8 +51,45 @@ describe('fetchDebutAlerts', () => {
     }])
   })
 
+  it('usa "Desconocido" y nulls cuando faltan los datos embebidos', async () => {
+    mockFrom.mockReturnValue(chain({
+      data: [{ player_id: 2, age_at_debut: 19, minutes: 5, debut_date: '2026-07-01', player: null, team: null, league: null }],
+      error: null,
+    }))
+
+    const result = await fetchDebutAlerts()
+
+    expect(result).toEqual([{
+      playerId: 2,
+      playerName: 'Desconocido',
+      photo: null,
+      position: null,
+      teamName: null,
+      teamLogo: null,
+      leagueName: null,
+      ageAtDebut: 19,
+      minutes: 5,
+      debutDate: '2026-07-01',
+    }])
+  })
+
   it('devuelve array vacio si no hay debutantes', async () => {
     mockFrom.mockReturnValue(chain({ data: [], error: null }))
     expect(await fetchDebutAlerts()).toEqual([])
+  })
+
+  it('propaga el error en vez de esconderlo como lista vacia', async () => {
+    mockFrom.mockReturnValue(chain({ data: null, error: new Error('boom') }))
+    await expect(fetchDebutAlerts()).rejects.toThrow('boom')
+  })
+
+  it('pide como maximo 100 filas, ordenadas por fecha de debut descendente', async () => {
+    const builder = chain({ data: [], error: null })
+    mockFrom.mockReturnValue(builder)
+
+    await fetchDebutAlerts()
+
+    expect(builder.order).toHaveBeenCalledWith('debut_date', { ascending: false })
+    expect(builder.limit).toHaveBeenCalledWith(100)
   })
 })
