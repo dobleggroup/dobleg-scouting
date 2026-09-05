@@ -179,6 +179,48 @@ export default function AdminAccesosPage() {
           </button>
         </div>
       </section>
+
+      <section className="border-t border-apple-gray-200 dark:border-apple-gray-700 pt-6 space-y-3">
+        <h2 className="text-sm font-semibold text-apple-gray-500 uppercase tracking-wide">Cómo funciona esta pantalla</h2>
+        <div className="text-sm text-apple-gray-600 dark:text-apple-gray-300 space-y-3 leading-relaxed">
+          <p>
+            Cada plataforma (Doble G, Independiente, y las que vayan sumando) vive en su propia dirección de
+            internet, pero todas comparten la misma base de datos y el mismo sistema de logueo. Una cuenta
+            (un email) puede tener acceso a una sola plataforma, o a varias — eso se decide acá.
+          </p>
+          <p>
+            <strong>"Club de siempre"</strong> es la plataforma donde esa cuenta entra por defecto. Toda cuenta
+            necesita tener uno para poder usar cualquier plataforma — si no tiene ninguno asignado, al loguearse
+            le va a aparecer la pantalla de "acceso no autorizado".
+          </p>
+          <p>
+            <strong>"Accesos extra"</strong> es para cuando, ADEMÁS del club de siempre, esa cuenta también
+            necesita entrar a otra plataforma — sin perder el acceso a la primera.
+          </p>
+          <div className="bg-apple-gray-50 dark:bg-apple-gray-800/50 rounded-lg p-3 space-y-2">
+            <p className="font-medium text-apple-gray-700 dark:text-apple-gray-200">Ejemplo 1 — alguien de Doble G que también necesita entrar a Independiente:</p>
+            <p>
+              Es el caso de la cuenta <code className="text-xs">marcoscucho99@gmail.com</code>: club de siempre =
+              Doble G Sports Group, y además tiene "Independiente" marcado como acceso extra. Así, con el mismo
+              mail y la misma contraseña, entra a las dos plataformas — cada una le muestra sólo lo suyo, nunca
+              mezclado.
+            </p>
+          </div>
+          <div className="bg-apple-gray-50 dark:bg-apple-gray-800/50 rounded-lg p-3 space-y-2">
+            <p className="font-medium text-apple-gray-700 dark:text-apple-gray-200">Ejemplo 2 — se suma un club nuevo (ej. "Racing"):</p>
+            <p>
+              1. Abajo, en "Clubes existentes", se crea el club nuevo: id <code className="text-xs">racing</code>,
+              nombre "Racing Club". 2. Cuando el primer usuario de Racing tenga su cuenta creada (tiene que haber
+              iniciado sesión al menos una vez), se lo busca acá por su email y se le pone "Racing" como club de
+              siempre. Con eso ya puede entrar a la plataforma de Racing normalmente.
+            </p>
+          </div>
+          <p className="text-apple-gray-400 text-xs">
+            Sólo vos (marcoscucho99@gmail.com) podés ver y usar esta pantalla — a cualquier otra cuenta le
+            aparece como una página inexistente.
+          </p>
+        </div>
+      </section>
     </div>
   )
 }
