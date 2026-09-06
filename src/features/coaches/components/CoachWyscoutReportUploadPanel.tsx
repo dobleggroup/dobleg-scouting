@@ -4,6 +4,7 @@ import { parseWyscoutReportPdf } from '@/features/coaches/wyscoutReport/parseWys
 import type { WyscoutReportData } from '@/features/coaches/wyscoutReport/wyscoutReportTypes'
 import { saveWyscoutReport } from '@/services/coachWyscoutReportService'
 import type { AgencyCoach } from '@/constants/agencyCoaches'
+import pdfWorkerSrc from '@/lib/pdf/pdfWorker'
 
 export default function CoachWyscoutReportUploadPanel({
   coach,
@@ -34,6 +35,7 @@ export default function CoachWyscoutReportUploadPanel({
       const { report, warnings } = await parseWyscoutReportPdf(buffer, {
         fileName: file.name,
         matchCountWindow: 10,
+        workerSrc: pdfWorkerSrc,
       })
       if (report.players.length === 0 && report.matches.length === 0) {
         setError('No se pudo leer el informe. Tiene que ser el PDF "Informe del equipo" de Wyscout.')
