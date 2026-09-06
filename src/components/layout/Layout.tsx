@@ -193,11 +193,14 @@ export default function Layout() {
   return (
     <div className="min-h-screen flex flex-col bg-apple-gray-50 dark:bg-apple-gray-900 text-apple-gray-800 dark:text-apple-gray-100 transition-colors duration-300 ease-apple">
       {/* Glow ambiente de fondo, solo en modo oscuro -- fixed para que quede
-          anclado a las esquinas del viewport aunque la página scrollee, igual
-          que el efecto de referencia (mismo verde de marca, no rojo). */}
+          anclado aunque la página scrollee, igual que el efecto de referencia
+          (mismo verde de marca, no rojo). El Navbar es sticky z-50 con fondo
+          90% opaco -- el centro de las manchas va DEBAJO de esa franja
+          (top-20/top-40), no arriba del viewport, si no queda tapado casi
+          entero y no se ve nada. */}
       <div className="hidden dark:block fixed inset-0 -z-10 pointer-events-none overflow-hidden" aria-hidden="true">
-        <div className="absolute -top-48 -left-48 w-[560px] h-[560px] rounded-full bg-brand-green/10 blur-[160px]" />
-        <div className="absolute top-1/3 -right-56 w-[520px] h-[520px] rounded-full bg-emerald-500/[0.06] blur-[160px]" />
+        <div className="absolute top-20 -left-32 w-[560px] h-[560px] rounded-full bg-brand-green/20 blur-[130px]" />
+        <div className="absolute top-40 -right-40 w-[520px] h-[520px] rounded-full bg-emerald-500/[0.12] blur-[130px]" />
       </div>
       <Navbar />
       <main className="flex-1 pb-bottomnav">
