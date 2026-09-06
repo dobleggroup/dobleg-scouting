@@ -32,5 +32,21 @@ describe('parseWyscoutReportPdf de punta a punta contra el fixture real', () => 
     expect(warnings.some(w => /p[aá]gina 19/i.test(w))).toBe(false)
     expect(warnings.some(w => /p[aá]gina 21/i.test(w))).toBe(false)
     expect(warnings.some(w => /no reconocida/i.test(w))).toBe(false)
+
+    // Finding I3 (revisión final): antes de este fix, todos los sub-gráficos
+    // de una misma sección de página compartían un único `category` (p.ej.
+    // los 3 sub-gráficos de la página 16 quedaban todos bajo
+    // 'duelos_defensivos'), aunque cada uno esté normalizado a su PROPIA
+    // cancha 0-100 de forma independiente -- la UI los mezclaba en un solo
+    // selector, superponiendo espacios de coordenadas no relacionados. Ahora
+    // cada sub-gráfico real tiene su propio category (derivado del título
+    // real del sub-gráfico cuando se puede, ver `deriveEventMapCategories`),
+    // así que la cantidad de categorías distintas debe ser mayor que la
+    // cantidad de secciones que aportan mapas (3: fase_defensiva/ataque
+    // tienen 3 sub-gráficos reales cada una, ver páginas 16/18).
+    const distinctCategories = new Set(report.eventMaps.map(m => m.category))
+    expect(distinctCategories.size).toBeGreaterThan(2)
+    expect(distinctCategories.has('duelos_defensivos')).toBe(false)
+    expect(distinctCategories.has('ataque')).toBe(false)
   })
 })
