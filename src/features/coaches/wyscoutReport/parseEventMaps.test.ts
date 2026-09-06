@@ -20,12 +20,20 @@ describe('parseEventMaps contra el fixture real (pagina 16)', () => {
     // duelos aereos -- cada uno con su propia etiqueta "PROPIA MITAD" (no hay
     // "MITAD ADVERSARIA" en esta pagina). parseEventMaps no distingue esos
     // sub-graficos por titulo, asi que devuelve un mapa por cada etiqueta: se
-    // valida que TODOS sean validos (mitad "propia", decenas de puntos, todos
-    // dentro de cancha), no solo el primero.
-    expect(maps.length).toBeGreaterThanOrEqual(1)
+    // valida que TODOS sean validos (mitad "propia", todos dentro de cancha),
+    // no solo el primero.
+    //
+    // Los conteos exactos (191/98/98) estan verificados contra el fixture real
+    // filtrando manualmente por "x" (menos de 300, la mini-cancha; el resto es
+    // la tabla de ranking de al lado) e independientemente contando cuantos
+    // numeros de 1-2 digitos con ancho chico caen ahi -- se afirma el numero
+    // exacto, no un piso generico, porque un piso generico (ej. ">30") no
+    // hubiese detectado una regresion real: una version anterior de este
+    // parser filtraba de mas (perdia ~30% de los puntos reales de cada
+    // sub-grafico, dando 134/64/71) y ese piso igual pasaba.
+    expect(maps.map(m => m.points.length)).toEqual([191, 98, 98])
     for (const map of maps) {
       expect(map.half).toBe('propia')
-      expect(map.points.length).toBeGreaterThan(30) // pagina 16 tiene decenas de eventos por sub-grafico
       for (const p of map.points) {
         expect(p.x).toBeGreaterThanOrEqual(0)
         expect(p.x).toBeLessThanOrEqual(100)

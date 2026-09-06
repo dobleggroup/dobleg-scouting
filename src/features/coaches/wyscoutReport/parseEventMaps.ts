@@ -15,42 +15,61 @@ function halfFromLabel(text: string | undefined): PitchHalf {
  *  2.53 y 5.06pt de ancho. */
 const JERSEY_NUMBER_MAX_WIDTH = 7
 
-/** Tolerancia en "y" para considerar que un item cae en la MISMA fila que
- *  otro (misma logica que `SAME_ROW_Y_TOLERANCE` en `parseMatchesSection.ts`).
- *  Verificado contra el fixture real: en la tabla de ranking que Wyscout
- *  dibuja junto a cada mini-cancha, el nombre del jugador y sus columnas de
- *  stats numericas de esa misma fila difieren en menos de 0.5pt de "y" entre
- *  si (ej. pagina 16: dorsal/stats en y=733.9, nombre "O. Pacheco" en
- *  y=733.5). */
-const ROW_Y_TOLERANCE = 3
+/** Umbral de hueco horizontal ("x") para separar el racimo denso de puntos de
+ *  la mini-cancha de los restos sueltos de la tabla de ranking (columna de
+ *  dorsal + columnas de stats) que cae en la misma banda de "y".
+ *
+ *  Un intento anterior distinguia por fila (numero que comparte "y" con un
+ *  item de texto = celda de tabla), pero eso descartaba puntos genuinos: el
+ *  nombre del jugador de la tabla corre a lo largo de TODA la altura del
+ *  grafico en una columna fija (x≈326 en la pagina 16), asi que por pura
+ *  coincidencia de "y" terminaba emparejado con puntos de cancha que estan a
+ *  100-200pt de distancia en "x" y no tienen ninguna relacion con esa fila
+ *  (verificado: "6" en x=124.5 excluido por compartir "y" con "P. Souto" en
+ *  x=326.4, a 202pt de distancia). Ademas, ni siquiera un corte por distancia
+ *  en "x" alcanza: el hueco mas chico entre un punto genuino y un item de
+ *  texto ajeno coincidente en "y" (63.1pt) es MENOR que huecos reales dentro
+ *  de una misma fila de tabla (dorsal a nombre ~9.5pt, pero nombre a su
+ *  propia columna de stats mas lejana ~90-97pt) -- ambas distribuciones se
+ *  superponen, no hay un corte de distancia unico que las separe.
+ *
+ *  Lo que si separa limpio, verificado contra las 3 mini-canchas de la
+ *  pagina 16: el racimo de puntos de cancha es denso (hueco interno maximo
+ *  10.1/17.7/18.9pt en cada una) y el primer resto de tabla aparece recien
+ *  47-51pt despues del ultimo punto de cancha -- un hueco 2.5x mas grande que
+ *  cualquier hueco interno real. Por eso se corta por DENSIDAD relativa (el
+ *  racimo con mas puntos gana) en vez de por una coordenada de pagina fija:
+ *  esto sigue funcionando aunque la mini-cancha este del lado derecho de la
+ *  pagina (graficos espejados "MITAD ADVERSARIA" de la pagina 22), porque el
+ *  racimo denso simplemente aparece en otro rango de "x".
+ */
+const CLUSTER_GAP_THRESHOLD = 30
 
-const HAS_LETTER_RE = /[a-zA-Záéíóúñ]/
-
-/** Una fila de tabla de ranking siempre trae, ademas de numeros, un item con
- *  letras en la misma fila (el nombre del jugador) -- un punto de evento
- *  sobre la cancha jamas tiene una etiqueta de texto acompañandolo (a
- *  diferencia de una cancha de posicion media, Tasks 7/9): son numeros
- *  sueltos sin nombre. Por eso, en vez de recortar por una coordenada "x"
- *  absoluta de pagina (que se rompe apenas la tabla/cancha se reflejan al
- *  lado derecho de la pagina, como pasa en los graficos "MITAD ADVERSARIA"
- *  espejados de la pagina 22), se descarta cualquier numero que comparta fila
- *  con un item de texto -- sea cual sea su "x". */
-function isTableRowCell(candidate: PdfTextItem, regionItems: PdfTextItem[]): boolean {
-  return regionItems.some(it =>
-    it !== candidate &&
-    HAS_LETTER_RE.test(it.str) &&
-    Math.abs(it.y - candidate.y) < ROW_Y_TOLERANCE,
-  )
+/** Divide los candidatos (ya ordenados por "x") en racimos cortando donde el
+ *  hueco horizontal supera `CLUSTER_GAP_THRESHOLD`, y devuelve el racimo con
+ *  mas puntos -- el resto (restos sueltos de tabla, con muchos menos puntos)
+ *  se descarta. Si no hay ningun hueco grande, todo es un solo racimo y se
+ *  devuelve entero. */
+function keepDensestCluster(candidates: PdfTextItem[]): PdfTextItem[] {
+  if (candidates.length === 0) return candidates
+  const sorted = [...candidates].sort((a, b) => a.x - b.x)
+  const clusters: PdfTextItem[][] = [[sorted[0]]]
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].x - sorted[i - 1].x > CLUSTER_GAP_THRESHOLD) clusters.push([])
+    clusters[clusters.length - 1].push(sorted[i])
+  }
+  return clusters.reduce((best, c) => (c.length > best.length ? c : best), clusters[0])
 }
 
 /** De un conjunto de items ya acotado a una region, se queda con los numeros
- *  sueltos que son puntos de evento genuinos (ver `isTableRowCell`). */
+ *  sueltos que son puntos de evento genuinos: 1-2 digitos, ancho chico, y
+ *  parte del racimo denso (ver `keepDensestCluster`) en vez de un resto
+ *  suelto de la tabla de ranking. */
 function extractEventNumbers(regionItems: PdfTextItem[]): PdfTextItem[] {
-  return regionItems.filter(it =>
-    /^\d{1,2}$/.test(it.str) &&
-    it.width < JERSEY_NUMBER_MAX_WIDTH &&
-    !isTableRowCell(it, regionItems),
+  const candidates = regionItems.filter(it =>
+    /^\d{1,2}$/.test(it.str) && it.width < JERSEY_NUMBER_MAX_WIDTH,
   )
+  return keepDensestCluster(candidates)
 }
 
 /** Un mapa de eventos = numeros de camiseta sueltos (1-2 digitos, sin nombre debajo
