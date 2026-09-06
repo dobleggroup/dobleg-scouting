@@ -1,7 +1,12 @@
 import { groupRows } from '@/lib/pdf/groupRows'
 import type { PdfTextItem } from '@/lib/pdf/extractPdfItems'
 import { dedupItems } from './dedupItems'
-import type { WyscoutReportMatchLineupPlayer, WyscoutReportMatchStint, PitchPoint } from './wyscoutReportTypes'
+import type {
+  WyscoutReportMatch,
+  WyscoutReportMatchLineupPlayer,
+  WyscoutReportMatchStint,
+  PitchPoint,
+} from './wyscoutReportTypes'
 
 const DATE_RE = /^(\d{2})\.(\d{2})\.(\d{4})$/
 const SCORE_RE = /^\d+\s*[–-]\s*\d+$/
@@ -235,6 +240,22 @@ export function parseMatchStints(pageItems: PdfTextItem[]): WyscoutReportMatchSt
     )
 
     return { formation: headerItem.str, fromMinute, toMinute, players: parseStintPlayers(pitchItems) }
+  })
+}
+
+/**
+ * Arma la lista completa de partidos (una entrada por cada pagina "PARTIDOS")
+ * combinando encabezado+alineacion (Task 8) y tramos de formacion (Task 9) de
+ * cada pagina.
+ */
+export function parseMatchesSection(
+  pagesItems: PdfTextItem[][],
+  knownRosterNames: Set<string>,
+): WyscoutReportMatch[] {
+  return pagesItems.map(pageItems => {
+    const { header, lineup } = parseMatchHeaderAndLineup(pageItems, knownRosterNames)
+    const stints = parseMatchStints(pageItems)
+    return { ...header, lineup, stints }
   })
 }
 

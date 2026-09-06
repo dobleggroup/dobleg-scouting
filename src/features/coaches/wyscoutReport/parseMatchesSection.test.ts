@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { extractPdfItems } from '@/lib/pdf/extractPdfItems'
-import { parseMatchHeaderAndLineup, parseMatchStints, minutesPlayedInMatch } from './parseMatchesSection'
+import { parseMatchHeaderAndLineup, parseMatchStints, minutesPlayedInMatch, parseMatchesSection } from './parseMatchesSection'
+import { parsePlayersSection } from './parsePlayersSection'
 
 function fixture(name: string): ArrayBuffer {
   const path = fileURLToPath(new URL(`./__fixtures__/${name}`, import.meta.url))
@@ -73,5 +74,22 @@ describe('parseMatchStints contra el fixture real (pagina 6)', () => {
     expect(minutesPlayedInMatch(stints, 'Echeverría')).toBe(62)
     expect(minutesPlayedInMatch(stints, 'Krüger')).toBe(11)
     expect(minutesPlayedInMatch(stints, 'Nadie')).toBe(0)
+  })
+})
+
+describe('parseMatchesSection contra las 10 paginas de partidos del fixture', () => {
+  it('arma los 10 partidos con fecha, rival y minutos jugados verificables', async () => {
+    const items = await extractPdfItems(fixture('temperley-informe-equipo.pdf'))
+    const roster = new Set(parsePlayersSection(items.filter(i => i.page === 2)).map(p => p.name))
+    const pages = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map(p => items.filter(i => i.page === p))
+    const matches = parseMatchesSection(pages, roster)
+
+    expect(matches).toHaveLength(10)
+    expect(matches[0]).toMatchObject({ date: '2026-08-31', rival: 'Quilmes', isHome: false })
+    expect(matches[9]).toMatchObject({ date: '2026-06-20', rival: 'San Martín Tucumán', isHome: true })
+
+    // Echeverria en el partido vs Quilmes: 46'(sube) hasta 74' = 28 minutos.
+    const vsQuilmes = matches[0]
+    expect(minutesPlayedInMatch(vsQuilmes.stints, 'Echeverría')).toBeGreaterThan(0)
   })
 })
