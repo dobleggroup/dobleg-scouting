@@ -5,7 +5,7 @@ returns integer
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $fn$
 declare
   inserted_count integer;
 begin
@@ -70,6 +70,6 @@ begin
 
   return inserted_count;
 end;
-$$;
+$fn$;
 
 revoke execute on function public.detect_debut_alerts() from public, anon, authenticated;

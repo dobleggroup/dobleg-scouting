@@ -4,7 +4,7 @@ language sql
 stable
 security definer
 set search_path = public
-as $$
+as $fn$
   select
     da.player_id,
     coalesce(sum(pms.minutes) filter (where f.id <> da.fixture_id), 0)::int as minutes_since,
@@ -14,6 +14,6 @@ as $$
   join public.fixtures f on f.id = pms.fixture_id
   where da.player_id = any(target_player_ids)
   group by da.player_id
-$$;
+$fn$;
 
 grant execute on function public.debut_activity_since(integer[]) to authenticated;
