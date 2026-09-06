@@ -7,6 +7,22 @@ as $fn$
 declare
   inserted_count integer;
 begin
+  with earliest_by_birthdate as (
+    select p.birth_date, min(f.date) as first_date
+    from public.player_match_stats pms
+    join public.fixtures f on f.id = pms.fixture_id
+    join public.players p on p.id = pms.player_id
+    where pms.minutes > 0 and p.birth_date is not null
+    group by p.birth_date
+  ),
+  earliest_by_name as (
+    select lower(trim(p.name)) as norm_name, min(f.date) as first_date
+    from public.player_match_stats pms
+    join public.fixtures f on f.id = pms.fixture_id
+    join public.players p on p.id = pms.player_id
+    where pms.minutes > 0
+    group by lower(trim(p.name))
+  )
   insert into public.debut_alerts (player_id, fixture_id, league_id, display_league_id, team_id, age_at_debut, minutes, debut_date)
   select distinct on (pms.player_id)
     pms.player_id,
@@ -32,23 +48,15 @@ begin
   join public.fixtures f on f.id = pms.fixture_id
   join public.leagues l on l.id = f.league_id and l.track_debuts
   join public.players p on p.id = pms.player_id and p.birth_date is not null
+  left join earliest_by_birthdate fab on fab.birth_date = p.birth_date
+  left join earliest_by_name fan on fan.norm_name = lower(trim(p.name))
   where pms.minutes > 0
     and extract(year from age(f.date, p.birth_date)) <= 20
     and not exists (
       select 1 from public.debut_alerts da where da.player_id = pms.player_id
     )
-    and not exists (
-      select 1
-      from public.player_match_stats pms2
-      join public.fixtures f2 on f2.id = pms2.fixture_id
-      join public.players p3 on p3.id = pms2.player_id
-      where (
-        lower(trim(p3.name)) = lower(trim(p.name))
-        or (p3.birth_date is not null and p3.birth_date = p.birth_date)
-      )
-        and pms2.minutes > 0
-        and f2.date < f.date
-    )
+    and coalesce(fab.first_date, f.date) >= f.date
+    and coalesce(fan.first_date, f.date) >= f.date
     and coalesce((
       select count(*) filter (where f3.stats_synced = false)::numeric / nullif(count(*), 0)
       from public.fixtures f3
