@@ -203,11 +203,11 @@ export default function Layout() {
           en vivo que no se filtran adentro de las tarjetas translúcidas de
           esta app (bg-apple-gray-800/60 y similares). */}
       <div className="hidden dark:block absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-        <div className="absolute -top-[110px] left-[6%] w-[380px] h-[300px] rotate-[-8deg] rounded-[46%_54%_61%_39%/40%_48%_52%_60%] bg-brand-green/[0.19] blur-[95px]" />
-        <div className="absolute -top-[180px] left-[38%] w-[520px] h-[280px] rotate-[24deg] rounded-[65%_35%_42%_58%/58%_62%_38%_42%] bg-brand-green/[0.09] blur-[110px]" />
-        <div className="absolute top-[10px] -right-24 w-[220px] h-[190px] rotate-[-20deg] rounded-[55%_45%_35%_65%/50%_40%_60%_50%] bg-brand-green/[0.11] blur-[80px]" />
-        <div className="absolute bottom-[-120px] left-[18%] w-[360px] h-[330px] rotate-[14deg] rounded-[38%_62%_58%_42%/62%_44%_56%_38%] bg-brand-green/[0.12] blur-[95px]" />
-        <div className="absolute bottom-[-70px] -right-28 w-[300px] h-[260px] rotate-[-22deg] rounded-[58%_42%_44%_56%/40%_58%_42%_60%] bg-brand-green/[0.16] blur-[90px]" />
+        <div className="absolute -top-[110px] left-[6%] w-[380px] h-[300px] rotate-[-8deg] rounded-[46%_54%_61%_39%/40%_48%_52%_60%] bg-brand-green/[0.26] blur-[95px]" />
+        <div className="absolute -top-[180px] left-[38%] w-[520px] h-[280px] rotate-[24deg] rounded-[65%_35%_42%_58%/58%_62%_38%_42%] bg-brand-green/[0.14] blur-[110px]" />
+        <div className="absolute top-[10px] -right-24 w-[220px] h-[190px] rotate-[-20deg] rounded-[55%_45%_35%_65%/50%_40%_60%_50%] bg-brand-green/[0.16] blur-[80px]" />
+        <div className="absolute bottom-[-120px] left-[18%] w-[360px] h-[330px] rotate-[14deg] rounded-[38%_62%_58%_42%/62%_44%_56%_38%] bg-brand-green/[0.17] blur-[95px]" />
+        <div className="absolute bottom-[-70px] -right-28 w-[300px] h-[260px] rotate-[-22deg] rounded-[58%_42%_44%_56%/40%_58%_42%_60%] bg-brand-green/[0.22] blur-[90px]" />
       </div>
       <Navbar />
       <main className="flex-1 pb-bottomnav">
