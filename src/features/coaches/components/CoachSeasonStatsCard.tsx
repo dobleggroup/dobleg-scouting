@@ -4,12 +4,16 @@ import { computeSeasonStats } from '@/features/coaches/seasonStats'
 import { isMatchFinished } from '@/utils/coachCalendar'
 import { fetchSeasonFixtures } from '@/services/footballApiService'
 import CoachWyscoutUploadPanel from './CoachWyscoutUploadPanel'
+import CoachWyscoutReportUploadPanel from './CoachWyscoutReportUploadPanel'
+import CoachWyscoutReportPanel from './CoachWyscoutReportPanel'
 import CoachMatchMetricsEvolution, { buildEnrichedMatchRows } from './CoachMatchMetricsEvolution'
 import CoachTeamVsRivalCharts from './CoachTeamVsRivalCharts'
 import CoachDtEfficiencyPanel from './CoachDtEfficiencyPanel'
 import CoachMatchHistoryTable from './CoachMatchHistoryTable'
+import { getLatestWyscoutReport } from '@/services/coachWyscoutReportService'
 import type { AgencyCoach } from '@/constants/agencyCoaches'
 import type { AgencyFixture } from '@/types/footballApi'
+import type { WyscoutReportData } from '@/features/coaches/wyscoutReport/wyscoutReportTypes'
 import { useLanguage } from '@/context/LanguageContext'
 
 function StatTile({ label, value }: { label: string; value: string }) {
@@ -34,13 +38,24 @@ export default function CoachSeasonStatsCard({ coach }: { coach: AgencyCoach }) 
   const [statsRows, setStatsRows] = useState<CoachMatchTeamStats[] | null>(null)
   const [fixtures, setFixtures] = useState<AgencyFixture[] | null>(null)
   const [showUpload, setShowUpload] = useState(false)
+  const [wyscoutReport, setWyscoutReport] = useState<WyscoutReportData | null>(null)
+  const [showReportUpload, setShowReportUpload] = useState(false)
 
   const reload = () => {
     listCoachMatchTeamStats(coach.key).then(setStatsRows)
   }
 
+  const reloadReport = () => {
+    getLatestWyscoutReport(coach.key).then(setWyscoutReport)
+  }
+
   useEffect(() => {
     reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coach.key])
+
+  useEffect(() => {
+    reloadReport()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coach.key])
 
@@ -77,6 +92,13 @@ export default function CoachSeasonStatsCard({ coach }: { coach: AgencyCoach }) 
         >
           {showUpload ? t('coachDetail.cerrar') : t('coachDetail.cargarExcelWyscout')}
         </button>
+        <button
+          type="button"
+          onClick={() => setShowReportUpload(v => !v)}
+          className="text-2xs font-semibold text-brand-green hover:underline"
+        >
+          {showReportUpload ? t('coachDetail.cerrar') : 'Cargar informe PDF de Wyscout'}
+        </button>
       </div>
 
       {missingCount > 0 && (
@@ -89,6 +111,12 @@ export default function CoachSeasonStatsCard({ coach }: { coach: AgencyCoach }) 
       {showUpload && (
         <div className="mb-4">
           <CoachWyscoutUploadPanel coach={coach} fixtures={fixtures} onSaved={() => { reload(); setShowUpload(false) }} />
+        </div>
+      )}
+
+      {showReportUpload && (
+        <div className="mb-4">
+          <CoachWyscoutReportUploadPanel coach={coach} onSaved={() => { reloadReport(); setShowReportUpload(false) }} />
         </div>
       )}
 
@@ -112,6 +140,7 @@ export default function CoachSeasonStatsCard({ coach }: { coach: AgencyCoach }) 
           <CoachTeamVsRivalCharts rows={enrichedRows} />
           <CoachMatchMetricsEvolution rows={enrichedRows} />
           <CoachMatchHistoryTable rows={enrichedRows} />
+          {wyscoutReport && <CoachWyscoutReportPanel report={wyscoutReport} />}
         </div>
       )}
     </div>
