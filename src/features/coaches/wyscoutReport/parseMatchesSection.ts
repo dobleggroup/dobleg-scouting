@@ -1,7 +1,7 @@
 import { groupRows } from '@/lib/pdf/groupRows'
 import type { PdfTextItem } from '@/lib/pdf/extractPdfItems'
 import { dedupItems } from './dedupItems'
-import type { WyscoutReportMatchLineupPlayer } from './wyscoutReportTypes'
+import type { WyscoutReportMatchLineupPlayer, WyscoutReportMatchStint, PitchPoint } from './wyscoutReportTypes'
 
 const DATE_RE = /^(\d{2})\.(\d{2})\.(\d{4})$/
 const SCORE_RE = /^\d+\s*[–-]\s*\d+$/
@@ -138,4 +138,113 @@ export function parseMatchHeaderAndLineup(
     },
     lineup: (ownIsLeft ? leftPlayers : rightPlayers).slice(0, STARTING_XI_SIZE),
   }
+}
+
+/** Encabezado de un tramo: esquema de formacion ("4-2-3-1", "4-3-3", etc). */
+const STINT_HEADER_RE = /^(\d(-\d){2,4})$/
+
+/** Rango de minutos de un tramo, p.ej. "1' — 63'" o, con descuento, "87' — 90+6'". */
+const MINUTE_RANGE_RE = /^(\d+)\+?(\d+)?'?\s*—\s*(\d+)\+?(\d+)?'?$/
+
+/** El descuento ("+N") suma como minutos enteros al minuto base: "90+6'" ->
+ *  96, no 90.6 -- verificado contra el fixture real (el ultimo tramo del
+ *  partido, "87' — 90+6'", termina en el minuto 96 de juego real, no en un
+ *  valor fraccionario que no representa nada en el contexto de un partido). */
+function parseMinuteToken(main: string, extra: string | undefined): number {
+  return Number(main) + (extra ? Number(extra) : 0)
+}
+
+/** Ancho horizontal de cada carril de tramo -- verificado contra el fixture
+ *  real (pagina 6): los 4 tramos arrancan en x=27.7, 166.3, 304.9, 443.5
+ *  (delta exacto de 138.6pt entre cada uno). */
+const STINT_SLOT_WIDTH = 138.6
+
+/** Distancia horizontal entre el rotulo de esquema de un tramo (p.ej. "4-2-3-1")
+ *  y el arranque real de su carril de puntos de cancha -- verificado contra
+ *  el fixture real: el carril arranca un poco a la izquierda del texto del
+ *  esquema (headerItem.x=27.7 pero el jugador mas a la izquierda de ese
+ *  tramo, "3" Angelini, esta en x=41.1; 15 de margen deja lugar de sobra sin
+ *  invadir el carril anterior). */
+const STINT_SLOT_LEFT_MARGIN = 15
+
+/** Franja vertical debajo del renglon de encabezado del tramo (esquema +
+ *  rango de minutos) donde vive la mini-cancha de ese tramo -- verificado
+ *  contra el fixture real: el renglon de encabezado esta en y=412.9, el
+ *  jugador mas alto de cualquier tramo (el arquero, numero "1") esta en
+ *  y=260.1, muy por debajo del margen de 20. */
+const STINT_HEADER_TO_PITCH_GAP = 20
+
+/** Igual patron que `parseAveragePositions` en `parseFormationsSection.ts`
+ *  ("numero de camiseta 1-2 digitos, inmediatamente arriba del apellido"),
+ *  pero acotado al carril horizontal de CADA tramo (`STINT_SLOT_WIDTH`) en
+ *  vez de a toda la pagina, porque los 4 tramos comparten el mismo rango de
+ *  "y" (sus 4 mini-canchas quedan una al lado de la otra, no apiladas). */
+function parseStintPlayers(pitchItems: PdfTextItem[]): PitchPoint[] {
+  const numbers = pitchItems.filter(it => /^\d{1,2}$/.test(it.str))
+  if (numbers.length === 0) return []
+  const xs = numbers.map(n => n.x)
+  const ys = numbers.map(n => n.y)
+  const [minX, maxX] = [Math.min(...xs), Math.max(...xs)]
+  const [minY, maxY] = [Math.min(...ys), Math.max(...ys)]
+  const spanX = maxX - minX || 1
+  const spanY = maxY - minY || 1
+
+  return numbers.map(n => {
+    const nameItem = pitchItems
+      .filter(it => it !== n && Math.abs(it.x - n.x) < 15 && it.y < n.y && n.y - it.y < 12)
+      .sort((a, b) => (n.y - a.y) - (n.y - b.y))[0]
+    return {
+      x: ((n.x - minX) / spanX) * 100,
+      y: 100 - ((n.y - minY) / spanY) * 100, // y de PDF crece hacia arriba; pitch 0-100 crece hacia abajo
+      label: nameItem?.str,
+    }
+  })
+}
+
+/**
+ * Arma los tramos de formacion de UN partido (esquema + rango de minutos +
+ * jugadores en cancha) a partir de los items de una pagina "PARTIDOS". Cada
+ * tramo se identifica por su propio rotulo de esquema en la misma fila que su
+ * rango de minutos; los puntos de cancha de ESE tramo se ubican por carril
+ * horizontal (`STINT_SLOT_WIDTH`), ya que los 4 tramos de un partido comparten
+ * el mismo rango vertical (sus mini-canchas van una al lado de la otra). Las
+ * coordenadas de `players` se normalizan a 0-100 tomando el bounding box de
+ * los propios puntos de CADA tramo (no el de toda la pagina), igual patron
+ * que `parseAveragePositions` en `parseFormationsSection.ts`.
+ */
+export function parseMatchStints(pageItems: PdfTextItem[]): WyscoutReportMatchStint[] {
+  const items = dedupItems(pageItems)
+
+  const headers = items
+    .filter(it => STINT_HEADER_RE.test(it.str))
+    .sort((a, b) => a.x - b.x)
+
+  return headers.map(headerItem => {
+    const rangeItem = items.find(it =>
+      Math.abs(it.y - headerItem.y) < 2 && it.x > headerItem.x && MINUTE_RANGE_RE.test(it.str),
+    )!
+    const m = rangeItem.str.match(MINUTE_RANGE_RE)!
+    const fromMinute = parseMinuteToken(m[1], m[2])
+    const toMinute = parseMinuteToken(m[3], m[4])
+
+    const slotStart = headerItem.x - STINT_SLOT_LEFT_MARGIN
+    const slotEnd = slotStart + STINT_SLOT_WIDTH
+    const pitchItems = items.filter(it =>
+      it.y < headerItem.y - STINT_HEADER_TO_PITCH_GAP &&
+      it.x >= slotStart && it.x < slotEnd,
+    )
+
+    return { formation: headerItem.str, fromMinute, toMinute, players: parseStintPlayers(pitchItems) }
+  })
+}
+
+/** Suma los minutos de los tramos en los que aparece el jugador (por apellido,
+ *  igual que el `label` de `PitchPoint` en `parseMatchStints`). */
+export function minutesPlayedInMatch(
+  stints: Pick<WyscoutReportMatchStint, 'fromMinute' | 'toMinute' | 'players'>[],
+  playerSurname: string,
+): number {
+  return stints
+    .filter(s => s.players.some(p => p.label === playerSurname))
+    .reduce((sum, s) => sum + (s.toMinute - s.fromMinute), 0)
 }
