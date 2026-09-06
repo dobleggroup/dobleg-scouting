@@ -16,6 +16,15 @@ export default function CoachWyscoutReportUploadPanel({
   const [saving, setSaving] = useState(false)
   const [result, setResult] = useState<{ report: WyscoutReportData; warnings: string[]; file: File } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Finding I5 (revisión final del branch): separado del `error` de arriba
+  // (que es de PARSEO, mostrado solo en la rama del dropzone) porque un
+  // fallo de `handleSave` ocurre mientras el usuario está viendo la rama de
+  // preview -- si se reusara `error` acá, nunca se mostraría (esa rama no lo
+  // renderiza), dejando al usuario sin ninguna señal visible de que
+  // "Guardar informe" falló (p.ej. porque la tabla de Supabase todavía no
+  // existe hasta aplicar la migración a mano). Mismo patrón que el sibling
+  // `CoachWyscoutUploadPanel`.
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const handleFile = async (file: File) => {
     setParsing(true)
@@ -41,10 +50,11 @@ export default function CoachWyscoutReportUploadPanel({
   const handleSave = async () => {
     if (!result) return
     setSaving(true)
+    setSaveError(null)
     try {
-      const { success, error: saveError } = await saveWyscoutReport(coach.key, result.report, result.warnings, result.file)
+      const { success, error: saveErrorMessage } = await saveWyscoutReport(coach.key, result.report, result.warnings, result.file)
       if (!success) {
-        setError(saveError ?? 'No se pudo guardar el informe.')
+        setSaveError(saveErrorMessage ?? 'No se pudo guardar el informe.')
         return
       }
       setResult(null)
@@ -75,6 +85,11 @@ export default function CoachWyscoutReportUploadPanel({
 
   return (
     <div className="space-y-3">
+      {saveError && (
+        <div className="rounded-apple-lg border border-brand-red/40 bg-brand-red/10 px-3 sm:px-4 py-2.5 text-sm text-brand-red">
+          {saveError}
+        </div>
+      )}
       <div className="bg-white dark:bg-apple-gray-800/60 rounded-apple-lg border border-apple-gray-200/60 dark:border-apple-gray-700/40 px-3 sm:px-4 py-3 text-sm">
         <p className="font-semibold text-apple-gray-800 dark:text-white">
           {result.report.matches.length} partidos · {result.report.players.length} jugadores · {result.report.formations.length} formaciones detectadas
