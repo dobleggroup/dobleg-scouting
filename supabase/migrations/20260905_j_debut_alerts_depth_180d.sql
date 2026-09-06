@@ -59,7 +59,9 @@ begin
       select 1 from public.fixtures f4
       where f4.league_id = f.league_id
         and f4.stats_synced = true
-        and f4.date < f.date - interval '180 days'
+        and f4.date < f.date - (
+          case when f.league_id in (131, 268, 344, 252) then interval '180 days' else interval '365 days' end
+        )
     )
   order by pms.player_id, f.date asc, f.id asc
   on conflict (player_id) do nothing;
