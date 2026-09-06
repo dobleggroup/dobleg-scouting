@@ -194,15 +194,19 @@ export default function Layout() {
     <div className="relative min-h-screen flex flex-col bg-apple-gray-50 dark:bg-apple-gray-900 text-apple-gray-800 dark:text-apple-gray-100 transition-colors duration-300 ease-apple">
       {/* Glow ambiente de fondo, solo en modo oscuro -- `absolute` (no `fixed`)
           sobre este contenedor relative, así que mide el alto real de TODA la
-          página y scrollea con el contenido: uno arriba, uno a mitad de
-          página, uno abajo del todo a la derecha, en vez de 2 manchas fijas
-          siempre pegadas al viewport. Cada mancha sigue siendo compacta en
-          alto (280-320px) para no quedar detrás de las tarjetas translúcidas
-          de esta app (bg-apple-gray-800/60 y similares) el tramo entero del
-          scroll -- verificado en vivo que así no se filtran adentro. */}
+          página y scrollea con el contenido: uno arriba, uno abajo del todo a
+          la derecha, en vez de manchas fijas siempre pegadas al viewport.
+          Cada punto son 2-3 formas orgánicas (border-radius asimétrico +
+          rotación, no un círculo perfecto) superpuestas con tamaños/opacidad
+          distintos para que la silueta combinada no se lea como "un círculo
+          difuminado" -- verificado en vivo que así no se filtran adentro de
+          las tarjetas translúcidas de esta app (bg-apple-gray-800/60 y
+          similares). */}
       <div className="hidden dark:block absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-        <div className="absolute -top-[120px] -left-32 w-[480px] h-[460px] rounded-full bg-brand-green/20 blur-[110px]" />
-        <div className="absolute bottom-[-140px] -right-24 w-[440px] h-[440px] rounded-full bg-brand-green/[0.14] blur-[110px]" />
+        <div className="absolute -top-[130px] -left-40 w-[460px] h-[420px] rotate-[-12deg] rounded-[42%_58%_63%_37%/48%_42%_58%_52%] bg-brand-green/20 blur-[100px]" />
+        <div className="absolute -top-[60px] left-10 w-[300px] h-[260px] rotate-[18deg] rounded-[60%_40%_38%_62%/55%_65%_35%_45%] bg-brand-green/[0.13] blur-[90px]" />
+        <div className="absolute bottom-[-150px] -right-32 w-[420px] h-[400px] rotate-[10deg] rounded-[55%_45%_40%_60%/45%_55%_60%_40%] bg-brand-green/[0.14] blur-[100px]" />
+        <div className="absolute bottom-[-40px] right-16 w-[260px] h-[240px] rotate-[-15deg] rounded-[38%_62%_55%_45%/60%_38%_62%_40%] bg-brand-green/10 blur-[85px]" />
       </div>
       <Navbar />
       <main className="flex-1 pb-bottomnav">
