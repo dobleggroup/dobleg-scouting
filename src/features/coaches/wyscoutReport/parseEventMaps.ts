@@ -1,5 +1,6 @@
 import type { PdfTextItem } from '@/lib/pdf/extractPdfItems'
 import { dedupItems } from './dedupItems'
+import { normalizeCluster } from './pitchNormalization'
 import type { WyscoutEventMap, PitchHalf } from './wyscoutReportTypes'
 
 const HALF_LABEL_RE = /^(PROPIA MITAD|MITAD ADVERSARIA)$/
@@ -94,11 +95,47 @@ function extractEventNumbers(regionItems: PdfTextItem[]): PdfTextItem[] {
  *  intenta primero la banda de abajo (hasta la siguiente etiqueta) y, solo si
  *  ahi no aparece ningun punto real, se prueba la banda de arriba (hasta la
  *  etiqueta anterior) -- nunca las dos a la vez, para no duplicar ni
- *  mezclar el contenido de dos mini-canchas vecinas. */
+ *  mezclar el contenido de dos mini-canchas vecinas.
+ *
+ *  Nota 3 (fix Finding I2, revision final del branch): la banda de "arriba"
+ *  de una etiqueta es, por construccion, EXACTAMENTE la misma banda que la
+ *  banda de "abajo" de la etiqueta anterior (ambas van de una etiqueta a la
+ *  siguiente en el mismo sentido) -- verificado contra el fixture real
+ *  (pagina 18, "ATAQUE"): esa pagina trae 3 etiquetas "MITAD ADVERSARIA" pie
+ *  de grafico, y la 2da etiqueta consume por "abajo" el racimo real de la
+ *  3ra (huerfana, sin contenido propio por debajo), asi que cuando la 3ra
+ *  cae al fallback de "arriba" recupera ese MISMO racimo -- 2 mapas
+ *  identicos en vez de 2 mapas distintos (confirmado: 3 mapas/229 puntos en
+ *  vez de 2 mapas/126 puntos, con los ultimos 2 puntos por puntos
+ *  identicos). Por eso se lleva un registro de que bandas de "y" ya fueron
+ *  asignadas a una etiqueta anterior (por "abajo" o por "arriba") y, si el
+ *  fallback de "arriba" de una etiqueta posterior recupera exactamente esa
+ *  misma banda, se descarta (mapa vacio) en vez de duplicar el de la
+ *  etiqueta anterior.
+ *
+ *  Importante: la deteccion de duplicado se hace sobre el RESULTADO del
+ *  fallback (ya filtrado por `extractEventNumbers`/`keepDensestCluster`), no
+ *  excluyendo la banda reclamada ANTES de correr esa deteccion de racimo --
+ *  si se excluyera antes, un resto suelto de una tabla vecina que cae justo
+ *  fuera de la banda reclamada (verificado contra el fixture real: un "5"
+ *  de la tabla "Jugadores" de la pagina 18, a x=316.9, aislado del racimo
+ *  real por `CLUSTER_GAP_THRESHOLD` pero dentro de la misma ventana de "y")
+ *  pasaria a ser, por eliminacion, el UNICO candidato restante y se
+ *  devolveria como si fuera un racimo real de 1 solo punto -- cuando en
+ *  realidad `keepDensestCluster` ya lo habia descartado correctamente frente
+ *  al racimo real de 103 puntos antes de la exclusion. */
 export function parseEventMaps(pageItems: PdfTextItem[], category: string): WyscoutEventMap[] {
   const items = dedupItems(pageItems)
   const halfLabels = items.filter(i => HALF_LABEL_RE.test(i.str)).sort((a, b) => b.y - a.y)
   if (halfLabels.length === 0) return []
+
+  const claimedYRanges: [number, number][] = []
+  const isDuplicateOfClaimed = (numbers: PdfTextItem[]) => {
+    if (numbers.length === 0) return false
+    const ys = numbers.map(n => n.y)
+    const [lo, hi] = [Math.min(...ys), Math.max(...ys)]
+    return claimedYRanges.some(([claimedLo, claimedHi]) => lo >= claimedLo && hi <= claimedHi)
+  }
 
   return halfLabels.map((label, i) => {
     const next = halfLabels[i + 1]
@@ -107,25 +144,28 @@ export function parseEventMaps(pageItems: PdfTextItem[], category: string): Wysc
     const belowItems = items.filter(it => it.y < label.y && (!next || it.y >= next.y))
     const belowNumbers = extractEventNumbers(belowItems)
 
-    const numbers = belowNumbers.length > 0
-      ? belowNumbers
-      : extractEventNumbers(items.filter(it => it.y > label.y && (!prev || it.y <= prev.y)))
+    let numbers = belowNumbers
+    if (numbers.length === 0) {
+      const aboveNumbers = extractEventNumbers(
+        items.filter(it => it.y > label.y && (!prev || it.y <= prev.y)),
+      )
+      numbers = isDuplicateOfClaimed(aboveNumbers) ? [] : aboveNumbers
+    }
 
-    const xs = numbers.map(n => n.x)
-    const ys = numbers.map(n => n.y)
-    const [minX, maxX] = [Math.min(...xs, 0), Math.max(...xs, 1)]
-    const [minY, maxY] = [Math.min(...ys, 0), Math.max(...ys, 1)]
-    const spanX = maxX - minX || 1
-    const spanY = maxY - minY || 1
+    if (numbers.length > 0) {
+      const ys = numbers.map(n => n.y)
+      claimedYRanges.push([Math.min(...ys), Math.max(...ys)])
+    }
 
     return {
       category,
       half: halfFromLabel(label.str),
-      points: numbers.map(n => ({
-        x: ((n.x - minX) / spanX) * 100,
-        y: 100 - ((n.y - minY) / spanY) * 100,
-        label: n.str,
-      })),
+      points: normalizeCluster(numbers, n => n.str),
     }
   })
+    // Una etiqueta cuyo racimo resulto duplicado (ver Nota 3) queda sin
+    // puntos propios -- se filtra aca en vez de devolverse como un mapa
+    // vacio, asi el caller nunca ve un mapa "fantasma" ni tiene que
+    // filtrarlo el mismo.
+    .filter(map => map.points.length > 0)
 }

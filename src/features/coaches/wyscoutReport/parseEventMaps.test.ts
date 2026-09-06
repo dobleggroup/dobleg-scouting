@@ -40,6 +40,47 @@ describe('parseEventMaps contra el fixture real (pagina 16)', () => {
         expect(p.y).toBeGreaterThanOrEqual(0)
         expect(p.y).toBeLessThanOrEqual(100)
       }
+      // Finding C1 (revision final): un intento anterior clampeaba el minimo
+      // de la normalizacion a 0 (`Math.min(...xs, 0)`), lo que -- como las
+      // coordenadas reales de un PDF siempre son positivas -- aplastaba
+      // cualquier racimo real contra el origen de la pagina en vez de contra
+      // su propio bounding box, dejando todos los puntos amontonados en una
+      // banda angosta cerca de x/y=0 en vez de ocupar la cancha 0-100
+      // completa. La aserción de rango [0,100] de arriba pasaba igual con
+      // ese bug (nunca se probaba el SPAN real), así que acá se afirma
+      // explícitamente que el racimo ocupa una porción sustancial de la
+      // cancha en ambos ejes -- esto hubiese fallado con el bug original
+      // (spans reales medidos con el bug: x en ~[0,17], y en ~[0,43]).
+      const xs = map.points.map(p => p.x)
+      const ys = map.points.map(p => p.y)
+      expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(50)
+      expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(50)
     }
+  })
+})
+
+describe('parseEventMaps contra el fixture real (pagina 18) -- Finding I2', () => {
+  it('no duplica el racimo de una etiqueta huerfana (3 etiquetas MITAD ADVERSARIA, solo 2 racimos reales)', async () => {
+    const items = await extractPdfItems(fixture('temperley-informe-equipo.pdf'))
+    const maps = parseEventMaps(items.filter(i => i.page === 18), 'ataque')
+
+    // La pagina 18 ("ATAQUE") trae 3 sub-graficos ("Centros", "Regates
+    // exitosos en el ultimo tercio", "Recuperaciones en el ultimo tercio"),
+    // cada uno con su propia etiqueta "MITAD ADVERSARIA" como pie de
+    // grafico -- pero la 3ra etiqueta no tiene ningun contenido propio por
+    // debajo (esta huerfana, verificado contra el fixture real), y el
+    // fallback de "buscar arriba" terminaba re-recuperando el MISMO racimo
+    // que la 2da etiqueta ya habia consumido por "abajo" -- produciendo 3
+    // mapas (23/103/103 puntos, dos de ellos byte-identicos) en vez de 2
+    // mapas reales distintos (23/103 puntos). Un piso generico (">0 mapas")
+    // no hubiese detectado esta regresion, por eso se afirma el conteo
+    // exacto de mapas y se verifica explicitamente que ningun par de mapas
+    // comparta el mismo conjunto de puntos.
+    expect(maps).toHaveLength(2)
+    expect(maps.map(m => m.points.length)).toEqual([23, 103])
+    for (const map of maps) {
+      expect(map.half).toBe('rival')
+    }
+    expect(JSON.stringify(maps[0].points)).not.toBe(JSON.stringify(maps[1].points))
   })
 })

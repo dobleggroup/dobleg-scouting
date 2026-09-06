@@ -1,6 +1,7 @@
 import { groupRows } from '@/lib/pdf/groupRows'
 import type { PdfTextItem } from '@/lib/pdf/extractPdfItems'
 import { dedupItems } from './dedupItems'
+import { normalizeCluster } from './pitchNormalization'
 import type {
   WyscoutReportMatch,
   WyscoutReportMatchLineupPlayer,
@@ -186,24 +187,12 @@ const STINT_HEADER_TO_PITCH_GAP = 20
  *  "y" (sus 4 mini-canchas quedan una al lado de la otra, no apiladas). */
 function parseStintPlayers(pitchItems: PdfTextItem[]): PitchPoint[] {
   const numbers = pitchItems.filter(it => /^\d{1,2}$/.test(it.str))
-  if (numbers.length === 0) return []
-  const xs = numbers.map(n => n.x)
-  const ys = numbers.map(n => n.y)
-  const [minX, maxX] = [Math.min(...xs), Math.max(...xs)]
-  const [minY, maxY] = [Math.min(...ys), Math.max(...ys)]
-  const spanX = maxX - minX || 1
-  const spanY = maxY - minY || 1
 
-  return numbers.map(n => {
-    const nameItem = pitchItems
+  return normalizeCluster(numbers, n =>
+    pitchItems
       .filter(it => it !== n && Math.abs(it.x - n.x) < 15 && it.y < n.y && n.y - it.y < 12)
-      .sort((a, b) => (n.y - a.y) - (n.y - b.y))[0]
-    return {
-      x: ((n.x - minX) / spanX) * 100,
-      y: 100 - ((n.y - minY) / spanY) * 100, // y de PDF crece hacia arriba; pitch 0-100 crece hacia abajo
-      label: nameItem?.str,
-    }
-  })
+      .sort((a, b) => (n.y - a.y) - (n.y - b.y))[0]?.str,
+  )
 }
 
 /**

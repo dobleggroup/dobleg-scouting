@@ -2,6 +2,7 @@ import { groupRows } from '@/lib/pdf/groupRows'
 import type { PdfCell } from '@/lib/pdf/groupRows'
 import type { PdfTextItem } from '@/lib/pdf/extractPdfItems'
 import { dedupItems } from './dedupItems'
+import { normalizeCluster } from './pitchNormalization'
 import type { WyscoutReportFormation, PitchPoint } from './wyscoutReportTypes'
 
 const STAT_LABELS = [
@@ -150,21 +151,14 @@ function parseAveragePositions(block: PdfTextItem[]): PitchPoint[] {
   // Numero de camiseta (1-2 digitos) inmediatamente arriba del apellido --
   // mismo patron que las estampas de partido (Task 10). Cancha de este
   // bloque: se toma el bounding box de los propios puntos para normalizar a
-  // 0-100. Se excluyen los valores de la tabla comparativa (ver
-  // `statValueItems`) antes de buscar numeros de camiseta.
+  // 0-100 (ver `normalizeCluster`). Se excluyen los valores de la tabla
+  // comparativa (ver `statValueItems`) antes de buscar numeros de camiseta.
   const excluded = statValueItems(block)
   const pitchItems = block.filter(i => !excluded.has(i))
   const numbers = pitchItems.filter(i => /^\d{1,2}$/.test(i.str))
-  if (numbers.length === 0) return []
-  const xs = numbers.map(n => n.x)
-  const ys = numbers.map(n => n.y)
-  const [minX, maxX] = [Math.min(...xs), Math.max(...xs)]
-  const [minY, maxY] = [Math.min(...ys), Math.max(...ys)]
-  const spanX = maxX - minX || 1
-  const spanY = maxY - minY || 1
 
-  return numbers.map(n => {
-    const nameItem = pitchItems
+  return normalizeCluster(numbers, n =>
+    pitchItems
       .filter(i =>
         i !== n &&
         !/^\d{1,2}$/.test(i.str) &&
@@ -173,13 +167,8 @@ function parseAveragePositions(block: PdfTextItem[]): PitchPoint[] {
         n.x >= i.x - NAME_SPAN_PAD &&
         n.x <= i.x + i.width + NAME_SPAN_PAD,
       )
-      .sort((a, b) => (n.y - a.y) - (n.y - b.y))[0]
-    return {
-      x: ((n.x - minX) / spanX) * 100,
-      y: 100 - ((n.y - minY) / spanY) * 100, // y de PDF crece hacia arriba; pitch 0-100 crece hacia abajo
-      label: nameItem?.str,
-    }
-  })
+      .sort((a, b) => (n.y - a.y) - (n.y - b.y))[0]?.str,
+  )
 }
 
 function parseTeamStats(block: PdfTextItem[]): { label: string; own: number; rival: number }[] {
