@@ -48,9 +48,9 @@ export function findPageHeaders(
 
   const result: { page: number; label: SectionLabel; raw: string }[] = []
   for (const [page, pageItems] of byPage) {
-    // El título de sección es el texto más específico (más largo) entre los
-    // candidatos del encabezado -- la página también repite "INFORME DEL EQUIPO"
-    // y el nombre del equipo ahí arriba, que no matchean ningún KNOWN_LABEL.
+    // El encabezado también repite "INFORME DEL EQUIPO" y el nombre del equipo
+    // ahí arriba -- ninguno de esos matchea KNOWN_LABELS, así que en la práctica
+    // queda un único candidato: el título de sección real de esa página.
     const candidates = pageItems
       .map(it => ({ raw: it.str, label: classifySectionLabel(it.str) }))
       .filter(c => c.label !== 'desconocida')
