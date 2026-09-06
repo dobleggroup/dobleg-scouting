@@ -44,6 +44,19 @@ export function classifySectionLabel(headerText: string): SectionLabel {
  *  de página siempre va ahí, separado del contenido por una línea horizontal). */
 const HEADER_Y_MIN = 760
 
+/** El título de sección real (el que clasifica la página) cae siempre exactamente
+ *  en y=807.3 en este layout -- verificado en las 12 páginas conocidas del fixture
+ *  real (jugadores, estadísticas, formaciones, partidos, fase_defensiva,
+ *  construccion_del_juego, ataque, finalizacion, transiciones, peligro_constante,
+ *  jugadas_a_balon_parado, glosario). El boilerplate "INFORME DEL EQUIPO" (y=819.1)
+ *  y el nombre del equipo (y=810.9) quedan por encima; los encabezados de columna
+ *  de contenido que a veces también superan HEADER_Y_MIN quedan por debajo (<790).
+ *  Se usa para identificar el título incluso cuando NO matchea ningún label
+ *  conocido (ver `findPageHeaders`), en vez de asumir que el primer item de la
+ *  página es el título. */
+const TITLE_Y = 807.3
+const TITLE_Y_TOLERANCE = 1
+
 export function findPageHeaders(
   items: PdfTextItem[],
 ): { page: number; label: SectionLabel; raw: string }[] {
@@ -59,11 +72,26 @@ export function findPageHeaders(
     // El encabezado también repite "INFORME DEL EQUIPO" y el nombre del equipo
     // ahí arriba -- ninguno de esos matchea KNOWN_LABELS, así que en la práctica
     // queda un único candidato: el título de sección real de esa página.
-    const candidates = pageItems
-      .map(it => ({ raw: it.str, label: classifySectionLabel(it.str) }))
-      .filter(c => c.label !== 'desconocida')
-    if (candidates.length === 0) continue
-    result.push({ page, label: candidates[0].label, raw: candidates[0].raw })
+    const candidates = pageItems.map(it => ({ raw: it.str, label: classifySectionLabel(it.str) }))
+    const known = candidates.find(c => c.label !== 'desconocida')
+    if (known) {
+      result.push({ page, label: known.label, raw: known.raw })
+      continue
+    }
+
+    // Ninguno de los items del encabezado matcheó una sección conocida. El plan
+    // exige que una página no clasificable vaya a `warnings`, nunca se pierda en
+    // silencio -- así que igual se reporta la página, con label "desconocida",
+    // en vez de omitirla del resultado (bug real: antes de este fix, esta rama
+    // simplemente hacía `continue` y la página desaparecía sin dejar rastro).
+    // Como `raw` se prefiere el título real de la página (ver `TITLE_Y`) en vez
+    // del boilerplate "INFORME DEL EQUIPO"/nombre de equipo, para que el mensaje
+    // de warning que arma el orquestador sea legible; si por algún motivo no hay
+    // ningún item en esa banda de "y", se usa el primero que haya como último
+    // recurso (nunca se descarta la página).
+    const titleItem = pageItems.find(it => Math.abs(it.y - TITLE_Y) <= TITLE_Y_TOLERANCE)
+    const fallback = titleItem ?? pageItems[0]
+    result.push({ page, label: 'desconocida', raw: fallback.str })
   }
   return result.sort((a, b) => a.page - b.page)
 }
