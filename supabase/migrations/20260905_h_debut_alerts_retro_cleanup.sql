@@ -8,7 +8,10 @@ where f.id = da.fixture_id
       from public.player_match_stats pms2
       join public.fixtures f2 on f2.id = pms2.fixture_id
       join public.players p3 on p3.id = pms2.player_id
-      where lower(trim(p3.name)) = lower(trim(p.name))
+      where (
+        lower(trim(p3.name)) = lower(trim(p.name))
+        or (p3.birth_date is not null and p3.birth_date = p.birth_date)
+      )
         and pms2.minutes > 0
         and f2.date < f.date
     )
