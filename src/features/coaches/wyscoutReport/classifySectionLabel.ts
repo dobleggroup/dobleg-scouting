@@ -4,6 +4,7 @@ import type { PdfTextItem } from '@/lib/pdf/extractPdfItems'
 export type SectionLabel =
   | 'jugadores' | 'estadisticas' | 'formaciones' | 'partidos'
   | 'fase_defensiva' | 'construccion_del_juego' | 'ataque' | 'transiciones'
+  | 'finalizacion' | 'peligro_constante'
   | 'jugadas_a_balon_parado' | 'glosario' | 'desconocida'
 
 const KNOWN_LABELS: { match: string; label: SectionLabel }[] = [
@@ -15,6 +16,13 @@ const KNOWN_LABELS: { match: string; label: SectionLabel }[] = [
   { match: 'construccion del juego', label: 'construccion_del_juego' },
   { match: 'ataque', label: 'ataque' },
   { match: 'transiciones', label: 'transiciones' },
+  // Páginas 19 y 21 del fixture real, no contempladas por el plan/spec original
+  // (ver ruling del controller en Task 15): "FINALIZACIÓN" trae los datos de
+  // tiros/goles (categoría "tiros" de los mapas de eventos) y "PELIGRO
+  // CONSTANTE" trae regates/pases en profundidad/fuera de juego, en el mismo
+  // estilo de grillas de zona + tabla de ranking que "TRANSICIONES".
+  { match: 'finalizacion', label: 'finalizacion' },
+  { match: 'peligro constante', label: 'peligro_constante' },
   { match: 'jugadas a balon parado', label: 'jugadas_a_balon_parado' },
   { match: 'glosario', label: 'glosario' },
 ]

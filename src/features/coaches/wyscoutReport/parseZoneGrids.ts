@@ -8,6 +8,23 @@ const SECTION_TITLES: { match: RegExp; category: WyscoutZoneGrid['category'] }[]
   { match: /^Faltas cometidas$/i, category: 'faltas' },
 ]
 
+// NOTA (Task 15): se investigó si la página PELIGRO CONSTANTE (página 21 del
+// fixture real) trae grillas 3x3 con el mismo formato que TRANSICIONES bajo
+// los títulos reales "Regate", "Pases en profundidad" y "Fuera de juego".
+// Verificado que NO es así: son tablas de porcentajes por JUGADOR (con nombre,
+// minutos, etc. a la derecha, igual que las tablas de ranking de FINALIZACIÓN)
+// intercaladas con una franja de valores de fuente ancha que por pura
+// coincidencia de layout (no de significado) matchea el mismo filtro
+// isGridPct usado para distinguir celda-real de marginal en TRANSICIONES.
+// Al correr parseZoneGrids sobre la página 21 con estos 3 títulos agregados
+// se obtiene: "Regate" con 10 celdas (col 0-3, con un row=1/col=1 espurio) en
+// vez de 9, y "Fuera de juego" con una sola celda -- no una grilla 3x3 real.
+// Forzar esos títulos acá produciría datos incorrectos, así que
+// deliberadamente NO se agregan (a diferencia de "finalizacion", que sí se
+// añadió a `classifySectionLabel.ts` para que la página deje de clasificar
+// como "desconocida" -- el warning se elimina aunque esta sección puntual no
+// se parsee en detalle; ver informe de Task 15 para más contexto).
+
 const PCT_RE = /^(\d+(?:\.\d+)?)%$/
 const REF_RE = /^\d+(?:\.\d+)?$/
 
