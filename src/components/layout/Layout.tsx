@@ -193,14 +193,17 @@ export default function Layout() {
   return (
     <div className="min-h-screen flex flex-col bg-apple-gray-50 dark:bg-apple-gray-900 text-apple-gray-800 dark:text-apple-gray-100 transition-colors duration-300 ease-apple">
       {/* Glow ambiente de fondo, solo en modo oscuro -- fixed para que quede
-          anclado aunque la página scrollee, igual que el efecto de referencia
-          (mismo verde de marca, no rojo). El Navbar es sticky z-50 con fondo
-          90% opaco -- el centro de las manchas va DEBAJO de esa franja
-          (top-20/top-40), no arriba del viewport, si no queda tapado casi
-          entero y no se ve nada. */}
+          anclado aunque la página scrollee. Confinado a la franja superior
+          (header/hero) y apagado antes de llegar al contenido: las tarjetas de
+          esta app son translúcidas (bg-apple-gray-800/60 y similares, patrón
+          usado en toda la plataforma) así que un glow que llegue hasta esa
+          altura se filtra visiblemente adentro de cada tarjeta -- verificado
+          en vivo con el navegador. Con -120px/-100px de arranque y solo
+          300-320px de alto, para cuando el contenido empieza (~y=190px en
+          Inicio) ya se apagó casi del todo. */}
       <div className="hidden dark:block fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-        <div className="absolute top-20 -left-32 w-[560px] h-[560px] rounded-full bg-brand-green/[0.18] blur-[120px]" />
-        <div className="absolute top-40 -right-40 w-[520px] h-[520px] rounded-full bg-brand-green/[0.12] blur-[120px]" />
+        <div className="absolute -top-[120px] -left-32 w-[480px] h-[320px] rounded-full bg-brand-green/[0.16] blur-[100px]" />
+        <div className="absolute -top-[100px] -right-40 w-[440px] h-[300px] rounded-full bg-brand-green/10 blur-[100px]" />
       </div>
       <Navbar />
       <main className="flex-1 pb-bottomnav">
