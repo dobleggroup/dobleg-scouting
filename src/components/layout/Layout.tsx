@@ -198,9 +198,9 @@ export default function Layout() {
           90% opaco -- el centro de las manchas va DEBAJO de esa franja
           (top-20/top-40), no arriba del viewport, si no queda tapado casi
           entero y no se ve nada. */}
-      <div className="hidden dark:block fixed inset-0 -z-10 pointer-events-none overflow-hidden" aria-hidden="true">
-        <div className="absolute top-20 -left-32 w-[560px] h-[560px] rounded-full bg-brand-green/20 blur-[130px]" />
-        <div className="absolute top-40 -right-40 w-[520px] h-[520px] rounded-full bg-emerald-500/[0.12] blur-[130px]" />
+      <div className="hidden dark:block fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+        <div className="absolute top-20 -left-32 w-[560px] h-[560px] rounded-full bg-brand-green/[0.18] blur-[120px]" />
+        <div className="absolute top-40 -right-40 w-[520px] h-[520px] rounded-full bg-brand-green/[0.12] blur-[120px]" />
       </div>
       <Navbar />
       <main className="flex-1 pb-bottomnav">
