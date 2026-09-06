@@ -140,9 +140,10 @@ export default function CoachSeasonStatsCard({ coach }: { coach: AgencyCoach }) 
           <CoachTeamVsRivalCharts rows={enrichedRows} />
           <CoachMatchMetricsEvolution rows={enrichedRows} />
           <CoachMatchHistoryTable rows={enrichedRows} />
-          {wyscoutReport && <CoachWyscoutReportPanel report={wyscoutReport} />}
         </div>
       )}
+
+      {wyscoutReport && <CoachWyscoutReportPanel report={wyscoutReport} />}
     </div>
   )
 }
