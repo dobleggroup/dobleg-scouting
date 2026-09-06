@@ -1,13 +1,28 @@
 import type { PitchHalf } from '@/features/coaches/wyscoutReport/wyscoutReportTypes'
 
+interface PitchPointInput {
+  x: number
+  y: number
+  label?: string
+}
+
+/** 'marker': puntos con pocas etiquetas (formaciones, balón parado) -- un punto
+ *  chico + la etiqueta como pastilla debajo, nunca metida adentro del punto.
+ *  'heat': nubes densas de eventos (decenas/cientos de puntos) -- sin texto,
+ *  cada punto es un resplandor que se suma con blend-mode sobre los vecinos,
+ *  así la densidad se lee como calor en vez de como puntos amarillos pisándose. */
+type DotStyle = 'marker' | 'heat'
+
 export default function VideoAnalysisPitch({
   exact,
   zones,
   half = 'completa',
+  dotStyle = 'marker',
 }: {
-  exact: { x: number; y: number; label?: string }[]
+  exact: PitchPointInput[]
   zones: { x1: number; y1: number; x2: number; y2: number }[]
   half?: PitchHalf
+  dotStyle?: DotStyle
 }) {
   // 'propia'/'rival' recortan el viewBox a la mitad de arriba/abajo -- los puntos
   // ya vienen normalizados 0-100 sobre esa mitad (el parser hizo esa cuenta), asi
@@ -36,15 +51,35 @@ export default function VideoAnalysisPitch({
         />
       ))}
 
-      {exact.map((p, i) => (
-        <div
-          key={i}
-          className="absolute -translate-x-1/2 -translate-y-1/2 flex items-center justify-center rounded-full bg-yellow-400 shadow text-2xs font-bold text-apple-gray-900"
-          style={{ left: `${p.x}%`, top: `${p.y}%`, width: p.label ? '18px' : '8px', height: p.label ? '18px' : '8px' }}
-        >
-          {p.label}
-        </div>
-      ))}
+      {dotStyle === 'heat'
+        ? exact.map((p, i) => (
+            <div
+              key={i}
+              className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full"
+              style={{
+                left: `${p.x}%`,
+                top: `${p.y}%`,
+                width: '9%',
+                height: '7%',
+                background: 'radial-gradient(circle, rgba(250,204,21,0.55) 0%, rgba(250,204,21,0.22) 45%, rgba(250,204,21,0) 75%)',
+                mixBlendMode: 'screen',
+              }}
+            />
+          ))
+        : exact.map((p, i) => (
+            <div
+              key={i}
+              className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-0.5"
+              style={{ left: `${p.x}%`, top: `${p.y}%` }}
+            >
+              <span className="w-2.5 h-2.5 rounded-full bg-yellow-400 ring-2 ring-emerald-900/70 shadow flex-shrink-0" />
+              {p.label && (
+                <span className="max-w-[4.5rem] truncate rounded px-1 py-px text-[9px] font-semibold leading-tight text-white bg-apple-gray-900/75 whitespace-nowrap">
+                  {p.label}
+                </span>
+              )}
+            </div>
+          ))}
 
       {exact.length === 0 && zones.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center">

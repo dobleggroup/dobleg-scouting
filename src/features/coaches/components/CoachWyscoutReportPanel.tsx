@@ -19,6 +19,27 @@ function rampStep(pct: number, allPcts: number[]): number {
   return Math.min(4, Math.floor((pct / max) * 5))
 }
 
+const ZONE_CATEGORY_LABEL: Record<string, string> = {
+  recuperaciones: 'Recuperaciones',
+  perdidas: 'Pérdidas de balón',
+  faltas: 'Faltas cometidas',
+}
+
+/** Los nombres de categoría de eventos vienen crudos del PDF ("Duelos defensivos
+ *  ganados en el propio tercio del campo") o son un fallback indexado cuando el
+ *  parser no pudo emparejar un título real ("ataque 1") -- acá solo se acortan
+ *  para mostrar, no se toca el dato. */
+function shortEventCategoryLabel(category: string): string {
+  const withoutZone = category.replace(/\s+en el (propio tercio del campo|último tercio)$/i, '')
+  const indexedFallback = withoutZone.match(/^([a-záéíóúñ]+)\s+(\d+)$/i)
+  if (indexedFallback) {
+    const [, base, n] = indexedFallback
+    return `${base[0].toUpperCase()}${base.slice(1)} (zona ${n})`
+  }
+  const capitalized = withoutZone.charAt(0).toUpperCase() + withoutZone.slice(1)
+  return capitalized.length > 32 ? `${capitalized.slice(0, 31)}…` : capitalized
+}
+
 function ZoneGridCard({ grid }: { grid: WyscoutZoneGrid }) {
   // El proyecto no usa el atributo `data-theme` (ver ThemeContext: alterna la
   // clase `.dark` en <html>), así que en vez de inyectar variables CSS por
@@ -31,7 +52,7 @@ function ZoneGridCard({ grid }: { grid: WyscoutZoneGrid }) {
   const pcts = grid.cells.map(c => c.pct)
   return (
     <div className="bg-white dark:bg-apple-gray-800/60 rounded-apple-lg border border-apple-gray-200/60 dark:border-apple-gray-700/40 p-4">
-      <p className="text-xs font-semibold text-apple-gray-400 uppercase tracking-wide mb-3">{grid.category}</p>
+      <p className="text-xs font-semibold text-apple-gray-400 uppercase tracking-wide mb-3">{ZONE_CATEGORY_LABEL[grid.category] ?? grid.category}</p>
       <div className="grid grid-cols-3 gap-1.5">
         {Array.from({ length: 9 }, (_, i) => {
           const row = Math.floor(i / 3)
@@ -127,31 +148,41 @@ export default function CoachWyscoutReportPanel({ report }: { report: WyscoutRep
         </div>
       </div>
 
-      <div>
-        <p className="text-xs font-semibold text-apple-gray-400 uppercase tracking-wide mb-3">Mapas de zona</p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {report.zoneGrids.map(g => <ZoneGridCard key={g.category} grid={g} />)}
-        </div>
-        {report.eventMaps.length > 0 && (
-          <div className="mt-4 space-y-3">
-            <div className="flex gap-2 flex-wrap">
-              {[...new Set(report.eventMaps.map(m => m.category))].map(cat => (
-                <button
-                  key={cat}
-                  onClick={() => setMapCategory(cat)}
-                  className={`text-xs px-3 py-1.5 rounded-full ${cat === mapCategory ? 'bg-brand-green text-apple-gray-900' : 'bg-apple-gray-100 dark:bg-apple-gray-800 text-apple-gray-500'}`}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
-            <VideoAnalysisPitch
-              exact={report.eventMaps.filter(m => m.category === mapCategory).flatMap(m => m.points)}
-              zones={[]}
-            />
+      {report.zoneGrids.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-apple-gray-400 uppercase tracking-wide mb-3">Mapas de calor por zona</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {report.zoneGrids.map(g => <ZoneGridCard key={g.category} grid={g} />)}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {report.eventMaps.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-apple-gray-400 uppercase tracking-wide mb-3">Mapa de eventos</p>
+          <div className="flex gap-2 flex-wrap mb-3">
+            {[...new Set(report.eventMaps.map(m => m.category))].map(cat => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setMapCategory(cat)}
+                className={`min-h-[32px] px-3 rounded-full text-xs font-semibold transition-colors ${
+                  cat === mapCategory
+                    ? 'bg-brand-green text-apple-gray-900'
+                    : 'bg-apple-gray-100 dark:bg-apple-gray-800 text-apple-gray-500 dark:text-apple-gray-400 hover:text-apple-gray-700 dark:hover:text-apple-gray-200'
+                }`}
+              >
+                {shortEventCategoryLabel(cat)}
+              </button>
+            ))}
+          </div>
+          <VideoAnalysisPitch
+            exact={report.eventMaps.filter(m => m.category === mapCategory).flatMap(m => m.points)}
+            zones={[]}
+            dotStyle="heat"
+          />
+        </div>
+      )}
 
       {report.setPieces.length > 0 && (
         <div>
