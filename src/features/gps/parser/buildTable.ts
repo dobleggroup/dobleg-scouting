@@ -1,8 +1,8 @@
 import { parseNumber, normalizeLabel } from './normalize'
-import type { PdfTextItem, PdfRow, PdfCell, PdfTable, PdfTableRow } from '../types'
+import { groupRows, nearestColumn } from '@/lib/pdf/groupRows'
+import type { PdfRow, PdfTable, PdfTableRow } from '../types'
 
-/** Dos textos con menos de esta diferencia de línea de base son la misma fila. */
-const ROW_TOLERANCE = 3
+export { groupRows }
 
 /** Mínimo de valores numéricos para considerar que una fila es de datos. */
 const MIN_NUMERIC_CELLS = 3
@@ -17,39 +17,9 @@ const MAX_HEADER_LINE_GAP = 13
 const HEADER_RE = /^(futbolista|jugador|player|nombre)$/
 const AGGREGATE_RE = /^(%|sumatoria|total|promedio|equipo|valor|[12]\s*(er|do|°)?\s*tiempo)/
 
-function toCell(item: PdfTextItem): PdfCell {
-  return { text: item.str, x: item.x, width: item.width, center: item.x + item.width / 2 }
-}
-
-/** Agrupa los items en filas por línea de base, de arriba hacia abajo. */
-export function groupRows(items: PdfTextItem[]): PdfRow[] {
-  const sorted = [...items].sort((a, b) => (a.page - b.page) || (b.y - a.y) || (a.x - b.x))
-  const rows: PdfRow[] = []
-  for (const it of sorted) {
-    const last = rows[rows.length - 1]
-    if (last && last.page === it.page && Math.abs(last.y - it.y) <= ROW_TOLERANCE) {
-      last.cells.push(toCell(it))
-    } else {
-      rows.push({ page: it.page, y: it.y, cells: [toCell(it)] })
-    }
-  }
-  for (const row of rows) row.cells.sort((a, b) => a.x - b.x)
-  return rows
-}
-
 /** True si la fila es un promedio/subtotal del PDF y no un jugador. */
 export function isAggregateRow(name: string): boolean {
   return AGGREGATE_RE.test(normalizeLabel(name))
-}
-
-function nearestColumn(centers: number[], center: number): number {
-  let best = 0
-  let bestDist = Infinity
-  for (let i = 0; i < centers.length; i++) {
-    const dist = Math.abs(centers[i] - center)
-    if (dist < bestDist) { bestDist = dist; best = i }
-  }
-  return best
 }
 
 /** True si la fila parece una fila de datos: nombre + varios valores numéricos. */

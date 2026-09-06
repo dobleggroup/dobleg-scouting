@@ -1,4 +1,10 @@
-import type { PdfTextItem } from '../types'
+export interface PdfTextItem {
+  str: string
+  x: number
+  y: number
+  width: number
+  page: number
+}
 
 interface ExtractOptions {
   /** URL del worker. En el browser hay que pasarla; en Node se usa el fake worker. */

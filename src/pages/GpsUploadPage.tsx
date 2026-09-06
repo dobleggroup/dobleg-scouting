@@ -11,7 +11,7 @@ import MetricCatalogManager from '@/features/gps/components/MetricCatalogManager
 import { mergeCompetitions } from '@/features/gps/competitions'
 import { parseGpsPdf, GpsParseError } from '@/features/gps/parser/parsePdf'
 import { parseGpsXlsx } from '@/features/gps/parser/parseXlsx'
-import pdfWorkerSrc from '@/features/gps/parser/pdfWorker'
+import pdfWorkerSrc from '@/lib/pdf/pdfWorker'
 import { EMPTY_MATCH_CONTEXT, type MatchContextValue, type GpsEntryRow, type GpsParseResult } from '@/features/gps/types'
 import HistoryReviewPanel from '@/features/gps/components/HistoryReviewPanel'
 import { extractHtmlTable } from '@/features/gps/parser/extractHtmlTable'

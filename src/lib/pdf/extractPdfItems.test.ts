@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { extractPdfItems } from './extractItems'
+import { extractPdfItems } from './extractPdfItems'
 
 function fixture(name: string): ArrayBuffer {
-  const path = fileURLToPath(new URL(`./__fixtures__/${name}`, import.meta.url))
+  const path = fileURLToPath(new URL(`../../features/gps/parser/__fixtures__/${name}`, import.meta.url))
   const buf = readFileSync(path)
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer
 }

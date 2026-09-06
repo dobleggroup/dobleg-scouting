@@ -1,4 +1,4 @@
-import { extractPdfItems } from './extractItems'
+import { extractPdfItems } from '@/lib/pdf/extractPdfItems'
 import { groupRows, buildTable } from './buildTable'
 import { buildCardTable } from './parseCardReport'
 import { parsePowerBiReport } from './parsePowerBiReport'

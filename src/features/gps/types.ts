@@ -62,18 +62,9 @@ export interface PdfTextItem {
   page: number     // 1-based
 }
 
-export interface PdfCell {
-  text: string
-  x: number
-  width: number
-  center: number   // x + width / 2
-}
-
-export interface PdfRow {
-  page: number
-  y: number
-  cells: PdfCell[]
-}
+// PdfCell/PdfRow viven en src/lib/pdf/groupRows.ts (compartido con el parser de
+// Wyscout); se re-exportan acá para no tocar los imports existentes de gps/.
+export type { PdfCell, PdfRow } from '@/lib/pdf/groupRows'
 
 export interface PdfTableRow {
   name: string
