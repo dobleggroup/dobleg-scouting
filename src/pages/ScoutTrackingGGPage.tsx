@@ -7,6 +7,7 @@ import {
   fetchScoutPlayerStatuses,
   fetchScoutScores,
   setScoutPlayerStatus,
+  setScoutPlayerAssignment,
   removeScoutPlayerFromList,
   uploadScoutPlayerFile,
   removeScoutPlayerFile,
@@ -148,6 +149,103 @@ function StatusDropdown({
   )
 }
 
+// ─── ASIGNADO A (dropdown) ─────────────────────────────────────────────────────
+
+function AssignedToDropdown({
+  playerId,
+  currentUserId,
+  currentUserName,
+  options,
+  onAssign,
+  requiresAuth,
+}: {
+  playerId: string
+  currentUserId: string | null
+  currentUserName: string | null
+  options: { userId: string; userName: string }[]
+  onAssign: (playerId: string, userId: string | null, userName: string | null) => Promise<void>
+  requiresAuth: boolean
+}) {
+  const { t } = useLanguage()
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [dropdownStyle, setDropdownStyle] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
+  const handleOpen = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (requiresAuth) return
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      const dropdownH = Math.min(280, 60 + options.length * 36)
+      const spaceBelow = window.innerHeight - rect.bottom
+      const top = spaceBelow >= dropdownH ? rect.bottom + 4 : rect.top - dropdownH - 4
+      const left = Math.min(rect.left, window.innerWidth - 212)
+      setDropdownStyle({ top, left })
+    }
+    setOpen(o => !o)
+  }
+
+  const handleSelect = async (userId: string | null, userName: string | null) => {
+    if (userId === currentUserId) { setOpen(false); return }
+    setLoading(true)
+    await onAssign(playerId, userId, userName)
+    setLoading(false)
+    setOpen(false)
+  }
+
+  return (
+    <div className="relative">
+      <button
+        ref={buttonRef}
+        onClick={handleOpen}
+        disabled={loading}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all hover:opacity-80 disabled:opacity-50 ${
+          currentUserName
+            ? 'bg-brand-green/10 border-brand-green/20 text-brand-green'
+            : 'bg-apple-gray-100 dark:bg-apple-gray-700 border-apple-gray-200 dark:border-apple-gray-600 text-apple-gray-500 dark:text-apple-gray-400'
+        }`}
+      >
+        {currentUserName || t('seguimiento.sinAsignar')}
+        <svg className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-[300]" onClick={() => setOpen(false)} />
+          <div
+            className="fixed z-[301] bg-white dark:bg-apple-gray-800 rounded-xl shadow-2xl border border-apple-gray-200 dark:border-apple-gray-700 py-1 min-w-[200px] max-h-72 overflow-y-auto"
+            style={{ top: dropdownStyle.top, left: dropdownStyle.left }}
+          >
+            <button
+              onClick={() => handleSelect(null, null)}
+              className={`w-full px-4 py-2.5 text-left text-xs font-medium hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700 transition-colors text-apple-gray-500 dark:text-apple-gray-400 ${!currentUserId ? 'bg-apple-gray-50 dark:bg-apple-gray-700 font-semibold' : ''}`}
+            >
+              {t('seguimiento.sinAsignar')}
+            </button>
+            {options.map(opt => (
+              <button
+                key={opt.userId}
+                onClick={() => handleSelect(opt.userId, opt.userName)}
+                className={`w-full px-4 py-2.5 text-left text-xs font-medium hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700 transition-colors flex items-center gap-2 text-apple-gray-700 dark:text-apple-gray-300 ${opt.userId === currentUserId ? 'bg-apple-gray-50 dark:bg-apple-gray-700 font-semibold' : ''}`}
+              >
+                {opt.userName}
+                {opt.userId === currentUserId && (
+                  <svg className="w-3.5 h-3.5 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 export default function ScoutTrackingGGPage() {
@@ -243,6 +341,13 @@ export default function ScoutTrackingGGPage() {
     }
   }, [user, userDisplayName])
 
+  const handleAssignChange = useCallback(async (playerId: string, userId: string | null, userName: string | null) => {
+    const ok = await setScoutPlayerAssignment(playerId, userId, userName)
+    if (ok) {
+      setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, assigned_to: userId, assigned_to_name: userName } : p))
+    }
+  }, [])
+
   const handleDelete = useCallback(async (id: string) => {
     if (!confirm(t('seguimiento.confirmarQuitar'))) return
     await removeScoutPlayerFromList(id, 'scouts_gg')
@@ -284,6 +389,21 @@ export default function ScoutTrackingGGPage() {
     players.forEach(p => { if (p.posicion) set.add(p.posicion) })
     return [...set].sort()
   }, [players])
+
+  // Opciones para "Asignado a" -- gente que ya agregó o ya tiene algo asignado
+  // en esta lista, más el usuario actual (así siempre puede asignarse a sí
+  // mismo aunque todavía no haya cargado ningún jugador).
+  const assigneeOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    players.forEach(p => {
+      if (p.added_by_scouts && p.added_by_scouts_name) map.set(p.added_by_scouts, p.added_by_scouts_name)
+      if (p.assigned_to && p.assigned_to_name) map.set(p.assigned_to, p.assigned_to_name)
+    })
+    if (user && userDisplayName) map.set(user.id, userDisplayName)
+    return [...map.entries()]
+      .map(([userId, userName]) => ({ userId, userName }))
+      .sort((a, b) => a.userName.localeCompare(b.userName))
+  }, [players, user, userDisplayName])
 
   // Filtered + sorted players
   const filtered = useMemo(() => {
@@ -468,6 +588,7 @@ export default function ScoutTrackingGGPage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">{t('seguimiento.colAgente')}</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">{t('seguimiento.colPosicion')}</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">{t('seguimiento.colEstado')}</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">{t('seguimiento.colAsignado')}</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">{t('seguimiento.colScoreScouts')}</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">{t('seguimiento.colScoreGG')}</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">{t('seguimiento.colAgregado')}</th>
@@ -623,6 +744,18 @@ export default function ScoutTrackingGGPage() {
                               currentStatus={currentStatus}
                               currentRecord={statusRecord}
                               onStatusChange={handleStatusChange}
+                              requiresAuth={requiresAuth}
+                            />
+                          </td>
+
+                          {/* Asignado a */}
+                          <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                            <AssignedToDropdown
+                              playerId={player.id}
+                              currentUserId={player.assigned_to}
+                              currentUserName={player.assigned_to_name}
+                              options={assigneeOptions}
+                              onAssign={handleAssignChange}
                               requiresAuth={requiresAuth}
                             />
                           </td>
@@ -838,12 +971,20 @@ export default function ScoutTrackingGGPage() {
                     )}
                   </div>
 
-                  <div className="mt-2 flex items-center justify-between gap-2">
+                  <div className="mt-2 flex items-center justify-between gap-2 flex-wrap">
                     <StatusDropdown
                       playerId={player.id}
                       currentStatus={currentStatus}
                       currentRecord={statusRecord}
                       onStatusChange={handleStatusChange}
+                      requiresAuth={requiresAuth}
+                    />
+                    <AssignedToDropdown
+                      playerId={player.id}
+                      currentUserId={player.assigned_to}
+                      currentUserName={player.assigned_to_name}
+                      options={assigneeOptions}
+                      onAssign={handleAssignChange}
                       requiresAuth={requiresAuth}
                     />
                     <div className="flex items-center gap-1.5">

@@ -347,6 +347,10 @@ export interface ScoutPlayer {
   added_by_datos_name: string | null
   added_by_scouts: string | null
   added_by_scouts_name: string | null
+  // A qué scout de la agencia se le asignó llevar este jugador -- distinto de
+  // added_by_scouts (quién lo cargó), para que las negociaciones no se pisen.
+  assigned_to: string | null
+  assigned_to_name: string | null
   created_at: string
   updated_at: string
   // Computed (not stored in DB, fetched separately)

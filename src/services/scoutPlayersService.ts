@@ -461,6 +461,23 @@ export async function removeScoutPlayerFromList(
   return true
 }
 
+// Asigna (o desasigna, con userId/userName null) un jugador de Seguimiento GG a un
+// scout puntual de la agencia -- distinto de "quién lo agregó" (added_by_scouts),
+// para que dos personas no terminen negociando con el mismo jugador sin saberlo.
+export async function setScoutPlayerAssignment(
+  playerId: string,
+  userId: string | null,
+  userName: string | null
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('scout_players')
+    .update({ assigned_to: userId, assigned_to_name: userName, updated_at: new Date().toISOString() })
+    .eq('id', playerId)
+
+  if (error) { console.error('Error setting scout player assignment:', error); return false }
+  return true
+}
+
 // Set status for a player in a specific list
 export async function setScoutPlayerStatus(
   playerId: string,
