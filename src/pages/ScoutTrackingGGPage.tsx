@@ -18,8 +18,10 @@ import LinkPlayerModal from '@/components/tracking/LinkPlayerModal'
 import LinkClubModal from '@/components/tracking/LinkClubModal'
 import FichaManualModal from '@/components/tracking/FichaManualModal'
 import { PlayerPhoto, TeamLogo } from '@/components/ui/PlayerPhoto'
-import { isMarketLinkAdmin } from '@/services/marketService'
+import { isMarketLinkAdmin, fetchTeamMembers } from '@/services/marketService'
+import { createNotification } from '@/services/notificationsService'
 import type { ScoutPlayer, ScoutPlayerStatusRecord, TrackingStatus, EnrichedPlayer } from '@/types'
+import type { TeamMember } from '@/types/market'
 import { fuzzyMatch } from '@/lib/search'
 import { useLanguage } from '@/context/LanguageContext'
 
@@ -43,6 +45,7 @@ const STATUS_SORT_RANK: Record<TrackingStatus, number> = {
   completado: 1,
   descartado: 2,
 }
+
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -153,17 +156,15 @@ function StatusDropdown({
 
 function AssignedToDropdown({
   playerId,
-  currentUserId,
   currentUserName,
   options,
   onAssign,
   requiresAuth,
 }: {
   playerId: string
-  currentUserId: string | null
   currentUserName: string | null
-  options: { userId: string; userName: string }[]
-  onAssign: (playerId: string, userId: string | null, userName: string | null) => Promise<void>
+  options: TeamMember[]
+  onAssign: (playerId: string, member: TeamMember | null) => Promise<void>
   requiresAuth: boolean
 }) {
   const { t } = useLanguage()
@@ -186,10 +187,10 @@ function AssignedToDropdown({
     setOpen(o => !o)
   }
 
-  const handleSelect = async (userId: string | null, userName: string | null) => {
-    if (userId === currentUserId) { setOpen(false); return }
+  const handleSelect = async (member: TeamMember | null) => {
+    if ((member?.name ?? null) === currentUserName) { setOpen(false); return }
     setLoading(true)
-    await onAssign(playerId, userId, userName)
+    await onAssign(playerId, member)
     setLoading(false)
     setOpen(false)
   }
@@ -220,19 +221,19 @@ function AssignedToDropdown({
             style={{ top: dropdownStyle.top, left: dropdownStyle.left }}
           >
             <button
-              onClick={() => handleSelect(null, null)}
-              className={`w-full px-4 py-2.5 text-left text-xs font-medium hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700 transition-colors text-apple-gray-500 dark:text-apple-gray-400 ${!currentUserId ? 'bg-apple-gray-50 dark:bg-apple-gray-700 font-semibold' : ''}`}
+              onClick={() => handleSelect(null)}
+              className={`w-full px-4 py-2.5 text-left text-xs font-medium hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700 transition-colors text-apple-gray-500 dark:text-apple-gray-400 ${!currentUserName ? 'bg-apple-gray-50 dark:bg-apple-gray-700 font-semibold' : ''}`}
             >
               {t('seguimiento.sinAsignar')}
             </button>
-            {options.map(opt => (
+            {options.map(member => (
               <button
-                key={opt.userId}
-                onClick={() => handleSelect(opt.userId, opt.userName)}
-                className={`w-full px-4 py-2.5 text-left text-xs font-medium hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700 transition-colors flex items-center gap-2 text-apple-gray-700 dark:text-apple-gray-300 ${opt.userId === currentUserId ? 'bg-apple-gray-50 dark:bg-apple-gray-700 font-semibold' : ''}`}
+                key={member.id}
+                onClick={() => handleSelect(member)}
+                className={`w-full px-4 py-2.5 text-left text-xs font-medium hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700 transition-colors flex items-center gap-2 text-apple-gray-700 dark:text-apple-gray-300 ${member.name === currentUserName ? 'bg-apple-gray-50 dark:bg-apple-gray-700 font-semibold' : ''}`}
               >
-                {opt.userName}
-                {opt.userId === currentUserId && (
+                {member.name}
+                {member.name === currentUserName && (
                   <svg className="w-3.5 h-3.5 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                   </svg>
@@ -292,6 +293,7 @@ export default function ScoutTrackingGGPage() {
 
   const [players, setPlayers] = useState<ScoutPlayerWithScore[]>([])
   const [statuses, setStatuses] = useState<Record<string, ScoutPlayerStatusRecord>>({})
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [fileUploadPlayerId, setFileUploadPlayerId] = useState<string | null>(null)
@@ -333,6 +335,13 @@ export default function ScoutTrackingGGPage() {
 
   useEffect(() => { load() }, [load])
 
+  // Roster real del staff de la agencia (misma tabla que usa Mercado para
+  // asignar negociaciones) -- ya trae el user_id vinculado de cada uno, así
+  // se puede notificar de verdad al asignar, no sólo guardar un nombre suelto.
+  useEffect(() => {
+    fetchTeamMembers().then(setTeamMembers).catch(() => setTeamMembers([]))
+  }, [])
+
   const handleStatusChange = useCallback(async (playerId: string, status: TrackingStatus) => {
     if (!user) return
     const result = await setScoutPlayerStatus(playerId, 'scouts_gg', status, user.id, userDisplayName)
@@ -341,12 +350,23 @@ export default function ScoutTrackingGGPage() {
     }
   }, [user, userDisplayName])
 
-  const handleAssignChange = useCallback(async (playerId: string, userId: string | null, userName: string | null) => {
-    const ok = await setScoutPlayerAssignment(playerId, userId, userName)
-    if (ok) {
-      setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, assigned_to: userId, assigned_to_name: userName } : p))
+  const handleAssignChange = useCallback(async (playerId: string, member: TeamMember | null) => {
+    const ok = await setScoutPlayerAssignment(playerId, member?.user_id ?? null, member?.name ?? null)
+    if (!ok) return
+    setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, assigned_to: member?.user_id ?? null, assigned_to_name: member?.name ?? null } : p))
+
+    // Sólo se puede avisar si la persona asignada tiene cuenta vinculada
+    // (user_id) en market_team_members, y no hace falta avisarse a uno mismo.
+    if (member?.user_id && member.user_id !== user?.id) {
+      const playerName = players.find(p => p.id === playerId)?.full_name ?? ''
+      await createNotification(
+        member.user_id,
+        'seguimiento_asignacion',
+        `${userDisplayName} te asignó a ${playerName} en Seguimiento GG`,
+        '/seguimiento-gg'
+      )
     }
-  }, [])
+  }, [players, user, userDisplayName])
 
   const handleDelete = useCallback(async (id: string) => {
     if (!confirm(t('seguimiento.confirmarQuitar'))) return
@@ -390,20 +410,6 @@ export default function ScoutTrackingGGPage() {
     return [...set].sort()
   }, [players])
 
-  // Opciones para "Asignado a" -- gente que ya agregó o ya tiene algo asignado
-  // en esta lista, más el usuario actual (así siempre puede asignarse a sí
-  // mismo aunque todavía no haya cargado ningún jugador).
-  const assigneeOptions = useMemo(() => {
-    const map = new Map<string, string>()
-    players.forEach(p => {
-      if (p.added_by_scouts && p.added_by_scouts_name) map.set(p.added_by_scouts, p.added_by_scouts_name)
-      if (p.assigned_to && p.assigned_to_name) map.set(p.assigned_to, p.assigned_to_name)
-    })
-    if (user && userDisplayName) map.set(user.id, userDisplayName)
-    return [...map.entries()]
-      .map(([userId, userName]) => ({ userId, userName }))
-      .sort((a, b) => a.userName.localeCompare(b.userName))
-  }, [players, user, userDisplayName])
 
   // Filtered + sorted players
   const filtered = useMemo(() => {
@@ -752,9 +758,8 @@ export default function ScoutTrackingGGPage() {
                           <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                             <AssignedToDropdown
                               playerId={player.id}
-                              currentUserId={player.assigned_to}
                               currentUserName={player.assigned_to_name}
-                              options={assigneeOptions}
+                              options={teamMembers}
                               onAssign={handleAssignChange}
                               requiresAuth={requiresAuth}
                             />
@@ -981,9 +986,8 @@ export default function ScoutTrackingGGPage() {
                     />
                     <AssignedToDropdown
                       playerId={player.id}
-                      currentUserId={player.assigned_to}
                       currentUserName={player.assigned_to_name}
-                      options={assigneeOptions}
+                      options={teamMembers}
                       onAssign={handleAssignChange}
                       requiresAuth={requiresAuth}
                     />

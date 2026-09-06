@@ -6,6 +6,7 @@ import { NEGOTIATION_STATUS_LABEL_KEY, NEGOTIATION_STATUS_COLOR, NEED_STATUS_LAB
 import { useAuth } from '@/context/AuthContext'
 import { useLanguage } from '@/context/LanguageContext'
 import type { ClubNeed, Negotiation } from '@/types/market'
+import { fetchNotifications, markAllNotificationsRead, type AppNotification } from '@/services/notificationsService'
 
 interface AlertEntry {
   kind: 'negotiation' | 'need'
@@ -35,6 +36,16 @@ const CACHE_TTL_MS = 60_000
  * sincronice entre el celu y la compu para esto.
  */
 const SEEN_STORAGE_KEY = 'mercado_alertas_vistas'
+
+function notifTimeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'ahora'
+  if (mins < 60) return `${mins}m`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h`
+  return `${Math.floor(hours / 24)}d`
+}
 
 function entryKey(e: Pick<AlertEntry, 'kind' | 'id' | 'dueDate'>): string {
   return `${e.kind}-${e.id}-${e.dueDate}`
@@ -99,12 +110,14 @@ export default function MarketAlertBadge() {
   const { t } = useLanguage()
   const navigate = useNavigate()
   const [entries, setEntries] = useState<AlertEntry[]>(cached?.entries ?? [])
+  const [notifs, setNotifs] = useState<AppNotification[]>([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [seenKeys, setSeenKeys] = useState<Set<string>>(() => loadSeenKeys())
   const ref = useRef<HTMLDivElement>(null)
 
   const load = (force = false) => {
+    fetchNotifications().then(setNotifs)
     if (!force && cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
       setEntries(cached.entries)
       return
@@ -156,8 +169,15 @@ export default function MarketAlertBadge() {
     })
   }, [open, entries])
 
-  const handleToggle = () => {
-    if (!open) load(true)
+  const handleToggle = async () => {
+    if (!open) {
+      load(true)
+      const unreadIds = notifs.filter(n => !n.read).map(n => n.id)
+      if (unreadIds.length > 0) {
+        await markAllNotificationsRead(unreadIds)
+        setNotifs(prev => prev.map(n => ({ ...n, read: true })))
+      }
+    }
     setOpen(o => !o)
   }
 
@@ -166,7 +186,12 @@ export default function MarketAlertBadge() {
     navigate(`/mercado?highlight=${entry.kind}-${entry.id}`)
   }
 
-  const count = entries.filter(e => !seenKeys.has(entryKey(e))).length
+  const handleSelectNotif = (n: AppNotification) => {
+    setOpen(false)
+    if (n.link) navigate(n.link)
+  }
+
+  const count = entries.filter(e => !seenKeys.has(entryKey(e))).length + notifs.filter(n => !n.read).length
 
   return (
     <div className="relative" ref={ref}>
@@ -188,6 +213,27 @@ export default function MarketAlertBadge() {
 
       {open && (
         <div className="absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto bg-white dark:bg-apple-gray-800 rounded-xl shadow-xl border border-apple-gray-200 dark:border-apple-gray-700 py-1.5 animate-scale-in origin-top-right z-50">
+          {notifs.length > 0 && (
+            <>
+              <p className="px-3.5 py-1.5 text-2xs font-semibold text-apple-gray-400 uppercase tracking-wider">{t('notif.titulo')}</p>
+              {notifs.map(n => (
+                <button
+                  key={n.id}
+                  onClick={() => handleSelectNotif(n)}
+                  className="w-full flex items-start gap-2.5 px-3.5 py-2.5 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/60 transition-colors"
+                >
+                  {!n.read && <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-brand-green flex-shrink-0" />}
+                  <div className={`min-w-0 flex-1 ${n.read ? 'ml-4' : ''}`}>
+                    <p className={`text-sm ${n.read ? 'text-apple-gray-500 dark:text-apple-gray-400' : 'font-semibold text-apple-gray-900 dark:text-white'}`}>
+                      {n.message}
+                    </p>
+                    <p className="text-2xs text-apple-gray-400 mt-0.5">{notifTimeAgo(n.created_at)}</p>
+                  </div>
+                </button>
+              ))}
+              <div className="my-1 border-t border-apple-gray-100 dark:border-apple-gray-700" />
+            </>
+          )}
           <p className="px-3.5 py-1.5 text-2xs font-semibold text-apple-gray-400 uppercase tracking-wider">{t('mercado.alertas')}</p>
           {loading ? (
             <p className="px-3.5 py-3 text-sm text-apple-gray-400">{t('mercado.cargando')}</p>
