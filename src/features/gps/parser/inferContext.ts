@@ -6,6 +6,14 @@ const MONTHS: Record<string, number> = {
   agosto: 8, septiembre: 9, setiembre: 9, octubre: 10, noviembre: 11, diciembre: 12,
 }
 
+// Tarjetas de reportes en inglés (ej. PlayerTek) traen la fecha así: "Saturday 22
+// August 2026". Con año explícito, a diferencia de "25 de Julio" no hace falta
+// adivinar el año.
+const MONTHS_EN: Record<string, number> = {
+  january: 1, february: 2, march: 3, april: 4, may: 5, june: 6, july: 7,
+  august: 8, september: 9, october: 10, november: 11, december: 12,
+}
+
 const pad = (n: number): string => String(n).padStart(2, '0')
 
 function inferRival(lines: string[]): string | null {
@@ -36,6 +44,14 @@ function inferDate(lines: string[], today: Date): string | null {
       let year = today.getUTCFullYear()
       if (Date.UTC(year, month - 1, day) > today.getTime()) year -= 1
       return `${year}-${pad(month)}-${pad(day)}`
+    }
+
+    // "Saturday 22 August 2026" (tarjetas tipo PlayerTek): ya trae el año.
+    const en = line.match(/\b(\d{1,2})\s+([a-z]+)\s+(\d{4})\b/i)
+    if (en) {
+      const month = MONTHS_EN[en[2].toLowerCase()]
+      if (!month) continue
+      return `${en[3]}-${pad(month)}-${pad(Number(en[1]))}`
     }
   }
   return null

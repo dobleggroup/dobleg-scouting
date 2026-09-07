@@ -103,6 +103,47 @@ describe('buildTable sobre un Reporte de Sesión de Catapult (cabecera sin colum
   })
 })
 
+describe('buildTable sobre un reporte Sonra/STATSports multi-jugador (cabecera en inglés "Name")', () => {
+  it('reconoce la cabecera real por la celda "Name" en vez de agarrar una fila de valores como cabecera', async () => {
+    const items = await extractPdfItems(fixture('sonra-maldonado-penarol.pdf'))
+    const table = buildTable(groupRows(items))!
+
+    expect(table).not.toBeNull()
+    expect(table.headers).toEqual([
+      'Name', 'Duration', 'Dist', 'Abs HSR', 'HMLD',
+      'Abs HSR + Abs Sprints', 'MaxSp', 'Acc+3', 'Dec+3', 'HIA', 'RPE',
+    ])
+    // la fila de valores sueltos que antes se colaba como cabecera no debe aparecer.
+    expect(table.headers).not.toContain('64')
+    expect(table.headers).not.toContain('6892,68')
+  })
+
+  it('trae a Cartagena (SC28) y Ginzo (JMG4) identificados por su código de tag, con los valores correctos', async () => {
+    const items = await extractPdfItems(fixture('sonra-maldonado-penarol.pdf'))
+    const table = buildTable(groupRows(items))!
+
+    const names = table.rows.map(r => r.name)
+    expect(names).toContain('SC28')
+    expect(names).toContain('JMG4')
+
+    const distIdx = table.headers.indexOf('Dist')
+    const hsrIdx = table.headers.indexOf('Abs HSR')
+    const maxSpIdx = table.headers.indexOf('MaxSp')
+    const acc3Idx = table.headers.indexOf('Acc+3')
+    const dec3Idx = table.headers.indexOf('Dec+3')
+
+    const cartagena = table.rows.find(r => r.name === 'SC28')!
+    expect(cartagena.values[distIdx]).toBe(10480)
+    expect(cartagena.values[hsrIdx]).toBe(458)
+    expect(cartagena.values[maxSpIdx]).toBe(27.3)
+    expect(cartagena.values[acc3Idx]).toBe(101)
+    expect(cartagena.values[dec3Idx]).toBe(80)
+
+    const ginzo = table.rows.find(r => r.name === 'JMG4')!
+    expect(ginzo.values[distIdx]).toBe(10542)
+  })
+})
+
 describe('buildTable sobre un reporte OpenField individual (una tarjeta por jugador)', () => {
   it('no confunde la celda suelta "JUGADOR" de la tarjeta con una cabecera de tabla', async () => {
     // No es un formato tabular: cada métrica es una tarjeta con título, valor y

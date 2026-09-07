@@ -3,6 +3,7 @@ import { groupRows, buildTable } from './buildTable'
 import { buildCardTable } from './parseCardReport'
 import { parsePowerBiReport } from './parsePowerBiReport'
 import { buildParseResult, type BuildParseResultOptions } from './buildParseResult'
+import { GpsParseError } from './errors'
 import type { GpsParseResult, PdfTextItem } from '../types'
 
 export interface ParseOptions extends BuildParseResultOptions {
@@ -15,7 +16,8 @@ export interface ParseOptions extends BuildParseResultOptions {
   presetPlayerName?: string
 }
 
-export class GpsParseError extends Error {}
+// Re-exportado para no romper los imports existentes (GpsUploadPage, tests).
+export { GpsParseError }
 
 /**
  * Archivo → propuesta de carga. No persiste nada: la UI muestra el resultado, el

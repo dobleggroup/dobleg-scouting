@@ -26,6 +26,11 @@ describe('inferContext', () => {
     expect(inferContext(['2026-05-03 vs Ajax'], TODAY).matchDate).toBe('2026-05-03')
   })
 
+  it('entiende fechas en inglés con nombre de mes (tarjetas tipo PlayerTek)', () => {
+    expect(inferContext(['Saturday', '22 August 2026'], TODAY).matchDate).toBe('2026-08-22')
+    expect(inferContext(['Saturday 22 August 2026'], TODAY).matchDate).toBe('2026-08-22')
+  })
+
   it('reconoce el rival en formato "Rival: X" (reportes Power BI)', () => {
     const result = inferContext(['Instancia: Fecha 2 TC', 'Rival: River Plate', 'Torneo: LPF Apertura 2026'])
     expect(result.rival).toBe('River Plate')

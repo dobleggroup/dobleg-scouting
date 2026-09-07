@@ -11,6 +11,7 @@ import MetricCatalogManager from '@/features/gps/components/MetricCatalogManager
 import { mergeCompetitions } from '@/features/gps/competitions'
 import { parseGpsPdf, GpsParseError } from '@/features/gps/parser/parsePdf'
 import { parseGpsXlsx } from '@/features/gps/parser/parseXlsx'
+import { parseGpsImage } from '@/features/gps/parser/parseImage'
 import pdfWorkerSrc from '@/lib/pdf/pdfWorker'
 import { EMPTY_MATCH_CONTEXT, type MatchContextValue, type GpsEntryRow, type GpsParseResult } from '@/features/gps/types'
 import HistoryReviewPanel from '@/features/gps/components/HistoryReviewPanel'
@@ -230,11 +231,13 @@ function AutoTab({ metrics, lookup, roster, rivals, competitions, teams, addMetr
     setError(null)
     setResult(null)
     try {
-      const data = await file.arrayBuffer()
       const isExcel = /\.xlsx?$/i.test(file.name)
+      const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp)$/i.test(file.name)
       const parsed = isExcel
-        ? await parseGpsXlsx(data, { roster, lookup })
-        : await parseGpsPdf(data, {
+        ? await parseGpsXlsx(await file.arrayBuffer(), { roster, lookup })
+        : isImage
+        ? await parseGpsImage(file, { roster, lookup, presetPlayerName: presetPlayer || undefined })
+        : await parseGpsPdf(await file.arrayBuffer(), {
             roster, lookup, workerSrc: pdfWorkerSrc,
             presetPlayerName: presetPlayer || undefined,
           })
@@ -285,7 +288,7 @@ function AutoTab({ metrics, lookup, roster, rivals, competitions, teams, addMetr
       <GpsDropzone
         onFile={file => void handleFile(file)}
         disabled={parsing}
-        accept="application/pdf,.pdf,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+        accept="application/pdf,.pdf,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
         label={t('gps.dropzoneAutoLabel')}
         hint={t('gps.dropzoneAutoHint')}
       />

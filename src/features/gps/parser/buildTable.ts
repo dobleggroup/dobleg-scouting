@@ -14,7 +14,7 @@ const MIN_NUMERIC_CELLS = 3
  */
 const MAX_HEADER_LINE_GAP = 13
 
-const HEADER_RE = /^(futbolista|jugador|player|nombre)$/
+const HEADER_RE = /^(futbolista|jugador|player|nombre|name)$/
 const AGGREGATE_RE = /^(%|sumatoria|total|promedio|equipo|valor|[12]\s*(er|do|°)?\s*tiempo)/
 
 /** True si la fila es un promedio/subtotal del PDF y no un jugador. */
