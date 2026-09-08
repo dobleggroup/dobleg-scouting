@@ -32,7 +32,6 @@ const inicioGroup: NavGroup = {
   icon: 'home',
   to: '/',
   items: [
-    { to: '/panel-interno', labelKey: 'nav.panelInterno', icon: 'chart' },
     { to: '/calendario', labelKey: 'nav.calendario', icon: 'calendar' },
     { to: '/carga-gps', labelKey: 'nav.cargaGps', icon: 'chart' },
   ],

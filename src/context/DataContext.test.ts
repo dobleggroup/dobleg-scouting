@@ -21,6 +21,11 @@ const agency = (over: Partial<AgencyPlayer> & Pick<AgencyPlayer, 'shortName' | '
   ...over,
 })
 
+const liveRow = (over: Partial<AgencyLiveDataRow> & Pick<AgencyLiveDataRow, 'name'>): AgencyLiveDataRow => ({
+  market_value_eur: null, transfermarkt_url: null, birth_date: null, nationality: null,
+  ...over,
+})
+
 describe('mergeAgencyIntoInternal', () => {
   it('pisa el Equipo del CSV legacy con el team curado en agencyPlayers, para un jugador que ya tenía fila propia', () => {
     // Como el CSV "J. Postigo, ..., Quilmes" — desactualizado desde que ficha por Acassuso.
@@ -60,7 +65,19 @@ describe('mergeAgencyIntoInternal', () => {
 
     const merged = mergeAgencyIntoInternal(baseInternal, [], roster)
 
-    expect(merged.map(p => p.Jugador)).toEqual(['J. Postigo'])
+    expect(merged.map(p => p.Jugador)).toEqual(['Joaquin Postigo'])
+  })
+
+  it('pisa el nombre corto del CSV legacy con el nombre completo de agencyPlayers (rompía la navegación a la ficha)', () => {
+    // Caso real: Julián Palacios tenía fila propia en el CSV interno guardada como
+    // "J. Palacios" (nombre corto) — cualquier lookup por nombre completo (ej. desde
+    // el widget de rendimiento del Home, que usa AGENCY_PLAYERS.fullName) fallaba.
+    const baseInternal = [player({ Jugador: 'J. Palacios', Equipo: 'Unión Santa Fe' })]
+    const roster = [agency({ shortName: 'J. Palacios', fullName: 'Julián Palacios', team: 'Unión Santa Fe' })]
+
+    const merged = mergeAgencyIntoInternal(baseInternal, [], roster)
+
+    expect(merged[0].Jugador).toBe('Julián Palacios')
   })
 
   it('completa Edad y Posición de un alta nueva sin fila propia, a partir de birthDate/position', () => {
@@ -92,7 +109,7 @@ describe('mergeAgencyIntoInternal', () => {
 describe('applyLiveAgencyData', () => {
   it('pisa el valor de mercado stale del Sheet con el vivo de Supabase (caso real: Prestianni €12.00m en el Sheet, €20M en Transfermarkt/Supabase)', () => {
     const players = [player({ Jugador: 'G. Prestianni', marketValueRaw: 12_000_000, marketValueFormatted: '€12.00m' })]
-    const live: AgencyLiveDataRow[] = [{ name: 'Gianluca Prestianni', market_value_eur: 20_000_000, transfermarkt_url: null }]
+    const live: AgencyLiveDataRow[] = [liveRow({ name: 'Gianluca Prestianni', market_value_eur: 20_000_000, transfermarkt_url: null })]
 
     const result = applyLiveAgencyData(players, live)
 
@@ -102,10 +119,10 @@ describe('applyLiveAgencyData', () => {
 
   it('completa el link de Transfermarkt cuando el Sheet nunca lo tuvo (caso real: Rodrigo Schlegel sin fila legacy)', () => {
     const players = [player({ Jugador: 'R. Schlegel', Transfermkt: '' })]
-    const live: AgencyLiveDataRow[] = [{
+    const live: AgencyLiveDataRow[] = [liveRow({
       name: 'Rodrigo Schlegel', market_value_eur: null,
       transfermarkt_url: 'https://www.transfermarkt.com/rodrigo-schlegel/profil/spieler/504258',
-    }]
+    })]
 
     const result = applyLiveAgencyData(players, live)
 
@@ -114,7 +131,7 @@ describe('applyLiveAgencyData', () => {
 
   it('matchea por formato corto vs nombre completo, igual que applyAgencyOverrides', () => {
     const players = [player({ Jugador: 'A. Steimbach', marketValueRaw: 500_000 })]
-    const live: AgencyLiveDataRow[] = [{ name: 'Alexis Steimbach', market_value_eur: 1_000_000, transfermarkt_url: null }]
+    const live: AgencyLiveDataRow[] = [liveRow({ name: 'Alexis Steimbach', market_value_eur: 1_000_000, transfermarkt_url: null })]
 
     const result = applyLiveAgencyData(players, live)
 
@@ -123,7 +140,7 @@ describe('applyLiveAgencyData', () => {
 
   it('no toca jugadores sin dato vivo correspondiente', () => {
     const players = [player({ Jugador: 'Ajeno Cualquiera', marketValueRaw: 500_000, marketValueFormatted: '€500K' })]
-    const live: AgencyLiveDataRow[] = [{ name: 'Gianluca Prestianni', market_value_eur: 20_000_000, transfermarkt_url: null }]
+    const live: AgencyLiveDataRow[] = [liveRow({ name: 'Gianluca Prestianni', market_value_eur: 20_000_000, transfermarkt_url: null })]
 
     const result = applyLiveAgencyData(players, live)
 
@@ -133,7 +150,7 @@ describe('applyLiveAgencyData', () => {
 
   it('no crea una nueva referencia de objeto cuando no hay nada nuevo que pisar', () => {
     const p = player({ Jugador: 'G. Prestianni', marketValueRaw: 20_000_000, Transfermkt: 'https://x' })
-    const live: AgencyLiveDataRow[] = [{ name: 'Gianluca Prestianni', market_value_eur: 20_000_000, transfermarkt_url: 'https://x' }]
+    const live: AgencyLiveDataRow[] = [liveRow({ name: 'Gianluca Prestianni', market_value_eur: 20_000_000, transfermarkt_url: 'https://x' })]
 
     const result = applyLiveAgencyData([p], live)
 

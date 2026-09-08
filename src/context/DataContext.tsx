@@ -125,9 +125,10 @@ export function mergeAgencyIntoInternal(
  * legacy — que nadie actualiza — queda pisando al dato real para siempre.
  */
 function applyAgencyOverrides(players: EnrichedPlayer[], agencyPlayers: AgencyPlayer[]): EnrichedPlayer[] {
-  const byKey = new Map<string, { team?: string; contractEnd?: string; position?: string }>()
+  const byKey = new Map<string, { fullName?: string; team?: string; contractEnd?: string; position?: string }>()
   for (const a of agencyPlayers) {
     const patch = {
+      fullName: a.fullName,
       team: a.team || undefined,
       contractEnd: a.contractEnd ?? undefined,
       position: a.position ?? undefined,
@@ -144,6 +145,10 @@ function applyAgencyOverrides(players: EnrichedPlayer[], agencyPlayers: AgencyPl
     const o = byKey.get(identityKey(p.Jugador))
     if (!o) return p
     const patched = { ...p }
+    // Algunas filas viejas del CSV interno quedaron con el nombre corto tipo
+    // "J. Palacios" como `Jugador` en vez del nombre completo — eso rompe cualquier
+    // navegación/lookup que use el nombre completo de agencyPlayers (ej. Home).
+    if (o.fullName && o.fullName !== p.Jugador) patched.Jugador = o.fullName
     if (o.team) patched.Equipo = o.team
     if (o.position) {
       const position = POSITION_MAP[o.position] ?? o.position
@@ -184,7 +189,10 @@ export function applyLiveAgencyData(
   return players.map(p => {
     const live = byKey.get(identityKey(p.Jugador))
     if (!live) return p
-    const patch: { marketValueRaw?: number; marketValueFormatted?: string; Transfermkt?: string } = {}
+    const patch: {
+      marketValueRaw?: number; marketValueFormatted?: string; Transfermkt?: string
+      birthDateLive?: string | null; nationalityLive?: string | null
+    } = {}
     if (live.market_value_eur != null && live.market_value_eur !== p.marketValueRaw) {
       patch.marketValueRaw = live.market_value_eur
       patch.marketValueFormatted = formatMarketValue(live.market_value_eur)
@@ -192,6 +200,12 @@ export function applyLiveAgencyData(
     if (live.transfermarkt_url && live.transfermarkt_url !== p.Transfermkt) {
       patch.Transfermkt = live.transfermarkt_url
     }
+    // birth_date/nationality vivos de Transfermarkt (`players`) — el Sheet legacy
+    // casi nunca tiene fecha de nacimiento cargada (sólo 2 de 39 jugadores la
+    // tenían en agencyPlayers.ts), esto es lo que realmente alcanza a casi todo
+    // el plantel para el widget de cumpleaños y el de nacionalidades.
+    if (live.birth_date) patch.birthDateLive = live.birth_date
+    if (live.nationality) patch.nationalityLive = live.nationality
     if (Object.keys(patch).length === 0) return p
     return { ...p, ...patch }
   })

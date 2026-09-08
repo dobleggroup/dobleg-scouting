@@ -5,7 +5,6 @@ import { LANGUAGE_LOCALES } from '@/constants/translations'
 
 interface InformesListProps {
   onOpen: (id: string) => void
-  onNew: () => void
 }
 
 function formatDate(iso: string, locale: string): string {
@@ -16,7 +15,7 @@ function formatDate(iso: string, locale: string): string {
   return `${date} · ${time}`
 }
 
-export default function InformesList({ onOpen, onNew }: InformesListProps) {
+export default function InformesList({ onOpen }: InformesListProps) {
   const { t, language } = useLanguage()
   const [items, setItems] = useState(() => listInformes())
 
@@ -31,22 +30,13 @@ export default function InformesList({ onOpen, onNew }: InformesListProps) {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold text-apple-gray-900 dark:text-white">{t('informes.misInformes')}</h2>
-          <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
-            {items.length === 0
-              ? t('informes.sinInformes')
-              : t(items.length === 1 ? 'informes.contadorUno' : 'informes.contadorVarios').replace('{count}', String(items.length))}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onNew}
-          className="px-4 py-2.5 rounded-xl bg-brand-green text-white text-sm font-semibold hover:bg-brand-green/90 transition-colors flex-shrink-0"
-        >
-          {t('informes.nuevoInforme')}
-        </button>
+      <div className="min-w-0">
+        <h2 className="text-lg font-semibold text-apple-gray-900 dark:text-white">{t('informes.misInformes')}</h2>
+        <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
+          {items.length === 0
+            ? t('informes.sinInformes')
+            : t(items.length === 1 ? 'informes.contadorUno' : 'informes.contadorVarios').replace('{count}', String(items.length))}
+        </p>
       </div>
 
       {items.length === 0 ? (
@@ -66,9 +56,16 @@ export default function InformesList({ onOpen, onNew }: InformesListProps) {
               className="rounded-2xl border border-apple-gray-200 dark:border-apple-gray-800 bg-white dark:bg-apple-gray-900 p-5 flex flex-col gap-3 hover:border-brand-green/40 transition-colors"
             >
               <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-apple-gray-900 dark:text-white truncate">
-                  {it.nombre || t('informes.sinNombre')}
-                </h3>
+                <div className="flex items-center gap-2 min-w-0">
+                  <h3 className="text-sm font-semibold text-apple-gray-900 dark:text-white truncate">
+                    {it.nombre || t('informes.sinNombre')}
+                  </h3>
+                  {it.modo === 'comparacion' && (
+                    <span className="px-1.5 py-0.5 rounded-md bg-brand-green/10 text-brand-green text-2xs font-semibold uppercase tracking-wide flex-shrink-0">
+                      1v1
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400 truncate mt-0.5">
                   {it.contextoComparacion || t('informes.sinContextoComparacion')}
                 </p>

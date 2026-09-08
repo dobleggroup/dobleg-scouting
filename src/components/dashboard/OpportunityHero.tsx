@@ -10,6 +10,33 @@ import Sparkline from '@/components/ui/Sparkline'
 const CHEAP_MAX = 5_000_000, CONTRACT_MAX = 12
 const TAG_LABEL = { contract: 'Fin de contrato', cheap: 'Precio bajo' } as const
 
+type AgeFilter = 'all' | 'u21' | '22-25' | '26plus'
+const AGE_FILTERS: { id: AgeFilter; label: string }[] = [
+  { id: 'all', label: 'Todas las edades' },
+  { id: 'u21', label: '≤21' },
+  { id: '22-25', label: '22-25' },
+  { id: '26plus', label: '26+' },
+]
+
+function ageFromBirthDate(birthDate: string | null): number | null {
+  if (!birthDate) return null
+  const d = new Date(birthDate)
+  if (Number.isNaN(d.getTime())) return null
+  const now = new Date()
+  let age = now.getFullYear() - d.getFullYear()
+  const monthDiff = now.getMonth() - d.getMonth()
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < d.getDate())) age--
+  return age
+}
+
+function matchesAgeFilter(age: number | null, filter: AgeFilter): boolean {
+  if (filter === 'all') return true
+  if (age === null) return false
+  if (filter === 'u21') return age <= 21
+  if (filter === '22-25') return age >= 22 && age <= 25
+  return age >= 26
+}
+
 export default function OpportunityHero() {
   const navigate = useNavigate()
   const { players: allPlayers, loading } = useRecentForm({
@@ -21,7 +48,15 @@ export default function OpportunityHero() {
     () => excludeAgencyPlayers(allPlayers, agencyPlayers),
     [allPlayers, agencyPlayers],
   )
-  const grouped = useMemo(() => topByPosition(players, OPPORTUNITY_POSITIONS, 8), [players])
+  const [ageFilter, setAgeFilter] = useState<AgeFilter>('all')
+  // El filtro de edad se aplica ANTES de recortar a top-8 por posición — si se
+  // aplicara después, un candidato bueno pero fuera del top-8 sin filtrar
+  // (por ejemplo puesto 12) desaparecería aunque cumpliera la edad pedida.
+  const ageFilteredPlayers = useMemo(
+    () => ageFilter === 'all' ? players : players.filter(p => matchesAgeFilter(ageFromBirthDate(p.birth_date), ageFilter)),
+    [players, ageFilter],
+  )
+  const grouped = useMemo(() => topByPosition(ageFilteredPlayers, OPPORTUNITY_POSITIONS, 8), [ageFilteredPlayers])
 
   const [activePos, setActivePos] = useState<Position>(OPPORTUNITY_POSITIONS[0])
   const [userSelected, setUserSelected] = useState(false)
@@ -83,19 +118,35 @@ export default function OpportunityHero() {
         </Link>
       </div>
 
-      <div className="flex gap-2 mb-4 overflow-x-auto scrollbar-thin">
-        {OPPORTUNITY_POSITIONS.map(pos => (
-          <button
-            key={pos}
-            onClick={() => { setUserSelected(true); setActivePos(pos) }}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
-              pos === activePos
-                ? 'bg-brand-green text-apple-gray-900'
-                : 'bg-apple-gray-100 dark:bg-apple-gray-800 text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-700 hover:text-apple-gray-700 dark:hover:text-apple-gray-200'}`}
-          >
-            {displayPosition(pos)}
-          </button>
-        ))}
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <div className="flex gap-2 overflow-x-auto scrollbar-thin">
+          {OPPORTUNITY_POSITIONS.map(pos => (
+            <button
+              key={pos}
+              onClick={() => { setUserSelected(true); setActivePos(pos) }}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
+                pos === activePos
+                  ? 'bg-brand-green text-apple-gray-900'
+                  : 'bg-apple-gray-100 dark:bg-apple-gray-800 text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-700 hover:text-apple-gray-700 dark:hover:text-apple-gray-200'}`}
+            >
+              {displayPosition(pos)}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1.5 overflow-x-auto scrollbar-thin">
+          {AGE_FILTERS.map(f => (
+            <button
+              key={f.id}
+              onClick={() => setAgeFilter(f.id)}
+              className={`px-2.5 py-1 rounded-full text-2xs font-semibold whitespace-nowrap border transition-all duration-200 ${
+                f.id === ageFilter
+                  ? 'border-brand-green text-brand-green bg-brand-green/10'
+                  : 'border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-400 dark:text-apple-gray-500 hover:border-brand-green/40 hover:text-brand-green'}`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {activePlayers.length === 0 ? (

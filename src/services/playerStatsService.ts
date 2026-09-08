@@ -181,6 +181,8 @@ export interface AgencyLiveDataRow {
   name: string;
   market_value_eur: number | null;
   transfermarkt_url: string | null;
+  birth_date: string | null;
+  nationality: string | null;
 }
 
 /**
@@ -197,7 +199,7 @@ export interface AgencyLiveDataRow {
 export async function fetchAgencyLiveData(): Promise<AgencyLiveDataRow[]> {
   const { data, error } = await supabase
     .from('players')
-    .select('name, market_value_eur, transfermarkt_url')
+    .select('name, market_value_eur, transfermarkt_url, birth_date, nationality')
     .eq('agent', 'Doble G Sports Group');
 
   if (error) throw error;
@@ -205,6 +207,8 @@ export async function fetchAgencyLiveData(): Promise<AgencyLiveDataRow[]> {
     name: r.name as string,
     market_value_eur: typeof r.market_value_eur === 'number' && r.market_value_eur > 0 ? r.market_value_eur : null,
     transfermarkt_url: r.transfermarkt_url || null,
+    birth_date: r.birth_date || null,
+    nationality: r.nationality || null,
   }));
 }
 
@@ -702,6 +706,21 @@ export function isApiFootballPlayer(p: { photo?: string | null }): boolean {
   return (p.photo ?? '').includes('media.api-sports.io');
 }
 
+// Fecha del partido más reciente cargado para un jugador, o null si no tiene
+// ninguno. Se usa para decidir entre las filas "gemelas" API-Football/Sofascore
+// de abajo -- ver por qué en el comentario de `resolvePreferredPlayerId`.
+async function latestMatchDate(playerId: number): Promise<string | null> {
+  const { data } = await supabase
+    .from('player_match_stats')
+    .select('fixture:fixtures(date)')
+    .eq('player_id', playerId)
+    .order('fixture(date)', { ascending: false })
+    .limit(1);
+  const row = data?.[0] as { fixture?: { date: string } | { date: string }[] } | undefined;
+  const fixture = Array.isArray(row?.fixture) ? row?.fixture[0] : row?.fixture;
+  return fixture?.date ?? null;
+}
+
 const preferredIdCache = new Map<number, number>();
 
 export async function resolvePreferredPlayerId(playerId: number): Promise<number> {
@@ -727,7 +746,22 @@ export async function resolvePreferredPlayerId(playerId: number): Promise<number
     }
     const { data: twins } = await query;
     const twin = (twins ?? []).find(t => t.id !== playerId && isApiFootballPlayer(t));
-    if (twin) resolved = twin.id;
+    if (twin) {
+      // Antes esto siempre saltaba a la fila de API-Football. Cuando esa fila
+      // no sigue al día (el jugador se transfirió y API-Football se quedó con
+      // el club viejo), terminaba mostrando un club/liga que ya no es real —
+      // caso real: Nahuel Arena se fue a CA Cerro (Uruguay) y la ficha lo
+      // mostraba en Independ. Rivadavia porque esa fila de API-Football no
+      // tenía partidos desde mayo, mientras Sofascore ya tenía agosto. Ahora
+      // sólo se prefiere API-Football si no está más desactualizada.
+      const [meLatest, twinLatest] = await Promise.all([
+        latestMatchDate(playerId),
+        latestMatchDate(twin.id),
+      ]);
+      if (!meLatest || (twinLatest && twinLatest >= meLatest)) {
+        resolved = twin.id;
+      }
+    }
   }
 
   preferredIdCache.set(playerId, resolved);
@@ -787,10 +821,17 @@ export async function fetchTeamFixtures(
 
 export interface SquadStatRow {
   player_id: number;
+  team_id: number;
   minutes: number;
   goals: number;
   assists: number;
+  shots_total: number;
+  shots_on: number;
+  passes_total: number;
   passes_key: number;
+  passes_accuracy: number | null;
+  tackles: number;
+  interceptions: number;
   duels_won: number;
   duels_total: number;
   dribbles_success: number;
@@ -801,6 +842,15 @@ export interface SquadStatRow {
   player?: { name: string } | null;
   fixture?: { date: string } | null;
 }
+
+const SQUAD_STAT_COLUMNS = `
+  player_id, team_id, fixture_id, minutes, goals, assists,
+  shots_total, shots_on, passes_total, passes_key, passes_accuracy,
+  tackles, interceptions, duels_won, duels_total, dribbles_success, dribbles_attempted,
+  rating, detected_position,
+  player:players(name),
+  fixture:fixtures!inner(date)
+`;
 
 // PostgREST corta en 1000 filas. Un plantel de una temporada ya anda por las 900
 // y el corte es silencioso: los rankings del informe saldrían con datos a medias.
@@ -817,14 +867,46 @@ export async function fetchSquadMatchStats(
   for (let page = 0; ; page++) {
     let query = supabase
       .from('player_match_stats')
-      .select(`
-        player_id, fixture_id, minutes, goals, assists, passes_key,
-        duels_won, duels_total, dribbles_success, dribbles_attempted,
-        rating, detected_position,
-        player:players(name),
-        fixture:fixtures!inner(date)
-      `)
+      .select(SQUAD_STAT_COLUMNS)
       .eq('team_id', teamId)
+      .gte('fixture.date', fromISO)
+      .order('fixture_id', { ascending: true })
+      .range(page * SQUAD_PAGE, (page + 1) * SQUAD_PAGE - 1);
+
+    if (toISO) query = query.lte('fixture.date', `${toISO}T23:59:59`);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const rows = (data ?? []) as unknown as SquadStatRow[];
+    out.push(...rows);
+    if (rows.length < SQUAD_PAGE) break;
+  }
+
+  return out;
+}
+
+/**
+ * Igual que `fetchSquadMatchStats` pero para varios equipos en una sola tanda
+ * de queries (`.in('team_id', ...)`) en vez de una por equipo. La agencia
+ * tiene jugadores en ~30 equipos distintos — pedirle a Supabase 30 queries en
+ * paralelo (`Promise.all` de `fetchSquadMatchStats`) satura el pool de
+ * conexiones y cada una termina esperando su turno; una sola query con `in`
+ * evita esa cola. Usado por `fetchAgencyPerformanceRows` (Home).
+ */
+export async function fetchMultiTeamMatchStats(
+  teamIds: number[],
+  fromISO: string,
+  toISO?: string,
+): Promise<SquadStatRow[]> {
+  if (teamIds.length === 0) return [];
+  const out: SquadStatRow[] = [];
+
+  for (let page = 0; ; page++) {
+    let query = supabase
+      .from('player_match_stats')
+      .select(SQUAD_STAT_COLUMNS)
+      .in('team_id', teamIds)
       .gte('fixture.date', fromISO)
       .order('fixture_id', { ascending: true })
       .range(page * SQUAD_PAGE, (page + 1) * SQUAD_PAGE - 1);

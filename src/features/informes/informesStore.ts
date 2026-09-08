@@ -42,6 +42,7 @@ export function listInformes() {
       contextoComparacion: i.contextoComparacion,
       updatedAt: i.updatedAt,
       nombre: i.content?.nombre ?? '',
+      modo: i.modo,
     }))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
 }

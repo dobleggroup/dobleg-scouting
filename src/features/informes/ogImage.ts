@@ -220,3 +220,141 @@ export async function buildOgImageBlob(input: OgCardInput): Promise<Blob | null>
 
   return new Promise(resolve => canvas.toBlob(b => resolve(b), 'image/jpeg', 0.92))
 }
+
+export interface OgComparisonInput {
+  a: { nombre: string; club?: string; fotoDataUrl?: string | null }
+  b: { nombre: string; club?: string; fotoDataUrl?: string | null }
+  logoDataUrl?: string | null
+}
+
+/** Apellido (última palabra) para que el nombre entre grande bajo cada foto. */
+export function shortName(nombre: string): string {
+  const parts = nombre.trim().split(/\s+/)
+  return parts[parts.length - 1] || nombre
+}
+
+/**
+ * Tarjeta de preview (Open Graph) para un informe de Comparación 1v1: dos fotos
+ * lado a lado con un "VS" en el medio, en vez de una sola foto + nombre grande.
+ * Mismo criterio que `buildOgImageBlob`: se lee de un vistazo a ~400px de ancho.
+ */
+export async function buildComparisonOgImageBlob(input: OgComparisonInput): Promise<Blob | null> {
+  if (typeof document === 'undefined') return null
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+
+  ctx.fillStyle = BG
+  ctx.fillRect(0, 0, W, H)
+  const glow = ctx.createRadialGradient(W / 2, -100, 0, W / 2, -100, 800)
+  glow.addColorStop(0, 'rgba(34,197,94,0.18)')
+  glow.addColorStop(1, 'rgba(34,197,94,0)')
+  ctx.fillStyle = glow
+  ctx.fillRect(0, 0, W, H)
+
+  // ── Logo / marca (arriba, centrado) ──
+  const logo = input.logoDataUrl ? await loadImage(input.logoDataUrl) : null
+  if (logo) {
+    const h = 40
+    const w = (logo.width / logo.height) * h
+    ctx.drawImage(logo, (W - w) / 2, 44, w, h)
+  } else {
+    ctx.fillStyle = TEXT
+    ctx.font = '700 28px "Segoe UI", system-ui, sans-serif'
+    ctx.textAlign = 'center'
+    setLetterSpacing(ctx, '0.06em')
+    ctx.fillText('DOBLE G', W / 2, 72)
+    setLetterSpacing(ctx, '0px')
+    ctx.textAlign = 'start'
+  }
+
+  // Eyebrow verde
+  ctx.fillStyle = GREEN
+  ctx.font = '700 22px "Segoe UI", system-ui, sans-serif'
+  ctx.textAlign = 'center'
+  setLetterSpacing(ctx, '0.22em')
+  ctx.fillText('COMPARACIÓN', W / 2, 128)
+  setLetterSpacing(ctx, '0px')
+
+  // ── Dos fotos cuadradas simétricas, con "VS" en el medio ──
+  const PS = 340, PY = 172
+  const gap = 90
+  const leftX = W / 2 - gap / 2 - PS
+  const rightX = W / 2 + gap / 2
+
+  async function drawPlayer(x: number, player: { nombre: string; club?: string; fotoDataUrl?: string | null }) {
+    const foto = player.fotoDataUrl ? await loadImage(player.fotoDataUrl) : null
+    ctx!.save()
+    roundedRect(ctx!, x, PY, PS, PS, 28)
+    ctx!.clip()
+    if (foto) {
+      drawCover(ctx!, foto, x, PY, PS, PS)
+    } else {
+      ctx!.fillStyle = CARD
+      ctx!.fillRect(x, PY, PS, PS)
+      ctx!.fillStyle = GREEN
+      ctx!.font = '700 100px "Segoe UI", system-ui, sans-serif'
+      ctx!.textAlign = 'center'
+      ctx!.textBaseline = 'middle'
+      ctx!.fillText(initialsFor(player.nombre), x + PS / 2, PY + PS / 2)
+      ctx!.textBaseline = 'alphabetic'
+    }
+    ctx!.restore()
+    ctx!.strokeStyle = 'rgba(255,255,255,0.12)'
+    ctx!.lineWidth = 2
+    roundedRect(ctx!, x + 1, PY + 1, PS - 2, PS - 2, 27)
+    ctx!.stroke()
+
+    // Nombre debajo de la foto, centrado sobre el ancho de la foto.
+    const name = shortName(player.nombre) || 'Informe'
+    const nameSize = fitFontSize(size => {
+      ctx!.font = `700 ${size}px "Segoe UI", system-ui, sans-serif`
+      return ctx!.measureText(name).width
+    }, PS, 44, 26)
+    ctx!.font = `700 ${nameSize}px "Segoe UI", system-ui, sans-serif`
+    ctx!.fillStyle = TEXT
+    ctx!.fillText(name, x + PS / 2, PY + PS + 48)
+
+    if (player.club) {
+      ctx!.font = '400 20px "Segoe UI", system-ui, sans-serif'
+      ctx!.fillStyle = MUTED
+      ctx!.fillText(player.club.trim(), x + PS / 2, PY + PS + 76)
+    }
+    ctx!.textAlign = 'start'
+  }
+
+  await drawPlayer(leftX, input.a)
+  await drawPlayer(rightX, input.b)
+
+  // "VS" central, sobre un círculo para que se lea despegado de ambas fotos.
+  const vsCx = W / 2, vsCy = PY + PS / 2
+  ctx.beginPath()
+  ctx.arc(vsCx, vsCy, 44, 0, Math.PI * 2)
+  ctx.fillStyle = BG
+  ctx.fill()
+  ctx.strokeStyle = GREEN
+  ctx.lineWidth = 2.5
+  ctx.stroke()
+  ctx.fillStyle = GREEN
+  ctx.font = '700 32px "Segoe UI", system-ui, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('VS', vsCx, vsCy + 2)
+  ctx.textAlign = 'start'
+  ctx.textBaseline = 'alphabetic'
+
+  // ── Pie ──
+  ctx.fillStyle = 'rgba(255,255,255,0.08)'
+  ctx.fillRect(72, 552, W - 144, 1)
+  ctx.fillStyle = MUTED
+  ctx.font = '600 18px "Segoe UI", system-ui, sans-serif'
+  ctx.textAlign = 'center'
+  setLetterSpacing(ctx, '0.18em')
+  ctx.fillText('DOBLE G SPORTS GROUP', W / 2, 588)
+  setLetterSpacing(ctx, '0px')
+  ctx.textAlign = 'start'
+
+  return new Promise(resolve => canvas.toBlob(b => resolve(b), 'image/jpeg', 0.92))
+}

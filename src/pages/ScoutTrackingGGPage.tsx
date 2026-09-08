@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
@@ -468,24 +468,35 @@ export default function ScoutTrackingGGPage() {
         </button>
       </div>
 
-      {/* Status pipeline */}
-      <div className="flex flex-wrap gap-2 mb-5">
-        {(Object.entries(TRACKING_STATUS_CONFIG) as [TrackingStatus, typeof TRACKING_STATUS_CONFIG.en_seguimiento][]).map(([key, cfg]) => (
-          <button
-            key={key}
-            onClick={() => setStatusFilter(statusFilter === key ? '' : key)}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-              statusFilter === key
-                ? `${cfg.bg} ${cfg.color} ring-2 ring-offset-1 ring-current dark:ring-offset-apple-gray-900`
-                : 'bg-white dark:bg-apple-gray-800 text-apple-gray-500 border-apple-gray-200 dark:border-apple-gray-700 hover:border-apple-gray-300'
-            }`}
-          >
-            <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-            {t(cfg.labelKey)}
-            <span className="font-bold opacity-70">{stats[key] || 0}</span>
-          </button>
-        ))}
-      </div>
+      {/* Status pipeline -- mientras `loading` es true, `players` todavía es
+          el [] inicial y `stats` da todo en 0: sin este gate, cada carga (y
+          cada refetch tras cambiar un estado) mostraba un flash real de "En
+          Seguimiento 0 / Contactado 0 / ..." antes de los números reales. */}
+      {loading ? (
+        <div className="flex flex-wrap gap-2 mb-5">
+          {Object.keys(TRACKING_STATUS_CONFIG).map(key => (
+            <div key={key} className="h-8 w-32 rounded-lg bg-apple-gray-100 dark:bg-apple-gray-700/40 animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2 mb-5">
+          {(Object.entries(TRACKING_STATUS_CONFIG) as [TrackingStatus, typeof TRACKING_STATUS_CONFIG.en_seguimiento][]).map(([key, cfg]) => (
+            <button
+              key={key}
+              onClick={() => setStatusFilter(statusFilter === key ? '' : key)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                statusFilter === key
+                  ? `${cfg.bg} ${cfg.color} ring-2 ring-offset-1 ring-current dark:ring-offset-apple-gray-900`
+                  : 'bg-white dark:bg-apple-gray-800 text-apple-gray-500 border-apple-gray-200 dark:border-apple-gray-700 hover:border-apple-gray-300'
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+              {t(cfg.labelKey)}
+              <span className="font-bold opacity-70">{stats[key] || 0}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Search + filter bar */}
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
@@ -612,9 +623,8 @@ export default function ScoutTrackingGGPage() {
                     const files = player.files ?? []
 
                     return (
-                      <>
+                      <Fragment key={player.id}>
                         <tr
-                          key={player.id}
                           className="hover:bg-brand-green/5 dark:hover:bg-brand-green/10 transition-colors cursor-pointer group"
                           onClick={() => {
                             if (player.supabase_player_id) {
@@ -906,7 +916,7 @@ export default function ScoutTrackingGGPage() {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     )
                   })}
                 </tbody>

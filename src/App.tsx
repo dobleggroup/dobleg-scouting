@@ -23,7 +23,6 @@ const OpportunitiesPage = lazy(() => import('@/pages/OpportunitiesPage'))
 const CoachesListPage = lazy(() => import('@/pages/CoachesListPage'))
 const CoachDetailPage = lazy(() => import('@/pages/CoachDetailPage'))
 const CoachMatchDetailPage = lazy(() => import('@/pages/CoachMatchDetailPage'))
-const DashboardPage = lazy(() => import('@/pages/DashboardPage'))
 const ScoutingWorksPage = lazy(() => import('@/pages/ScoutingWorksPage'))
 const ScatterChartPage = lazy(() => import('@/pages/ScatterChartPage'))
 const ScoutEvaluationPage = lazy(() => import('@/pages/ScoutEvaluationPage'))
@@ -62,7 +61,6 @@ export default function App() {
             <Route path="/scouting" element={<ExternalScoutingPage />} />
             <Route path="/interno" element={<InternalScoutingPage />} />
             <Route path="/clasificacion-interna" element={<InternalClassificationPage />} />
-            <Route path="/panel-interno" element={<DashboardPage />} />
             <Route path="/seguimiento-datos" element={<MonitoringPage />} />
             <Route path="/oportunidades" element={<OpportunitiesPage />} />
             <Route path="/debutantes" element={<DebutantesPage />} />

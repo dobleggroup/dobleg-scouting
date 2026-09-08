@@ -6,7 +6,9 @@ export default {
     extend: {
       colors: {
         brand: {
-          green: '#22C55E',
+          // Ver src/index.css -- la variable cambia entre claro y oscuro para
+          // que el verde tenga contraste legible en ambos.
+          green: 'rgb(var(--color-brand-green) / <alpha-value>)',
           red: '#DC2626',
           dark: '#111111',
         },

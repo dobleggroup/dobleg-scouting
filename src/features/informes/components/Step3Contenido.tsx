@@ -1,4 +1,5 @@
-import type { Informe, InformeContent, MatchRow, Comparable, ContinuityOverrides, ContinuityKey } from '@/features/informes/types'
+import type { Informe, InformeContent, MatchRow, Comparable, ContinuityOverrides, ContinuityKey, ComparisonProfile } from '@/features/informes/types'
+import { EMPTY_COMPARISON_PROFILE } from '@/features/informes/types'
 import { useInformeEnrichment } from '@/features/informes/useInformeEnrichment'
 import {
   autoContinuityValues,
@@ -132,7 +133,14 @@ export default function Step3Contenido({ informe, content, onChange, onChangeInf
         {/* ── Izquierda ── */}
         <div className="space-y-4">
           <div className={cardClass}>
-            <h2 className="text-sm font-semibold text-apple-gray-900 dark:text-white mb-3">Datos del jugador</h2>
+            <h2 className="text-sm font-semibold text-apple-gray-900 dark:text-white mb-3">
+              {informe.modo === 'comparacion' ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-brand-green flex-shrink-0" />
+                  Datos — Jugador 1
+                </span>
+              ) : 'Datos del jugador'}
+            </h2>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Nombre" value={content.nombre} onChange={v => set('nombre', v)} />
               <Field label="Club" value={content.club} onChange={v => set('club', v)} />
@@ -150,7 +158,9 @@ export default function Step3Contenido({ informe, content, onChange, onChangeInf
 
           <div className={cardClass}>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-apple-gray-900 dark:text-white">Estadísticas principales</h2>
+              <h2 className="text-sm font-semibold text-apple-gray-900 dark:text-white">
+                {informe.modo === 'comparacion' ? 'Estadísticas — Jugador 1' : 'Estadísticas principales'}
+              </h2>
               <CheckboxField label="Ocultar en el email" checked={content.hideMainStats} onChange={v => set('hideMainStats', v)} />
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -192,6 +202,39 @@ export default function Step3Contenido({ informe, content, onChange, onChangeInf
               </p>
             </div>
           </div>
+
+          {informe.modo === 'comparacion' && (() => {
+            const b: ComparisonProfile = informe.comparisonB ?? EMPTY_COMPARISON_PROFILE
+            const setB = <K extends keyof ComparisonProfile>(key: K, value: ComparisonProfile[K]) =>
+              onChangeInforme({ ...informe, comparisonB: { ...b, [key]: value } })
+            return (
+              <div className={cardClass}>
+                <h2 className="text-sm font-semibold text-apple-gray-900 dark:text-white mb-3">
+                  <span className="inline-flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+                    Datos y estadísticas — Jugador 2
+                  </span>
+                </h2>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Nombre" value={b.nombre} onChange={v => setB('nombre', v)} />
+                  <Field label="Club" value={b.club} onChange={v => setB('club', v)} />
+                  <Field label="Posición" value={b.posicion} onChange={v => setB('posicion', v)} />
+                  <Field label="Edad" value={b.edad} onChange={v => setB('edad', v)} />
+                  <Field label="Nacionalidad" value={b.nacionalidad} onChange={v => setB('nacionalidad', v)} />
+                  <Field label="Liga" value={b.liga} onChange={v => setB('liga', v)} />
+                  <Field label="Contrato" value={b.contrato} onChange={v => setB('contrato', v)} />
+                  <Field label="Valor de mercado" value={b.valorMercado} onChange={v => setB('valorMercado', v)} />
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3 pt-3 border-t border-apple-gray-100 dark:border-apple-gray-800">
+                  <Field label="Rating" value={b.rating} onChange={v => setB('rating', v)} />
+                  <Field label="PJ" value={b.pj} onChange={v => setB('pj', v)} />
+                  <Field label="Minutos" value={b.minutos} onChange={v => setB('minutos', v)} />
+                  <Field label="Goles" value={b.goles} onChange={v => setB('goles', v)} />
+                  <Field label="Asistencias" value={b.asistencias} onChange={v => setB('asistencias', v)} />
+                </div>
+              </div>
+            )
+          })()}
 
           {/* ── Pestaña General del informe ── */}
           <div className={cardClass}>
@@ -254,18 +297,21 @@ export default function Step3Contenido({ informe, content, onChange, onChangeInf
             )}
           </div>
 
-          <div className={cardClass}>
-            <h2 className="text-sm font-semibold text-apple-gray-900 dark:text-white mb-3">Links y carrera</h2>
-            <div className="space-y-3">
-              <Field label="Video (URL de YouTube)" value={content.videoUrl} onChange={v => set('videoUrl', v)} placeholder="https://youtube.com/..." />
-              <Field label="Transfermarkt" value={content.transfermarktUrl} onChange={v => set('transfermarktUrl', v)} placeholder="https://transfermarkt.com/..." />
-              <Field label="Agencia" value={content.representante} onChange={v => set('representante', v)} />
+          {informe.modo !== 'comparacion' && (
+            <div className={cardClass}>
+              <h2 className="text-sm font-semibold text-apple-gray-900 dark:text-white mb-3">Links y carrera</h2>
+              <div className="space-y-3">
+                <Field label="Video (URL de YouTube)" value={content.videoUrl} onChange={v => set('videoUrl', v)} placeholder="https://youtube.com/..." />
+                <Field label="Transfermarkt" value={content.transfermarktUrl} onChange={v => set('transfermarktUrl', v)} placeholder="https://transfermarkt.com/..." />
+                <Field label="Agencia" value={content.representante} onChange={v => set('representante', v)} />
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* ── Derecha ── */}
         <div className="space-y-4">
+          {informe.modo !== 'comparacion' && (
           <div className={cardClass}>
             <div className="flex items-center justify-between gap-2 mb-1">
               <h2 className="text-sm font-semibold text-apple-gray-900 dark:text-white">Últimos 5 partidos</h2>
@@ -324,7 +370,9 @@ export default function Step3Contenido({ informe, content, onChange, onChangeInf
               La fecha es sólo para que los reconozcas acá; en el informe se publican rival, resultado, rating y minutos. El resultado se escribe con los goles de su equipo primero (ej. 2-1) para que el color salga bien.
             </p>
           </div>
+          )}
 
+          {informe.modo !== 'comparacion' && (
           <div className={cardClass}>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-apple-gray-900 dark:text-white">Comparables</h2>
@@ -369,7 +417,9 @@ export default function Step3Contenido({ informe, content, onChange, onChangeInf
               + Agregar comparable
             </button>
           </div>
+          )}
 
+          {informe.modo !== 'comparacion' && (
           <div className={cardClass}>
             <label className={labelClass}>Comparaciones</label>
             <textarea
@@ -380,8 +430,9 @@ export default function Step3Contenido({ informe, content, onChange, onChangeInf
               className={`${inputClass} resize-y mt-1`}
             />
           </div>
+          )}
 
-          <Step3Impacto informe={informe} onChange={onChangeInforme} />
+          {informe.modo !== 'comparacion' && <Step3Impacto informe={informe} onChange={onChangeInforme} />}
         </div>
       </div>
 

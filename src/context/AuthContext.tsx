@@ -29,12 +29,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [clubId, setClubId] = useState<string | null | undefined>(undefined)
 
   useEffect(() => {
-    // Get initial session
+    // `onAuthStateChange` ya dispara un evento inicial con la sesión vigente
+    // apenas se suscribe (además del INITIAL_SESSION/SIGNED_IN normal), así que
+    // pedir `getMyClubId` también acá duplicaba la consulta a user_profiles en
+    // cada carga de la app. Se guarda el id del usuario ya resuelto por
+    // `getSession` para no repetirla si `onAuthStateChange` trae la misma sesión.
+    let resolvedForUserId: string | null = null
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       setUser(session?.user ?? null)
       setLoading(false)
       if (session?.user) {
+        resolvedForUserId = session.user.id
         getMyClubId(session.user.id).then(setClubId)
       } else {
         setClubId(undefined)
@@ -47,8 +54,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null)
       setLoading(false)
       if (session?.user) {
+        if (session.user.id === resolvedForUserId) return
+        resolvedForUserId = session.user.id
         getMyClubId(session.user.id).then(setClubId)
       } else {
+        resolvedForUserId = null
         setClubId(undefined)
       }
     })

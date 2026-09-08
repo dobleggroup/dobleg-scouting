@@ -48,7 +48,12 @@ export const BASE_AGENCY_PLAYERS: AgencyPlayer[] = [
   { shortName: 'F. Paradela', fullName: 'Federico Paradela', image: 'https://encrypted-tbn1.gstatic.com/images?q=tbn:ANd9GcS8105jO1m0aDXDfCWOOsYjAw31izl4OjZp4O035Zc3PRMYQA', contractEnd: '31/12/2026', marketValue: '€75k', team: 'Gimnasia Jujuy', apiTeamId: 479, isReserve: false },
   { shortName: 'B. Centeno', fullName: 'Bruno Centeno', image: 'https://encrypted-tbn3.gstatic.com/images?q=tbn:ANd9GcQrXW5EJJwbfRNL1c7M_Blul3no8gLbc8sCh459MbUaawxTvw', contractEnd: null, marketValue: '€50k', team: 'Deportivo Maldonado', apiTeamId: 2370, isReserve: false },
   { shortName: 'F. Lo Celso', fullName: 'Francesco Lo Celso', image: 'https://img.a.transfermarkt.technology/portrait/header/642757-1638750271.JPG?lm=1', contractEnd: '31/12/2026', marketValue: '€25k', team: 'Estudiantes Río Cuarto', apiTeamId: 2424, isReserve: false },
-  { shortName: 'Gonzalo González', fullName: 'Gonzalo González', image: 'https://encrypted-tbn2.gstatic.com/images?q=tbn:ANd9GcTuKilxrc1i5zJfFS3hEXFA4YhCx64fAMPL1FG3RM-mD_Ypbg', contractEnd: '31/12/2026', marketValue: null, team: 'Estudiantes Río Cuarto', apiTeamId: 2424, isReserve: false },
+  // shortName tenía el nombre completo repetido -- la fuente de datos (API-Football)
+  // guarda a este jugador como "G. Gonzalez" (abreviado), así que sin esta variante
+  // nunca matcheaba contra el roster y aparecía como "Sin rodaje" jugando en realidad
+  // (ver bug real: partidos hasta 4/9/26 con Estudiantes Río Cuarto, invisibles en
+  // todos los widgets de rendimiento por este motivo).
+  { shortName: 'G. González', fullName: 'Gonzalo González', image: 'https://encrypted-tbn2.gstatic.com/images?q=tbn:ANd9GcTuKilxrc1i5zJfFS3hEXFA4YhCx64fAMPL1FG3RM-mD_Ypbg', contractEnd: '31/12/2026', marketValue: null, team: 'Estudiantes Río Cuarto', apiTeamId: 2424, isReserve: false },
   { shortName: 'L. Minniti', fullName: 'Luciano Minniti', image: null, contractEnd: '31/12/2028', marketValue: null, team: 'Tigre', apiTeamId: 452, isReserve: true },
   { shortName: 'A. Melano', fullName: 'Agustín Melano', image: 'https://encrypted-tbn3.gstatic.com/images?q=tbn:ANd9GcQI0lcQIHGis9Sa6VDh2h8FANIarYviSQSNpUcOLYYuPpzl2w', contractEnd: '31/12/2026', marketValue: null, team: 'Belgrano', apiTeamId: 440, isReserve: true },
   { shortName: 'F. Paradela', fullName: 'Francesco Paradela', image: null, contractEnd: null, marketValue: null, team: 'Gimnasia La Plata', apiTeamId: 434, isReserve: true },

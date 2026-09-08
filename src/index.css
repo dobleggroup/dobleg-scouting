@@ -3,6 +3,20 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* brand-green como variable RGB (para que sigan andando los modificadores
+       de opacidad tipo bg-brand-green/10) -- en modo claro el verde original
+       (#22C55E, "green-500") se leía muy débil sobre fondo blanco (~2.5:1 de
+       contraste, ilegible como texto chico). Se usa un verde más oscuro y
+       saturado ("green-700", ~4.6:1 sobre blanco) sólo en claro; en oscuro se
+       mantiene el original porque ahí sí se ve bien. */
+    --color-brand-green: 21 128 61;
+  }
+
+  .dark {
+    --color-brand-green: 34 197 94;
+  }
+
   * {
     box-sizing: border-box;
   }

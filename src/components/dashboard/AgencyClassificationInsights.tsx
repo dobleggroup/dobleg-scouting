@@ -12,7 +12,7 @@ const MOVEMENT_WINDOW_DAYS = 90
 
 function StatCard({ label, value, subtitle, dot }: { label: string; value: number; subtitle: string; dot?: string }) {
   return (
-    <div className="bg-white dark:bg-apple-gray-800 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 p-4">
+    <div className="bg-white dark:bg-apple-gray-800 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 p-4 hover:border-brand-green/40 hover:-translate-y-0.5 transition-all">
       <div className="flex items-center gap-1.5 mb-1">
         {dot && <span className={`w-2 h-2 rounded-full ${dot}`} />}
         <p className="text-2xs font-semibold text-apple-gray-400 uppercase tracking-wider">{label}</p>
@@ -65,7 +65,7 @@ export default function AgencyClassificationInsights() {
       <StatCard label="Clase A" value={counts.A} subtitle={classified > 0 ? `${pctA}% del plantel clasificado` : 'Sin clasificar todavía'} dot={CLASS_DOT_COLOR.A} />
       <StatCard label="Clase B" value={counts.B} subtitle="Jugadores en desarrollo" dot={CLASS_DOT_COLOR.B} />
       <StatCard label="Clase C" value={counts.C} subtitle="Jugadores en formación" dot={CLASS_DOT_COLOR.C} />
-      <div className="bg-white dark:bg-apple-gray-800 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 p-4">
+      <div className="bg-white dark:bg-apple-gray-800 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 p-4 hover:border-brand-green/40 hover:-translate-y-0.5 transition-all">
         <p className="text-2xs font-semibold text-apple-gray-400 uppercase tracking-wider mb-1">Movimiento Clase A (90 días)</p>
         {netA === null ? (
           <p className="text-sm text-apple-gray-400 mt-1">Sin datos</p>

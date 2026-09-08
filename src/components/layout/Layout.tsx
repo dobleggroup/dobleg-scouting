@@ -192,22 +192,34 @@ export default function Layout() {
 
   return (
     <div className="relative min-h-screen flex flex-col bg-apple-gray-50 dark:bg-apple-gray-900 text-apple-gray-800 dark:text-apple-gray-100 transition-colors duration-300 ease-apple">
-      {/* Glow ambiente de fondo, solo en modo oscuro -- `absolute` (no `fixed`)
-          sobre este contenedor relative, así que mide el alto real de TODA la
-          página y scrollea con el contenido. A propósito NO son 2 manchas
-          simétricas en punta-arriba/punta-abajo (se veía muy "prolijo" /
-          artificial) -- son 5 formas orgánicas (border-radius asimétrico +
-          rotación) de tamaño, opacidad y posición bien distintas entre sí,
-          desparramadas en vez de en pares espejados, para que se lea como
-          algo casual y no como "2 círculos difuminados a juego" -- verificado
-          en vivo que no se filtran adentro de las tarjetas translúcidas de
-          esta app (bg-apple-gray-800/60 y similares). */}
-      <div className="hidden dark:block absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+      {/* Glow ambiente de fondo. `fixed` (no `absolute`) a propósito: Home ya
+          tiene 30+ widgets y la página mide miles de px — con `absolute` sobre
+          el contenedor de toda la altura, las manchas de abajo quedaban pegadas
+          al final real del documento, invisibles en toda la mitad del scroll
+          ("no veo el verde" en la práctica). `fixed` las clava a las 4 esquinas
+          del viewport, visibles todo el tiempo sin importar cuánto scrolleás.
+          El motivo real de que se "filtrara" en las tarjetas nunca fue el
+          alcance del glow, sino que las tarjetas de Home usan fondos
+          translúcidos (`/60`) que lo dejan pasar — eso se corrigió en
+          HomePage.tsx (tarjetas opacas), no acá. */}
+      <div className="hidden dark:block fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         <div className="absolute -top-[110px] left-[6%] w-[380px] h-[300px] rotate-[-8deg] rounded-[46%_54%_61%_39%/40%_48%_52%_60%] bg-brand-green/[0.26] blur-[95px]" />
         <div className="absolute -top-[180px] left-[38%] w-[520px] h-[280px] rotate-[24deg] rounded-[65%_35%_42%_58%/58%_62%_38%_42%] bg-brand-green/[0.14] blur-[110px]" />
         <div className="absolute top-[10px] -right-24 w-[220px] h-[190px] rotate-[-20deg] rounded-[55%_45%_35%_65%/50%_40%_60%_50%] bg-brand-green/[0.16] blur-[80px]" />
         <div className="absolute bottom-[-120px] left-[18%] w-[360px] h-[330px] rotate-[14deg] rounded-[38%_62%_58%_42%/62%_44%_56%_38%] bg-brand-green/[0.17] blur-[95px]" />
         <div className="absolute bottom-[-70px] -right-28 w-[300px] h-[260px] rotate-[-22deg] rounded-[58%_42%_44%_56%/40%_58%_42%_60%] bg-brand-green/[0.22] blur-[90px]" />
+      </div>
+      {/* Misma idea en modo claro — cada intento anterior (0.05-0.08, después
+          0.20-0.34) seguía leyéndose como "no hay verde" porque, con `absolute`,
+          en una página larga como Home casi nunca estaba a la vista. Ahora que
+          es `fixed` (visible siempre, las 4 esquinas) esta opacidad sí se nota
+          de verdad sin ensuciar el fondo blanco. */}
+      <div className="block dark:hidden fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+        <div className="absolute -top-[110px] left-[6%] w-[380px] h-[300px] rotate-[-8deg] rounded-[46%_54%_61%_39%/40%_48%_52%_60%] bg-brand-green/[0.30] blur-[95px]" />
+        <div className="absolute -top-[180px] left-[38%] w-[520px] h-[280px] rotate-[24deg] rounded-[65%_35%_42%_58%/58%_62%_38%_42%] bg-brand-green/[0.22] blur-[110px]" />
+        <div className="absolute top-[10px] -right-24 w-[220px] h-[190px] rotate-[-20deg] rounded-[55%_45%_35%_65%/50%_40%_60%_50%] bg-brand-green/[0.24] blur-[80px]" />
+        <div className="absolute bottom-[-120px] left-[18%] w-[360px] h-[330px] rotate-[14deg] rounded-[38%_62%_58%_42%/62%_44%_56%_38%] bg-brand-green/[0.26] blur-[95px]" />
+        <div className="absolute bottom-[-70px] -right-28 w-[300px] h-[260px] rotate-[-22deg] rounded-[58%_42%_44%_56%/40%_58%_42%_60%] bg-brand-green/[0.36] blur-[90px]" />
       </div>
       <Navbar />
       <main className="flex-1 pb-bottomnav">

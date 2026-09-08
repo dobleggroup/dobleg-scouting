@@ -166,9 +166,15 @@ export function radarSvg(opts: {
   axes: string[]
   series: RadarSeries[]
   size?: number
+  /** Color de anillos/radios — default pensado para fondo oscuro. Los informes
+   *  con fondo claro (ej. Comparación 1v1) pasan un gris más oscuro acá. */
+  gridColor?: string
+  axisTextColor?: string
 }): string {
   const { axes, series } = opts
   const size = opts.size ?? 480
+  const gridColor = opts.gridColor ?? COLOR_GRID
+  const axisTextColor = opts.axisTextColor ?? COLOR_AXIS_TEXT
   const count = axes.length
   const cx = size / 2
   const cy = size / 2
@@ -191,7 +197,7 @@ export function radarSvg(opts: {
     const verts = radarVertices(new Array(count).fill(ring), cx, cy, maxR, count)
     const pointsAttr = verts.map(v => `${v.x},${v.y}`).join(' ')
     parts.push(
-      `<polygon points="${pointsAttr}" fill="none" stroke="${COLOR_GRID}" stroke-width="1"/>`
+      `<polygon points="${pointsAttr}" fill="none" stroke="${gridColor}" stroke-width="1"/>`
     )
   }
 
@@ -199,7 +205,7 @@ export function radarSvg(opts: {
   const outerVerts = radarVertices(new Array(count).fill(100), cx, cy, maxR, count)
   outerVerts.forEach(v => {
     parts.push(
-      `<line x1="${cx}" y1="${cy}" x2="${v.x}" y2="${v.y}" stroke="${COLOR_GRID}" stroke-width="1"/>`
+      `<line x1="${cx}" y1="${cy}" x2="${v.x}" y2="${v.y}" stroke="${gridColor}" stroke-width="1"/>`
     )
   })
 
@@ -224,7 +230,7 @@ export function radarSvg(opts: {
       .map((ln, li) => `<tspan x="${pos.x}" dy="${round2(li === 0 ? startDy : lineH)}">${escapeSvgText(ln)}</tspan>`)
       .join('')
     parts.push(
-      `<text x="${pos.x}" y="${pos.y}" fill="${COLOR_AXIS_TEXT}" font-size="${labelFont}" text-anchor="${anchor}" dominant-baseline="middle">${tspans}</text>`
+      `<text x="${pos.x}" y="${pos.y}" fill="${axisTextColor}" font-size="${labelFont}" text-anchor="${anchor}" dominant-baseline="middle">${tspans}</text>`
     )
   })
 

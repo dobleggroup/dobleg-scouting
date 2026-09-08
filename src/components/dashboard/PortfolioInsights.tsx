@@ -70,16 +70,20 @@ export function computePortfolioInsights(
 }
 
 function InsightCard({ label, icon, tone, children }: { label: string; icon: React.ReactNode; tone: 'default' | 'warning' | 'up' | 'down'; children: React.ReactNode }) {
+  // Antes eran íconos con gradiente multicolor (verde-teal, ámbar-naranja,
+  // rosa-rojo) — no es la identidad de la app: acá los íconos siempre son
+  // planos, fondo tenue del color semántico + ícono del mismo color (ver
+  // QuickAccess/ContractAlertsWidget en Home).
   const toneClasses = {
-    default: 'from-emerald-500 to-teal-600',
-    warning: 'from-amber-500 to-orange-600',
-    up: 'from-emerald-500 to-teal-600',
-    down: 'from-rose-500 to-red-600',
+    default: 'bg-brand-green/10 text-brand-green',
+    warning: 'bg-amber-500/10 text-amber-500',
+    up: 'bg-brand-green/10 text-brand-green',
+    down: 'bg-red-500/10 text-red-500',
   }[tone]
 
   return (
-    <div className="bg-white dark:bg-apple-gray-800 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 p-4 flex items-start gap-3">
-      <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${toneClasses} flex items-center justify-center flex-shrink-0`}>
+    <div className="bg-white dark:bg-apple-gray-800 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 p-4 flex items-start gap-3 hover:border-brand-green/40 hover:-translate-y-0.5 transition-all">
+      <div className={`w-9 h-9 rounded-lg ${toneClasses} flex items-center justify-center flex-shrink-0`}>
         {icon}
       </div>
       <div className="min-w-0">
@@ -90,7 +94,7 @@ function InsightCard({ label, icon, tone, children }: { label: string; icon: Rea
   )
 }
 
-const iconClass = 'w-4.5 h-4.5 text-white'
+const iconClass = 'w-5 h-5'
 
 export default function PortfolioInsights({ players, history }: { players: EnrichedPlayer[]; history: MarketValueHistoryEntry[] }) {
   const { currency, rate } = useCurrency()

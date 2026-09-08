@@ -524,7 +524,11 @@ export default function DashboardPage() {
           <p className="text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-4">
             {t('dashboard.scoreGGPorPosicion')} · {t('dashboard.interno')}
           </p>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          {/* Fila única sin wrap -- con grid por breakpoints, 6-7 posiciones no
+              siempre dividen parejo (ej. 7 en 3 columnas deja 1 solo en la
+              última fila) y quedaba asimétrico. Con flex + scroll horizontal
+              en pantallas angostas se ve siempre en una sola línea. */}
+          <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
             {positionScores.map(({ label, avg, count, globalAvg }) => {
               // Normalize globalAvg to match the active scale (positionAverages is 0-100 from CSV, Supabase scores are 1-10)
               const normGlobalAvg = globalAvg !== null && globalAvg > 10 ? globalAvg / 10 : globalAvg
@@ -554,9 +558,9 @@ export default function DashboardPage() {
               // Bar width: normalize avg to 0-100% sobre el rango real de display (5.5-8.5)
               const barWidth = Math.min(100, Math.max(0, ((avg - 5.5) / (8.5 - 5.5)) * 100))
               return (
-                <div key={label} className="flex flex-col gap-1.5">
-                  <div className="flex items-end justify-between">
-                    <span className="text-xs text-apple-gray-500 dark:text-apple-gray-400 leading-tight">{label}</span>
+                <div key={label} className="flex flex-col gap-1.5 flex-1 min-w-[110px]">
+                  <div className="flex items-end justify-between gap-2">
+                    <span className="text-xs text-apple-gray-500 dark:text-apple-gray-400 leading-tight whitespace-nowrap">{label}</span>
                     <span className="text-2xs text-apple-gray-400 tabular-nums">{count}j</span>
                   </div>
                   <div className={`text-2xl font-bold tabular-nums ${colorClass}`}>

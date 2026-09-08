@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { initialsFor, subtitleLine, fitFontSize } from './ogImage'
+import { initialsFor, subtitleLine, fitFontSize, shortName } from './ogImage'
 
 describe('initialsFor', () => {
   it('toma las dos primeras palabras', () => {
@@ -28,6 +28,20 @@ describe('subtitleLine', () => {
 
   it('sin datos devuelve cadena vacía', () => {
     expect(subtitleLine({ club: '', posicion: '', edad: '', liga: '' })).toBe('')
+  })
+})
+
+describe('shortName', () => {
+  it('se queda con el apellido (última palabra)', () => {
+    expect(shortName('José Paradela')).toBe('Paradela')
+  })
+
+  it('nombre compuesto de un jugador: sigue tomando la última palabra', () => {
+    expect(shortName('Juan Martín Ginzo')).toBe('Ginzo')
+  })
+
+  it('un solo nombre: lo devuelve tal cual', () => {
+    expect(shortName('Pelé')).toBe('Pelé')
   })
 })
 

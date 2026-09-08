@@ -1,5 +1,7 @@
 import type { ApiResponse, ApiFixture, AgencyFixture, ApiFixtureLineup, ApiFixtureEvent } from '@/types/footballApi'
 import { getPlayersByTeamId, getUniqueTeamIds } from '@/constants/agencyPlayers'
+import { listAgencyCoaches } from './agencyCoachesService'
+import type { AgencyCoach } from '@/constants/agencyCoaches'
 
 // Las llamadas a API-Football pasan por /api/football (proxy server-side:
 // netlify/functions/football.js en prod, proxy de vite.config.ts en dev) para
@@ -46,8 +48,9 @@ async function getTeamFixtures(teamId: number): Promise<ApiFixture[]> {
   ]
 }
 
-function mapFixture(fixture: ApiFixture, teamId: number): AgencyFixture {
+function mapFixture(fixture: ApiFixture, teamId: number, coachesByTeam?: Map<number, AgencyCoach[]>): AgencyFixture {
   const players = getPlayersByTeamId(teamId)
+  const coaches = coachesByTeam?.get(teamId) ?? []
   const isHome = fixture.teams.home.id === teamId
 
   return {
@@ -82,7 +85,21 @@ function mapFixture(fixture: ApiFixture, teamId: number): AgencyFixture {
       fullName: p.fullName,
       image: p.image,
     })),
+    coaches: coaches.map(c => ({ fullName: c.fullName, photo: c.photo })),
   }
+}
+
+/** Mapa apiTeamId → entrenadores de la agencia que dirigen ese equipo. */
+async function buildCoachesByTeam(): Promise<Map<number, AgencyCoach[]>> {
+  const coaches = await listAgencyCoaches().catch(() => null)
+  const byTeam = new Map<number, AgencyCoach[]>()
+  for (const c of coaches ?? []) {
+    if (c.apiTeamId == null) continue
+    const list = byTeam.get(c.apiTeamId) ?? []
+    list.push(c)
+    byTeam.set(c.apiTeamId, list)
+  }
+  return byTeam
 }
 
 function getCachedGeneric<T>(key: string, ttl: number): T | null {
@@ -112,7 +129,11 @@ export async function fetchAllAgencyFixtures(forceRefresh = false): Promise<Agen
     if (cached) return cached
   }
 
-  const teamIds = getUniqueTeamIds()
+  // Los entrenadores de la agencia también entran acá — antes el calendario
+  // sólo pedía fixtures de los equipos con jugadores propios, así que el
+  // equipo de un entrenador representado (ej. Temperley) nunca aparecía.
+  const coachesByTeam = await buildCoachesByTeam()
+  const teamIds = [...new Set([...getUniqueTeamIds(), ...coachesByTeam.keys()])]
   const batchSize = 5
   const allFixtures: AgencyFixture[] = []
   let hasAnyResults = false
@@ -123,7 +144,7 @@ export async function fetchAllAgencyFixtures(forceRefresh = false): Promise<Agen
     for (let j = 0; j < batch.length; j++) {
       if (results[j].length > 0) hasAnyResults = true
       for (const fixture of results[j]) {
-        allFixtures.push(mapFixture(fixture, batch[j]))
+        allFixtures.push(mapFixture(fixture, batch[j], coachesByTeam))
       }
     }
   }
@@ -140,6 +161,10 @@ export async function fetchAllAgencyFixtures(forceRefresh = false): Promise<Agen
         p => !existing.players.some(ep => ep.fullName === p.fullName)
       )
       existing.players.push(...newPlayers)
+      const newCoaches = (f.coaches ?? []).filter(
+        c => !(existing.coaches ?? []).some(ec => ec.fullName === c.fullName)
+      )
+      existing.coaches = [...(existing.coaches ?? []), ...newCoaches]
     } else {
       fixtureMap.set(f.fixtureId, { ...f })
     }

@@ -101,6 +101,8 @@ export interface AgencyFixture {
   goalsAway: number | null
   isHome: boolean
   players: { shortName: string; fullName: string; image: string | null }[]
+  /** Entrenadores de la agencia que dirigen a alguno de los dos equipos (si los hay). */
+  coaches?: { fullName: string; photo: string | null }[]
   source?: 'api' | 'manual'
 }
 

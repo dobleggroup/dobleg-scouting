@@ -57,9 +57,25 @@ export interface ContinuityOverrides {
   hidden?: ContinuityKey[]
 }
 export interface Comparable { jugador: string; club: string; rating: string; delta: string }
+// Ficha del segundo jugador en modo Comparación 1v1 — mismos campos "de bio" que
+// `InformeContent` tiene para el protagonista (sin las cosas de pestañas que no
+// aplican a un cara a cara: Físico, Carrera, continuidad, últimos 5, etc.).
+export interface ComparisonProfile {
+  nombre: string; club: string; posicion: string; rol: string
+  edad: string; nacionalidad: string; liga: string; contrato: string; valorMercado: string
+  altura: string; pie: string
+  rating: string; pj: string; minutos: string; goles: string; asistencias: string
+}
+export const EMPTY_COMPARISON_PROFILE: ComparisonProfile = {
+  nombre: '', club: '', posicion: '', rol: '',
+  edad: '', nacionalidad: '', liga: '', contrato: '', valorMercado: '',
+  altura: '', pie: '',
+  rating: '', pj: '', minutos: '', goles: '', asistencias: '',
+}
 export interface InformeContent {
   nombre: string; club: string; posicion: string; rol: string
   edad: string; nacionalidad: string; liga: string; contrato: string; valorMercado: string
+  altura?: string; pie?: string
   hideMainStats: boolean
   rating: string; pj: string; minutos: string; goles: string; asistencias: string
   ratingPromedio?: string        // referencia opcional para el gauge de rating (marca de promedio)
@@ -87,6 +103,16 @@ export interface Informe {
   updatedAt: string
   contextoComparacion: string
   fotoDataUrl: string | null
+  /** 'comparacion' = informe 1v1: una sola página (foto+ficha de los dos, radar,
+   *  texto de perfil y tabla de barras), sin pestañas — ver ComparisonPreview.tsx.
+   *  Ausente = informe estándar de siempre (protagonista vs. pool/liga, con tabs). */
+  modo?: 'comparacion'
+  /** Foto del segundo jugador en modo comparación (data URL), subida en el paso 1. */
+  fotoComparadoDataUrl?: string | null
+  /** Ficha del segundo jugador en modo comparación (club, edad, PJ, goles, etc.). */
+  comparisonB?: ComparisonProfile
+  /** Métricas elegidas para el radar + tabla de barras del informe de comparación. */
+  comparisonMetrics?: string[]
   ligaCrestDataUrl?: string            // escudo de la liga (data URL), subido en el paso 1
   protagonistIndex: number            // índice de la fila protagonista en rows
   comparePlayerIndices?: number[]     // índices de jugadores a comparar en el radar (máx 2)
