@@ -704,7 +704,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'home.verCalendario': 'Ver calendario',
     'home.resultadosRecientes': 'Resultados recientes',
     'home.sinPartidosEl': 'Sin partidos el',
-    'home.qaPlantel': 'Plantel',
+    'home.qaPlantel': 'Jugadores',
     'home.qaScouting': 'Scouting',
     'home.qaSeguimiento': 'Seguimiento',
     'home.qaMercado': 'Mercado',

@@ -857,33 +857,54 @@ const SQUAD_STAT_COLUMNS = `
 // Por eso se pagina hasta traer todo.
 const SQUAD_PAGE = 1000;
 
+/**
+ * Pagina un select de `player_match_stats` hasta traer todo. Antes esto pedía
+ * cada página en serie (`await` una por una dentro de un `for`) — el `.in()`
+ * de ~30 equipos a un año del Home eran 20-40 round-trips seguidos, y era la
+ * carga más lenta de esa pantalla (ver reporte de "tarda muchísimo"). Ahora
+ * la primera página pide el total con `count: 'exact'` (mismo round-trip, sin
+ * costo extra) y el resto de las páginas se piden todas juntas con
+ * `Promise.all` en vez de una atrás de la otra.
+ */
+async function fetchAllSquadStatPages(
+  buildPage: (page: number, withCount: boolean) => PromiseLike<{
+    data: unknown[] | null;
+    error: { message: string } | null;
+    count?: number | null;
+  }>,
+): Promise<SquadStatRow[]> {
+  const first = await buildPage(0, true);
+  if (first.error) throw first.error;
+  const firstRows = (first.data ?? []) as unknown as SquadStatRow[];
+  const total = first.count ?? firstRows.length;
+  const totalPages = Math.max(1, Math.ceil(total / SQUAD_PAGE));
+  if (totalPages <= 1) return firstRows;
+
+  const rest = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, i) => buildPage(i + 1, false)),
+  );
+  for (const r of rest) if (r.error) throw r.error;
+
+  return [firstRows, ...rest.map(r => (r.data ?? []) as unknown as SquadStatRow[])].flat();
+}
+
 export async function fetchSquadMatchStats(
   teamId: number,
   fromISO: string,
   toISO?: string,
 ): Promise<SquadStatRow[]> {
-  const out: SquadStatRow[] = [];
-
-  for (let page = 0; ; page++) {
+  return fetchAllSquadStatPages((page, withCount) => {
     let query = supabase
       .from('player_match_stats')
-      .select(SQUAD_STAT_COLUMNS)
+      .select(SQUAD_STAT_COLUMNS, withCount ? { count: 'exact' } : undefined)
       .eq('team_id', teamId)
       .gte('fixture.date', fromISO)
       .order('fixture_id', { ascending: true })
       .range(page * SQUAD_PAGE, (page + 1) * SQUAD_PAGE - 1);
 
     if (toISO) query = query.lte('fixture.date', `${toISO}T23:59:59`);
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    const rows = (data ?? []) as unknown as SquadStatRow[];
-    out.push(...rows);
-    if (rows.length < SQUAD_PAGE) break;
-  }
-
-  return out;
+    return query;
+  });
 }
 
 /**
@@ -900,26 +921,17 @@ export async function fetchMultiTeamMatchStats(
   toISO?: string,
 ): Promise<SquadStatRow[]> {
   if (teamIds.length === 0) return [];
-  const out: SquadStatRow[] = [];
 
-  for (let page = 0; ; page++) {
+  return fetchAllSquadStatPages((page, withCount) => {
     let query = supabase
       .from('player_match_stats')
-      .select(SQUAD_STAT_COLUMNS)
+      .select(SQUAD_STAT_COLUMNS, withCount ? { count: 'exact' } : undefined)
       .in('team_id', teamIds)
       .gte('fixture.date', fromISO)
       .order('fixture_id', { ascending: true })
       .range(page * SQUAD_PAGE, (page + 1) * SQUAD_PAGE - 1);
 
     if (toISO) query = query.lte('fixture.date', `${toISO}T23:59:59`);
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    const rows = (data ?? []) as unknown as SquadStatRow[];
-    out.push(...rows);
-    if (rows.length < SQUAD_PAGE) break;
-  }
-
-  return out;
+    return query;
+  });
 }
