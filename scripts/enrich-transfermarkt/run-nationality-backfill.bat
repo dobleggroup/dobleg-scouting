@@ -1,5 +1,4 @@
 @echo off
-set SUPABASE_URL=https://qgwmxjjumauortbwvivu.supabase.co
-set SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFnd214amp1bWF1b3J0Ynd2aXZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzA4Mjg4MCwiZXhwIjoyMDg4NjU4ODgwfQ.SVBEC8XKv4nxpOcyouzD4QFppG_Ljlwj_zUFwIovC4Y
+call "%~dp0..\secrets.bat"
 cd /d C:\Users\marcos\Desktop\primer-appcloud\scripts\enrich-transfermarkt
 python backfill_nationality_api_football.py --limit 800 >> backfill_nationality_api_football_daily.log 2>&1
