@@ -261,6 +261,9 @@ export default function FutureSquadPlayerPicker({
                   </button>
                 </li>
               ))}
+              {slotEntries.length < MAX_PER_SLOT && (
+                <li className="text-2xs text-apple-gray-400 px-2.5 pt-1">{t('futureSquadPicker.sumarMas')}</li>
+              )}
             </ol>
           )}
           <div className="flex gap-1 bg-apple-gray-100 dark:bg-apple-gray-700 rounded-xl p-1">
