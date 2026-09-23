@@ -169,7 +169,7 @@ export default function CoachCalendarTab({ coach }: { coach: AgencyCoach }) {
           a lo ancho del layout de main.5xl (screen-2xl) da celdas gigantes con escudos de
           14px perdidos en el centro. Se acota para que la grilla quede proporcionada y el
           espacio sobrante en desktop se use para un detalle de partido mas grande, no vacio. */}
-      <div className="lg:w-[34rem] lg:flex-shrink-0 space-y-4">
+      <div className="lg:w-[46rem] lg:flex-shrink-0 space-y-4">
         <div className="flex items-center justify-between">
           <button
             type="button"
@@ -182,7 +182,7 @@ export default function CoachCalendarTab({ coach }: { coach: AgencyCoach }) {
             </svg>
           </button>
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-apple-gray-800 dark:text-white">{monthLabel}</span>
+            <span className="text-base sm:text-lg font-semibold text-apple-gray-800 dark:text-white">{monthLabel}</span>
             {!isCurrentMonthVisible && (
               <button type="button" onClick={goToday} className="text-2xs font-semibold text-brand-green hover:underline">
                 {t('calendario.hoy')}
@@ -201,9 +201,9 @@ export default function CoachCalendarTab({ coach }: { coach: AgencyCoach }) {
           </button>
         </div>
 
-        <div className="grid grid-cols-7 gap-1">
+        <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
           {dayLabels.map((label, i) => (
-            <div key={i} className="text-center text-2xs font-semibold text-apple-gray-400 uppercase py-1">
+            <div key={i} className="text-center text-xs font-semibold text-apple-gray-400 uppercase py-1.5">
               {label}
             </div>
           ))}
@@ -220,14 +220,16 @@ export default function CoachCalendarTab({ coach }: { coach: AgencyCoach }) {
               key={cell.date}
               type="button"
               onClick={() => handleCellClick(cell)}
-              className={`flex flex-col items-center justify-center gap-1 aspect-square rounded-apple-lg text-base transition-colors duration-150 ease-apple ${
+              className={`flex flex-col items-center justify-center gap-1 sm:gap-1.5 aspect-square rounded-apple-lg text-sm sm:text-base lg:text-lg transition-colors duration-150 ease-apple ${
                 !cell.isCurrentMonth
                   ? 'text-apple-gray-300 dark:text-apple-gray-600'
                   : isSelected
                     ? 'bg-brand-green text-apple-gray-900 font-bold'
                     : isToday
                       ? 'bg-brand-green/10 text-brand-green font-bold'
-                      : 'text-apple-gray-700 dark:text-apple-gray-300 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-800'
+                      : hasFixture
+                        ? 'bg-apple-gray-50 dark:bg-apple-gray-800/50 text-apple-gray-800 dark:text-white font-semibold hover:bg-apple-gray-100 dark:hover:bg-apple-gray-800'
+                        : 'text-apple-gray-700 dark:text-apple-gray-300 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-800'
               }`}
             >
               <span>{cell.dayNumber}</span>
@@ -235,20 +237,20 @@ export default function CoachCalendarTab({ coach }: { coach: AgencyCoach }) {
                 <span className="flex items-center gap-0.5">
                   {hasFixture && day!.fixtures.length === 1 && (
                     isAbroad ? (
-                      <PlaneIcon className={`w-4 h-4 ${isSelected ? 'text-apple-gray-900' : 'text-brand-green'}`} />
+                      <PlaneIcon className={`w-6 h-6 sm:w-8 sm:h-8 ${isSelected ? 'text-apple-gray-900' : 'text-brand-green'}`} />
                     ) : (
                       <img
                         src={(day!.fixtures[0].isHome ? day!.fixtures[0].awayTeam : day!.fixtures[0].homeTeam).logo}
                         alt=""
-                        className="w-5 h-5 object-contain"
+                        className="w-7 h-7 sm:w-9 sm:h-9 lg:w-11 lg:h-11 object-contain drop-shadow-sm"
                       />
                     )
                   )}
                   {hasFixture && day!.fixtures.length > 1 && (
-                    <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-apple-gray-900' : 'bg-brand-green'}`} />
+                    <span className={`w-2.5 h-2.5 rounded-full ${isSelected ? 'bg-apple-gray-900' : 'bg-brand-green'}`} />
                   )}
                   {hasSession && (
-                    <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-apple-gray-900/60' : 'bg-apple-gray-400'}`} />
+                    <span className={`w-2.5 h-2.5 rounded-full ${isSelected ? 'bg-apple-gray-900/60' : 'bg-apple-gray-400'}`} />
                   )}
                 </span>
               )}
