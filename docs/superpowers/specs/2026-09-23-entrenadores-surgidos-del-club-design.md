@@ -39,7 +39,7 @@ hardcodeado a Temperley, aunque la primera carga de datos es solo Temperley.
 - Transfermarkt es accesible: perfil, página de debuts
   (`/{slug}/debuets/spieler/{id}`) y API interna de pases
   (`tmapi-alpha.transfermarkt.technology/transfer/history/player/{id}`). Ids de
-  club: Temperley **14542**, Temperley II **77918**, Temperley Sub-20 **22597**.
+  club: Temperley **14542**, Temperley II **77897**, Temperley Sub-20 **22597**.
 - Fuentes de chequeo (no de verdad): Excel Wyscout "Team Stats Temperley (4).xlsx"
   (31 partidos, esquema y duración) y listado de plantel Wyscout (partidos y goles
   por jugador en la temporada).
@@ -60,7 +60,7 @@ Una fila por jugador del plantel de un club (primer equipo o reserva), scoping p
 | Columna | Tipo | Notas |
 |---|---|---|
 | `id` | uuid pk | |
-| `club_id` | uuid | tenant de la plataforma |
+| `club_id` | text | tenant (`'dobleg'`); default `current_club_id()`, el script lo manda explícito |
 | `team_api_id` | int | 454 = Temperley |
 | `squad` | text | `'primera'` \| `'reserva'` |
 | `tm_player_id` | int unique por club | clave de Transfermarkt |
@@ -70,7 +70,7 @@ Una fila por jugador del plantel de un club (primer equipo o reserva), scoping p
 | `photo_url`, `market_value_eur`, `contract_until`, `joined_at`, `joined_from` | | perfil TM |
 | `youth_clubs` | text[] | "Clubes juveniles" del perfil TM |
 | `first_pro_club_tm_id`, `first_pro_club_name` | | derivado |
-| `pro_debut_date`, `pro_debut_club`, `pro_debut_competition`, `pro_debut_opponent` | | página de debuts TM |
+| `pro_debut_date`, `pro_debut_club`, `pro_debut_club_tm_id`, `pro_debut_competition`, `pro_debut_opponent`, `pro_debut_coach` | | página de debuts TM (incluye el DT con el que debutó) |
 | `transfer_history` | jsonb | pases TM normalizados `[{date, fromClub, toClub, type, fee}]` |
 | `homegrown_auto` | bool | calculado (regla abajo) |
 | `homegrown_reason` | text | por qué, legible ("Debutó en Temperley 12/03/2024 vs X") |
@@ -92,9 +92,10 @@ Vista/uso: `homegrown = coalesce(homegrown_override, homegrown_auto)`.
    hoy está en el plantel de Temperley sin haber pasado por otro club senior →
    `true` con `homegrown_reason = 'sin debut registrado — inferido'`, marcado para
    revisión.
-4. Casos a revisar a mano en la tabla de revisión: Oswaldo Pacheco (paraguayo,
-   llegó a Temperley II en 2022 — ¿jugó profesional antes?), Pedro Souto,
-   Valentín Aguiñagalde, Lisandro Morrone.
+4. Verificado: Oswaldo Pacheco debutó en CSD Liniers (Primera B, 09/02/2025) →
+   `false`. Morrone (debut Temperley 25/04/2026 con Domingo) y Richarte (Temperley
+   21/04/2024) → `true`.
+5. Casos a revisar a mano en la tabla de revisión: Pedro Souto, Valentín Aguiñagalde, y todo jugador con veredicto inferido.
 
 ### 1d. Script de enriquecimiento
 
@@ -106,7 +107,10 @@ el `squad` de cada una — los 24 del primer equipo, 10 de Temperley II y Cristo
 Nova (1384314).
 
 Pasos por jugador:
-1. Perfil TM → datos de perfil + clubes juveniles.
+1. Perfil TM (API interna `tmapi-alpha…/player/{id}`, JSON) → datos de perfil.
+   Clubes juveniles = clubes del historial de pases cuyo nombre es juvenil
+   ("Youth", "U20", "Sub-", "II", "Reserva"); nombres de club vía
+   `tmapi-alpha…/clubs?ids[]=`.
 2. Página de debuts TM → debut profesional.
 3. API de pases TM → `transfer_history`.
 4. API-Football: vincular `api_player_id` recorriendo las alineaciones de los
@@ -154,8 +158,8 @@ si el DT no tiene equipo o si no hay filas en `club_squad_careers` para su equip
 
 1. **KPIs**: promedio de canteranos por partido; partidos con ≥1 canterano (x de
    N); minutos de canteranos y % del total del equipo; canteranos que
-   **debutaron en Primera con el DT** (`pro_debut_date ≥ tenureStart` y club de
-   debut = el del DT), con nombres.
+   **debutaron en Primera con el DT** (`pro_debut_coach` = nombre del DT,
+   normalizado, y `pro_debut_date ≥ tenureStart`), con nombres.
 2. **Barras por partido** (Recharts), eje X = fecha + rival, orden cronológico:
    barra apilada **titulares / ingresados**.
 3. **Barras de minutos** por partido, alineadas con las de arriba (mismo eje X; no
