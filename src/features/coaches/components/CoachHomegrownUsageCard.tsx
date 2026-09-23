@@ -6,6 +6,7 @@ import type { SquadCareer } from '@/services/squadCareersService'
 import type { HomegrownMatchUsage } from '@/features/coaches/homegrown/homegrownMatchUsage'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { linearTrend, movingAverage } from '@/features/coaches/homegrown/homegrownInsights'
+import { buildHomegrownReport, cleanClub, reportFileName } from '@/features/coaches/homegrown/homegrownReport'
 import { Collapsible, MinutesShareChart, ParticipationMap, StarterAgeChart, TrendChip } from './HomegrownInsightPanels'
 import { useLanguage } from '@/context/LanguageContext'
 import { useTheme } from '@/context/ThemeContext'
@@ -41,9 +42,63 @@ interface ChartRow {
   match: HomegrownMatchUsage
 }
 
-/** "CA Ferrocarril Midland" -> "Ferrocarril Midland": las siglas societarias no le dicen nada al lector. */
-function cleanClub(name: string): string {
-  return name.replace(/^(Club Atlético|Club Social y Deportivo|CA|CS|CSD|AA|Club) /, '')
+async function loadLogoDataUrl(path: string): Promise<string | undefined> {
+  try {
+    const blob = await (await fetch(path)).blob()
+    return await new Promise<string>((resolve, reject) => {
+      const fr = new FileReader()
+      fr.onload = () => resolve(fr.result as string)
+      fr.onerror = () => reject(fr.error)
+      fr.readAsDataURL(blob)
+    })
+  } catch {
+    return undefined
+  }
+}
+
+/** Descarga el informe en PDF (dibujado, no una captura): se lee bien impreso y en el celular. */
+function ExportPdfButton({ coach, data }: { coach: AgencyCoach; data: HomegrownUsageResult }) {
+  const [status, setStatus] = useState<'idle' | 'working' | 'error'>('idle')
+  const onClick = async () => {
+    setStatus('working')
+    try {
+      const [{ exportHomegrownPdf }, logoDataUrl] = await Promise.all([
+        import('@/features/coaches/homegrown/exportHomegrownPdf'),
+        loadLogoDataUrl('/brand/logo-black.png'),
+      ])
+      const now = new Date()
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+      await exportHomegrownPdf(buildHomegrownReport(data, coach), { fileName: reportFileName(coach.fullName, today), today, logoDataUrl })
+      setStatus('idle')
+    } catch (err) {
+      console.error('[homegrown-pdf]', err)
+      setStatus('error')
+    }
+  }
+  return (
+    <div className="flex items-center gap-2 flex-shrink-0">
+      {status === 'error' && <span className="text-2xs text-red-500" role="alert">No se pudo generar. Probá de nuevo.</span>}
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={status === 'working'}
+        className="inline-flex items-center gap-1.5 rounded-full border border-apple-gray-200 dark:border-apple-gray-700 bg-white dark:bg-apple-gray-800 px-3 py-1.5 text-xs font-medium text-apple-gray-700 dark:text-apple-gray-200 hover:border-brand-green/60 hover:text-brand-green disabled:opacity-60 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/40 transition-colors"
+      >
+        {status === 'working' ? (
+          <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+            <path d="M21 12a9 9 0 00-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+          </svg>
+        ) : (
+          <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path d="M10.75 2.75a.75.75 0 00-1.5 0v8.614L6.295 8.235a.75.75 0 10-1.09 1.03l4.25 4.5a.75.75 0 001.09 0l4.25-4.5a.75.75 0 00-1.09-1.03l-2.955 3.129V2.75z" />
+            <path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z" />
+          </svg>
+        )}
+        {status === 'working' ? 'Generando PDF…' : 'Exportar PDF'}
+      </button>
+    </div>
+  )
 }
 
 function StarIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
@@ -258,7 +313,10 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
 
   return (
     <div className={cardClass}>
-      <h3 className="text-sm font-semibold text-apple-gray-800 dark:text-white mb-3">{t('coachDetail.homegrownTitulo')}</h3>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h3 className="text-sm font-semibold text-apple-gray-800 dark:text-white">{t('coachDetail.homegrownTitulo')}</h3>
+        <ExportPdfButton coach={coach} data={data} />
+      </div>
 
       <div className="space-y-4">
         <p className="text-sm leading-relaxed text-apple-gray-700 dark:text-apple-gray-200">
