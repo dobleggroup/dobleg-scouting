@@ -4,6 +4,8 @@ import type { PlayerWithScore, Position } from '@/types/scoring'
 import { getScoreColorClass } from '@/components/ui/ScoreBar'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import type { SquadPlayer } from '@/services/footballApiService'
+import type { SlotEntry } from '@/services/futureSquadService'
+import { MAX_PER_SLOT } from '@/features/coaches/futureSquadDepth'
 import { POSITION_LABEL_KEY } from '@/features/coaches/squadGrouping'
 import {
   POSITION_KEY_API_MAP,
@@ -52,6 +54,9 @@ export default function FutureSquadPlayerPicker({
   onSelectSquad,
   onSelectCandidate,
   onClose,
+  slotEntries,
+  onMoveUp,
+  onRemoveEntry,
 }: {
   slotKey: string
   formationType: string
@@ -63,6 +68,10 @@ export default function FutureSquadPlayerPicker({
   onSelectSquad: (player: SquadPlayer) => void
   onSelectCandidate: (player: PlayerWithScore) => void
   onClose: () => void
+  /** Jugadores ya elegidos para este puesto, en orden (1 = titular). */
+  slotEntries: SlotEntry[]
+  onMoveUp: (index: number) => void
+  onRemoveEntry: (index: number) => void
 }) {
   const { t } = useLanguage()
   const { currency, rate } = useCurrency()
@@ -215,13 +224,44 @@ export default function FutureSquadPlayerPicker({
       >
         <div className="p-5 border-b border-apple-gray-200 dark:border-apple-gray-700">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-apple-gray-800 dark:text-white">{displayName}</h3>
+            <div>
+              <h3 className="text-lg font-bold text-apple-gray-800 dark:text-white">{displayName}</h3>
+              <p className="text-2xs text-apple-gray-400">
+                {t('futureSquadPicker.cupo').replace('{n}', String(slotEntries.length)).replace('{max}', String(MAX_PER_SLOT))}
+              </p>
+            </div>
             <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-apple-gray-400 hover:text-apple-gray-600 dark:hover:text-apple-gray-200 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700 transition-colors">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
+          {slotEntries.length > 0 && (
+            <ol className="mb-4 space-y-1">
+              {slotEntries.map((e, i) => (
+                <li
+                  key={`${e.source}-${e.playerId}`}
+                  className={`flex items-center gap-2 rounded-lg px-2.5 ${i === 0 ? 'py-2 bg-brand-green/10' : 'py-1.5 bg-apple-gray-50 dark:bg-apple-gray-700/40'}`}
+                >
+                  <span className={`w-5 text-center tabular-nums font-bold ${i === 0 ? 'text-brand-green text-sm' : 'text-apple-gray-400 text-xs'}`}>{i + 1}</span>
+                  <span className={`flex-1 min-w-0 truncate ${i === 0 ? 'text-sm font-semibold text-apple-gray-800 dark:text-white' : 'text-xs text-apple-gray-600 dark:text-apple-gray-300'}`}>
+                    {e.playerName}
+                    {e.source === 'candidate' && <span className="ml-1.5 text-2xs font-semibold text-sky-500">{t('futureSquadPicker.refuerzo')}</span>}
+                  </span>
+                  {i > 0 && (
+                    <button type="button" onClick={() => onMoveUp(i)} aria-label={t('futureSquadPicker.subir')} title={t('futureSquadPicker.subir')}
+                      className="w-7 h-7 flex items-center justify-center rounded-md text-apple-gray-400 hover:text-brand-green hover:bg-white dark:hover:bg-apple-gray-700">
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M10 17a.75.75 0 01-.75-.75V5.612L5.29 9.77a.75.75 0 01-1.08-1.04l5.25-5.5a.75.75 0 011.08 0l5.25 5.5a.75.75 0 11-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0110 17z" clipRule="evenodd" /></svg>
+                    </button>
+                  )}
+                  <button type="button" onClick={() => onRemoveEntry(i)} aria-label={t('futureSquadPicker.quitarDelPuesto')} title={t('futureSquadPicker.quitarDelPuesto')}
+                    className="w-7 h-7 flex items-center justify-center rounded-md text-apple-gray-400 hover:text-red-500 hover:bg-white dark:hover:bg-apple-gray-700">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          )}
           <div className="flex gap-1 bg-apple-gray-100 dark:bg-apple-gray-700 rounded-xl p-1">
             {(['plantel', 'sugeridos', 'buscar'] as PickerTab[]).map(tab => (
               <button

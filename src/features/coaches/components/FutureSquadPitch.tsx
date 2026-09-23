@@ -5,6 +5,9 @@ import type { CandidateVisuals } from '@/services/coachService'
 import type { SquadPlayer } from '@/services/footballApiService'
 import { useLanguage } from '@/context/LanguageContext'
 
+/** Opciones 2 a 6 debajo del titular: cada una un poco más chica y tenue que la anterior. */
+const ALTERNATE_TEXT = ['text-[11px]', 'text-[10px]', 'text-[9.5px]', 'text-[9px]', 'text-[8.5px]']
+
 function initialsOf(name: string): string {
   return name
     .split(' ')
@@ -39,7 +42,7 @@ export default function FutureSquadPitch({
   const [dragOverSlot, setDragOverSlot] = useState<string | null>(null)
 
   return (
-    <div className="bg-gradient-to-b from-emerald-600 to-emerald-700 rounded-2xl p-4 sm:p-6 relative aspect-[3/4] w-full shadow-2xl overflow-hidden">
+    <div className="bg-gradient-to-b from-emerald-600 to-emerald-700 rounded-2xl p-4 sm:p-6 relative aspect-[2/3] w-full shadow-2xl overflow-hidden">
       {/* Lineas de campo -- mismo dibujo que /formacion y la pizarra tactica */}
       <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 130" preserveAspectRatio="none">
         <rect x="2" y="2" width="96" height="126" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="0.5" />
@@ -76,7 +79,7 @@ export default function FutureSquadPitch({
         return (
           <div
             key={pos.key}
-            className="absolute -translate-x-1/2 -translate-y-1/2"
+            className="absolute -translate-x-1/2 -translate-y-6 sm:-translate-y-8 flex flex-col items-center"
             style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
             onDragOver={e => {
               e.preventDefault()
@@ -149,12 +152,25 @@ export default function FutureSquadPitch({
             </div>
 
             {occupied && (
-              <p className="mt-1 flex items-center justify-center gap-1 whitespace-nowrap text-2xs font-semibold text-white/90">
+              <p className="mt-1 flex items-center justify-center gap-1 whitespace-nowrap text-xs font-semibold text-white drop-shadow">
                 {slot!.playerName!.split(' ').slice(-1)[0]}
                 {isCandidate && slot!.rating !== null && (
                   <span className="px-1 rounded bg-sky-500/90 text-white text-[10px] font-bold tabular-nums">{slot!.rating!.toFixed(1)}</span>
                 )}
               </p>
+            )}
+            {occupied && (slot!.alternates?.length ?? 0) > 0 && (
+              <div className="mt-0.5 px-1.5 py-0.5 rounded-md bg-black/25 flex flex-col items-center">
+                {slot!.alternates!.map((alt, i) => (
+                  <p
+                    key={`${alt.source}-${alt.playerId}`}
+                    className={`${ALTERNATE_TEXT[i] ?? ALTERNATE_TEXT[ALTERNATE_TEXT.length - 1]} leading-tight whitespace-nowrap font-medium ${alt.source === 'candidate' ? 'text-sky-200' : 'text-white'}`}
+                    style={{ opacity: 0.92 - i * 0.12 }}
+                  >
+                    {alt.playerName.split(' ').slice(-1)[0]}
+                  </p>
+                ))}
+              </div>
             )}
           </div>
         )

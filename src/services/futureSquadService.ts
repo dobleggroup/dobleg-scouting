@@ -10,6 +10,18 @@ export interface FutureSquadSlot {
   playerName: string | null
   playerNumber: number | null        // solo aplica a source === 'squad'
   rating: number | null              // solo aplica a source === 'candidate'
+  /** Opciones 2 a 6 del puesto, en orden (el titular son los campos de arriba). Opcional
+   *  para seguir leyendo planes guardados antes de que existiera. Ver futureSquadDepth. */
+  alternates?: SlotEntry[]
+}
+
+/** Un jugador dentro de un puesto (titular u opción). */
+export interface SlotEntry {
+  source: SlotPlayerSource
+  playerId: number | string
+  playerName: string
+  playerNumber: number | null
+  rating: number | null
 }
 
 export interface FutureSquadBaja {
@@ -41,6 +53,7 @@ function normalizeSlots(raw: unknown): FutureSquadSlot[] {
     playerName: (s.playerName ?? null) as string | null,
     playerNumber: (s.playerNumber ?? null) as number | null,
     rating: (s.rating ?? s.ggScore ?? null) as number | null,
+    alternates: Array.isArray(s.alternates) ? (s.alternates as SlotEntry[]) : [],
   }))
 }
 

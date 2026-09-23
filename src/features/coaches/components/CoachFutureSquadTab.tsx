@@ -8,6 +8,7 @@ import {
 import { mapLineupToSlots, type LineupPlayerForPrefill } from '@/features/coaches/futureSquadPrefill'
 import { groupSquadByPosition, POSITION_LABEL_KEY } from '@/features/coaches/squadGrouping'
 import FutureSquadPitch from './FutureSquadPitch'
+import { addToSlot, entriesOf, moveUpInSlot, removeFromSlot, removePlayerEverywhere } from '@/features/coaches/futureSquadDepth'
 import FutureSquadPlayerPicker from './FutureSquadPlayerPicker'
 import { FORMATIONS } from '@/constants/formations'
 import { fetchSquadCached, fetchSeasonFixtures, fetchFixtureLineups, type SquadPlayer } from '@/services/footballApiService'
@@ -35,6 +36,7 @@ function emptySlots(formationType: string): FutureSquadSlot[] {
     playerName: null,
     playerNumber: null,
     rating: null,
+    alternates: [],
   }))
 }
 
@@ -103,8 +105,8 @@ function DraggableSquadRow({
 function FutureSquadSummary({ slots, bajasCount }: { slots: FutureSquadSlot[]; bajasCount: number }) {
   const { t } = useLanguage()
   const filled = slots.filter(s => s.source !== null).length
-  const altas = slots.filter(s => s.source === 'candidate')
-  const rated = altas.filter(s => s.rating !== null)
+  const altas = slots.flatMap(entriesOf).filter(e => e.source === 'candidate')
+  const rated = altas.filter(e => e.rating !== null)
   const avgRating = rated.length ? rated.reduce((sum, s) => sum + (s.rating as number), 0) / rated.length : null
   const tiles = [
     { label: t('coachFutureSquad.resumenTitulares'), value: `${filled}/${slots.length}` },
@@ -179,7 +181,7 @@ export default function CoachFutureSquadTab({ coach }: { coach: AgencyCoach }) {
   // Foto y escudo de los candidatos de scouting puestos en la cancha (no vienen en el
   // plantel crudo del equipo -- se resuelven aparte, una vez por cada id nuevo que aparezca).
   const candidateIds = useMemo(
-    () => [...new Set(slots.filter(s => s.source === 'candidate').map(s => Number(s.playerId)))],
+    () => [...new Set(slots.flatMap(entriesOf).filter(e => e.source === 'candidate').map(e => Number(e.playerId)))],
     [slots],
   )
   useEffect(() => {
@@ -210,33 +212,20 @@ export default function CoachFutureSquadTab({ coach }: { coach: AgencyCoach }) {
     ))
   }
 
+  // Cada puesto admite hasta 6 jugadores en orden (titular + opciones): elegir a alguien para
+  // un puesto ocupado lo suma como siguiente opción en vez de pisar al titular. Si estaba en
+  // otro puesto se mueve (ver futureSquadDepth).
   function assignSquadPlayer(targetSlotKey: string, player: SquadPlayer) {
-    // If the target slot is currently held by a different squad player, that incumbent is being
-    // bumped out of the plan entirely (not just relocated) — he needs a baja so he doesn't
-    // silently vanish from both the pitch and the bajas list.
-    const targetSlot = slots.find(s => s.slotKey === targetSlotKey)
-    if (targetSlot?.source === 'squad' && targetSlot.playerId !== player.id) {
-      pushBaja(targetSlot.playerId as number, targetSlot.playerName as string)
-    }
-    setSlots(prev => prev.map(s => {
-      if (s.slotKey === targetSlotKey) {
-        return { slotKey: s.slotKey, source: 'squad', playerId: player.id, playerName: player.name, playerNumber: player.number, rating: null }
-      }
-      // Repositioning: if this player already occupies another slot, vacate it instead of
-      // leaving a stale duplicate placement (no baja is created — this is a move, not a release).
-      if (s.source === 'squad' && s.playerId === player.id) {
-        return { slotKey: s.slotKey, source: null, playerId: null, playerName: null, playerNumber: null, rating: null }
-      }
-      return s
+    setSlots(prev => addToSlot(prev, targetSlotKey, {
+      source: 'squad', playerId: player.id, playerName: player.name, playerNumber: player.number, rating: null,
     }))
-    // Si el jugador estaba en Bajas y se lo reincorpora a la cancha (arrastrado de vuelta), sacarlo de ahi.
+    // Si el jugador estaba en Bajas y se lo reincorpora a la cancha, sacarlo de ahí.
     setBajas(prev => prev.filter(b => b.playerId !== player.id))
   }
 
   function handleSelectSquad(player: SquadPlayer) {
     if (!pickerSlotKey) return
     assignSquadPlayer(pickerSlotKey, player)
-    setPickerSlotKey(null)
   }
 
   function handleDropSquadPlayer(slotKey: string, playerId: number) {
@@ -248,45 +237,29 @@ export default function CoachFutureSquadTab({ coach }: { coach: AgencyCoach }) {
   function handleDropToBaja(playerId: number) {
     const player = squad.find(p => p.id === playerId)
     if (!player) return
-    const occupiedSlot = slots.find(s => s.source === 'squad' && s.playerId === player.id)
-    if (occupiedSlot) {
-      setSlots(prev => prev.map(s => (
-        s.slotKey === occupiedSlot.slotKey
-          ? { slotKey: s.slotKey, source: null, playerId: null, playerName: null, playerNumber: null, rating: null }
-          : s
-      )))
-    }
+    setSlots(prev => removePlayerEverywhere(prev, 'squad', player.id))
     pushBaja(player.id, player.name)
   }
 
   function handleSelectCandidate(player: PlayerWithScore) {
     if (!pickerSlotKey) return
-    // Same displacement rule as handleSelectSquad: a squad player sitting in the target slot
-    // must get a baja before being overwritten by a scouting candidate. A candidate incumbent
-    // has no baja concept, so replacing one silently is fine.
-    const targetSlot = slots.find(s => s.slotKey === pickerSlotKey)
-    if (targetSlot?.source === 'squad') {
-      pushBaja(targetSlot.playerId as number, targetSlot.playerName as string)
-    }
-    setSlots(prev => prev.map(s => (
-      s.slotKey === pickerSlotKey
-        ? { slotKey: s.slotKey, source: 'candidate', playerId: String(player.id), playerName: player.name, playerNumber: null, rating: player.primary_score }
-        : s
-    )))
+    setSlots(prev => addToSlot(prev, pickerSlotKey, {
+      source: 'candidate', playerId: String(player.id), playerName: player.name, playerNumber: null, rating: player.primary_score,
+    }))
     setCandidateVisuals(prev => ({ ...prev, [player.id]: { photo: player.photo, teamLogo: player.team?.logo ?? null } }))
-    setPickerSlotKey(null)
   }
 
+  /** La cruz roja del titular en la cancha: un jugador del plantel pasa a Bajas (sale de
+   *  todos los puestos); un refuerzo solo se saca del puesto. La primera opción sube. */
   function handleRemoveSlot(slotKey: string) {
     const slot = slots.find(s => s.slotKey === slotKey)
     if (!slot || slot.source === null) return
-
     if (slot.source === 'squad') {
       pushBaja(slot.playerId as number, slot.playerName as string)
+      setSlots(prev => removePlayerEverywhere(prev, 'squad', slot.playerId as number))
+    } else {
+      setSlots(prev => removeFromSlot(prev, slotKey, 0))
     }
-    setSlots(prev => prev.map(s => (
-      s.slotKey === slotKey ? { slotKey: s.slotKey, source: null, playerId: null, playerName: null, playerNumber: null, rating: null } : s
-    )))
   }
 
   function handleRemoveBaja(id: string) {
@@ -305,8 +278,9 @@ export default function CoachFutureSquadTab({ coach }: { coach: AgencyCoach }) {
     setTimeout(() => setSaveStatus('idle'), 1500)
   }
 
-  const usedSquadIds = new Set(slots.filter(s => s.source === 'squad').map(s => s.playerId as number))
-  const usedCandidateIds = new Set(slots.filter(s => s.source === 'candidate').map(s => s.playerId as string))
+  const allEntries = slots.flatMap(entriesOf)
+  const usedSquadIds = new Set(allEntries.filter(e => e.source === 'squad').map(e => e.playerId as number))
+  const usedCandidateIds = new Set(allEntries.filter(e => e.source === 'candidate').map(e => String(e.playerId)))
   const bajaPlayerIds = new Set(bajas.map(b => b.playerId))
   const pickerSlot = pickerSlotKey ? slots.find(s => s.slotKey === pickerSlotKey) : null
   const rosterGroups = useMemo(
@@ -457,9 +431,12 @@ export default function CoachFutureSquadTab({ coach }: { coach: AgencyCoach }) {
           formationType={formationType}
           squad={squad}
           apiTeamId={coach.apiTeamId}
-          usedSquadIds={pickerSlot?.source === 'squad' ? new Set([...usedSquadIds].filter(id => id !== pickerSlot.playerId)) : usedSquadIds}
+          usedSquadIds={usedSquadIds}
           bajaPlayerIds={bajaPlayerIds}
-          usedCandidateIds={pickerSlot?.source === 'candidate' ? new Set([...usedCandidateIds].filter(id => id !== pickerSlot.playerId)) : usedCandidateIds}
+          usedCandidateIds={usedCandidateIds}
+          slotEntries={pickerSlot ? entriesOf(pickerSlot) : []}
+          onMoveUp={index => setSlots(prev => moveUpInSlot(prev, pickerSlotKey, index))}
+          onRemoveEntry={index => setSlots(prev => removeFromSlot(prev, pickerSlotKey, index))}
           onSelectSquad={handleSelectSquad}
           onSelectCandidate={handleSelectCandidate}
           onClose={() => setPickerSlotKey(null)}
