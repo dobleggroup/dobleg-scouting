@@ -5,6 +5,8 @@ import { getScoreColorClass } from '@/components/ui/ScoreBar'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import type { SquadPlayer } from '@/services/footballApiService'
 import type { SlotEntry } from '@/services/futureSquadService'
+import { useSquadRatings } from '@/services/teamTwinService'
+import { identityKey } from '@/context/DataContext'
 import { MAX_PER_SLOT } from '@/features/coaches/futureSquadDepth'
 import { POSITION_LABEL_KEY } from '@/features/coaches/squadGrouping'
 import {
@@ -114,10 +116,9 @@ export default function FutureSquadPlayerPicker({
 
   // Rating del plantel actual -- consulta acotada por equipo, no bloquea el render de la
   // pestaña "Plantel" (arranca vacia, se completa cuando llega la respuesta).
-  const { players: squadScored } = usePlayersList(
-    activeTab === 'plantel' && apiTeamId ? { team_id: apiTeamId, pageSize: 60 } : { pageSize: 0 },
-  )
-  const squadScoreById = useMemo(() => new Map(squadScored.map(p => [p.id, p.primary_score])), [squadScored])
+  // El plantel viene de API-Football; los ratings viven en el gemelo de Sofascore del
+  // equipo (otro id), así que se cruzan por nombre. Ver teamTwinService.
+  const squadRatings = useSquadRatings(apiTeamId)
 
   const { players: suggestionPool, loading: suggestionsLoading } = usePlayersList(
     activeTab === 'sugeridos' && allowedPositions.length > 0
@@ -289,7 +290,7 @@ export default function FutureSquadPlayerPicker({
                   const isPlacedElsewhere = usedSquadIds.has(p.id)
                   const fits = fittingGroups.has(p.position ?? '')
                   const firstNonFitting = !fits && (i === 0 || fittingGroups.has(availableSquad[i - 1].position ?? ''))
-                  const score = squadScoreById.get(p.id)
+                  const score = squadRatings.get(identityKey(p.name))?.rating ?? null
                   return (
                     <div key={p.id}>
                     {firstNonFitting && fittingGroups.size > 0 && (

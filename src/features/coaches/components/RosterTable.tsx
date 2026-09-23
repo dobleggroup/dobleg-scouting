@@ -8,6 +8,7 @@ import type { SquadPlayerProfile } from '@/services/coachService'
 import type { SquadCareer } from '@/services/squadCareersService'
 import { PlayerPhoto } from '@/components/ui/PlayerPhoto'
 import { useLanguage } from '@/context/LanguageContext'
+import { getScoreColorClass } from '@/components/ui/ScoreBar'
 
 /** Nuestras posiciones, en el orden en que se lee un plantel (de arquero a delantero). */
 export const OUR_POSITIONS = ['ARQ', 'LD', 'CB', 'LI', 'VC', 'VI', 'EXT', 'DEL'] as const
@@ -51,12 +52,14 @@ export interface RosterRow {
   stats?: { minutes: number; matches: number }
   profile?: SquadPlayerProfile
   career?: SquadCareer
+  /** Rating de la temporada (Scout Externo); null si el jugador no tiene. */
+  rating?: number | null
   /** null = fila no clickeable. */
   onOpen: (() => void) | null
   busy: boolean
 }
 
-type SortKey = 'position' | 'name' | 'age' | 'height' | 'value' | 'contract' | 'minutes'
+type SortKey = 'position' | 'name' | 'age' | 'height' | 'value' | 'contract' | 'minutes' | 'rating'
 
 function monthsUntil(iso: string): number {
   return Math.round((new Date(iso).getTime() - Date.now()) / (1000 * 60 * 60 * 24 * 30.44))
@@ -112,6 +115,7 @@ function compare(a: Derived, b: Derived, key: SortKey): number {
     case 'value': return nullsLast(a.value, b.value, (b.value ?? 0) - (a.value ?? 0))
     case 'contract': return nullsLast(a.contractEnd, b.contractEnd, (a.contractEnd ?? '').localeCompare(b.contractEnd ?? ''))
     case 'minutes': return (b.row.stats?.minutes ?? -1) - (a.row.stats?.minutes ?? -1)
+    case 'rating': return nullsLast(a.row.rating ?? null, b.row.rating ?? null, (b.row.rating ?? 0) - (a.row.rating ?? 0))
   }
 }
 
@@ -153,6 +157,7 @@ export default function RosterTable({ rows }: { rows: RosterRow[] }) {
 
   // Sin minutos cargados para nadie (clubes sin sync de partidos) la columna sería solo rayas.
   const hasMinutes = rows.some(r => r.stats)
+  const hasRatings = rows.some(r => r.rating != null)
   const posLabel = (p: OurPosition | null) => (p ? t(POSITION_LABEL_KEY[p]) : '—')
   const header = (key: SortKey | null, label: string, align: 'left' | 'center' | 'right' = 'left', cls = '') => {
     const active = key !== null && sort.key === key
@@ -189,6 +194,7 @@ export default function RosterTable({ rows }: { rows: RosterRow[] }) {
                     {[posLabel(d.position), d.age != null ? `${d.age} ${t('externo.anios')}` : null, d.nationality].filter(Boolean).join(' · ')}
                   </p>
                 </div>
+                {d.row.rating != null && <span className={`text-sm font-bold tabular-nums flex-shrink-0 ${getScoreColorClass(d.row.rating, '10')}`}>{d.row.rating.toFixed(1)}</span>}
                 {d.value != null && <span className="text-xs font-semibold text-brand-green flex-shrink-0">{formatMarketValue(d.value)}</span>}
               </div>
               {(d.homegrown || d.contractEnd || d.agent) && (
@@ -215,6 +221,7 @@ export default function RosterTable({ rows }: { rows: RosterRow[] }) {
                 {header('age', t('teamRoster.colEdad'), 'center')}
                 {header('height', t('teamRoster.colAltura'), 'center', 'hidden lg:table-cell')}
                 {header(null, t('teamRoster.colPie'), 'left', 'hidden lg:table-cell')}
+                {hasRatings && header('rating', t('teamRoster.colRating'), 'center')}
                 {header('value', t('teamRoster.colValor'), 'right')}
                 {header('contract', t('teamRoster.colContrato'), 'center')}
                 {header(null, t('teamRoster.colAgente'), 'left', 'hidden xl:table-cell')}
@@ -250,6 +257,13 @@ export default function RosterTable({ rows }: { rows: RosterRow[] }) {
                       {d.heightCm ? `${(d.heightCm / 100).toLocaleString('es-AR', { minimumFractionDigits: 2 })} m` : DASH}
                     </td>
                     <td className="px-3 py-2.5 text-apple-gray-700 dark:text-apple-gray-300 hidden lg:table-cell">{d.foot ?? DASH}</td>
+                    {hasRatings && (
+                      <td className="px-3 py-2.5 text-center">
+                        {d.row.rating != null
+                          ? <span className={`text-sm font-bold tabular-nums ${getScoreColorClass(d.row.rating, '10')}`}>{d.row.rating.toFixed(1)}</span>
+                          : DASH}
+                      </td>
+                    )}
                     <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-apple-gray-800 dark:text-white whitespace-nowrap">{d.value != null ? formatMarketValue(d.value) : DASH}</td>
                     <td className="px-3 py-2.5 text-center">{d.contractEnd ? <ContractBadge iso={d.contractEnd} /> : DASH}</td>
                     <td className="px-3 py-2.5 text-apple-gray-600 dark:text-apple-gray-400 text-xs max-w-[10rem] truncate hidden xl:table-cell">{d.agent ?? DASH}</td>
