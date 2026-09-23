@@ -5,7 +5,6 @@ import { loadHomegrownUsage, type HomegrownUsageResult } from '@/services/homegr
 import type { SquadCareer } from '@/services/squadCareersService'
 import type { HomegrownMatchUsage } from '@/features/coaches/homegrown/homegrownMatchUsage'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
-import CopyChartButton from '@/components/ui/CopyChartButton'
 import { useLanguage } from '@/context/LanguageContext'
 import { useTheme } from '@/context/ThemeContext'
 import { LANGUAGE_LOCALES } from '@/constants/translations'
@@ -148,10 +147,6 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
   const chartMinWidth = rows.length * MIN_BAR_SLOT_PX
   const maxCount = Math.max(1, ...rows.map(r => r.startersCount + r.subsCount))
   const maxDebutsInMatch = Math.max(0, ...rows.map(r => r.debutNames.length))
-  const chartId = `homegrown-usage-${coach.key}`
-  const subtitle = t('coachDetail.homegrownSubtitulo')
-    .replace('{club}', coach.club ?? '')
-    .replace('{fecha}', fmtDate(data.tenureStart + 'T12:00:00', { day: 'numeric', month: 'long', year: 'numeric' }))
 
   const renderTooltip = ({ active, payload }: { active?: boolean; payload?: { payload?: ChartRow }[] }) => {
     const row = active ? payload?.[0]?.payload : undefined
@@ -218,15 +213,9 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
 
   return (
     <div className={cardClass}>
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-apple-gray-800 dark:text-white">{t('coachDetail.homegrownTitulo')}</h3>
-          <p className="text-2xs text-apple-gray-400 mt-0.5">{subtitle}</p>
-        </div>
-        <CopyChartButton targetId={chartId} filename={`surgidos-del-club-${coach.key}`} />
-      </div>
+      <h3 className="text-sm font-semibold text-apple-gray-800 dark:text-white mb-3">{t('coachDetail.homegrownTitulo')}</h3>
 
-      <div id={chartId} className="space-y-4 bg-white dark:bg-transparent">
+      <div className="space-y-4">
         <p className="text-sm leading-relaxed text-apple-gray-700 dark:text-apple-gray-200">
           {t('coachDetail.homegrownResumen')
             .replace('{partidos}', String(summary.matchesWithData))
