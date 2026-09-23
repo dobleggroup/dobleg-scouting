@@ -166,4 +166,31 @@ def link_api_player(tm_full_name, api_players):
         return (by_initial[0][0], "exact")
     if len(candidates) == 1:
         return (candidates[0][0], "surname-only")
+    if not by_initial:
+        return (None, "none")
     return (None, "ambiguous")
+
+
+def group_api_aliases(api_players, appearances):
+    """API-Football a veces reasigna a un jugador a otro id (p. ej. usa el de un homónimo y
+    después crea uno nuevo). Mismo nombre + nunca juntos en una alineación = misma persona.
+    `appearances` = [(fecha, {ids en la alineación})]. Devuelve ({id canónico: nombre},
+    {id canónico: [ids alias]}); el canónico es el que aparece más recientemente."""
+    last_seen = {}
+    for date, ids in appearances:
+        for i in ids:
+            last_seen[i] = max(last_seen.get(i, ""), date)
+    by_name = {}
+    for api_id, name in api_players.items():
+        by_name.setdefault(name, []).append(api_id)
+    canonical, aliases = {}, {}
+    for name, ids in by_name.items():
+        together = any(len(set(ids) & lineup) > 1 for _, lineup in appearances)
+        if len(ids) == 1 or together:
+            for i in ids:
+                canonical[i] = name
+            continue
+        ordered = sorted(ids, key=lambda i: last_seen.get(i, ""), reverse=True)
+        canonical[ordered[0]] = name
+        aliases[ordered[0]] = ordered[1:]
+    return canonical, aliases

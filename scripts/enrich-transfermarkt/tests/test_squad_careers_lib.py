@@ -107,8 +107,31 @@ class LinkApi(unittest.TestCase):
         self.assertEqual(lib.link_api_player("Valentín Aguiñagalde", self.API), (6, "exact"))
 
     def test_ambiguo_y_ninguno(self):
-        self.assertEqual(lib.link_api_player("Juan Díaz", {1: "V. Diaz", 2: "F. Diaz"}), (None, "ambiguous"))
+        self.assertEqual(lib.link_api_player("Juan Díaz", {1: "J. Diaz", 2: "J. Diaz"}), (None, "ambiguous"))
         self.assertEqual(lib.link_api_player("Nadie Nunca", self.API), (None, "none"))
+
+    def test_varios_con_el_apellido_y_ninguna_inicial_coincide(self):
+        # Jonathan Díaz no está en las alineaciones; los otros Díaz no son él.
+        self.assertEqual(lib.link_api_player("Jonathan Díaz", {1: "V. Diaz", 2: "F. Diaz"}), (None, "none"))
+
+
+class ApiAliases(unittest.TestCase):
+    def test_mismo_nombre_sin_coincidir_es_la_misma_persona(self):
+        # Ávalos: la API usó el id de un homónimo (356282) hasta marzo y después creó 647644.
+        appearances = [
+            ("2026-02-06", {356282, 1}), ("2026-03-29", {356282, 1}),
+            ("2026-04-04", {647644, 1}), ("2026-09-19", {647644, 1}),
+        ]
+        names = {356282: "N. Avalos", 647644: "N. Avalos", 1: "M. Calzon"}
+        canonical, aliases = lib.group_api_aliases(names, appearances)
+        self.assertEqual(canonical, {647644: "N. Avalos", 1: "M. Calzon"})
+        self.assertEqual(aliases, {647644: [356282]})
+
+    def test_mismo_nombre_en_el_mismo_partido_son_distintos(self):
+        appearances = [("2026-02-06", {10, 11})]
+        canonical, aliases = lib.group_api_aliases({10: "J. Diaz", 11: "J. Diaz"}, appearances)
+        self.assertEqual(set(canonical), {10, 11})
+        self.assertEqual(aliases, {})
 
 
 if __name__ == "__main__":

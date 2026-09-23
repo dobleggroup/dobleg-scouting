@@ -1,0 +1,44 @@
+# Temperley — primer equipo (24)
+primera|https://www.transfermarkt.es/ezequiel-mastrolia/profil/spieler/159076
+primera|https://www.transfermarkt.es/valentin-diaz/profil/spieler/1230638
+primera|https://www.transfermarkt.es/jeronimo-pourtau/profil/spieler/504885
+primera|https://www.transfermarkt.es/iago-iriarte/profil/spieler/891771
+primera|https://www.transfermarkt.es/valentin-aguinagalde/profil/spieler/1283950
+primera|https://www.transfermarkt.es/oswaldo-pacheco/profil/spieler/1160434
+primera|https://www.transfermarkt.es/lucas-angelini/profil/spieler/971407
+primera|https://www.transfermarkt.es/pedro-souto/profil/spieler/924999
+primera|https://www.transfermarkt.es/rodrigo-mazur/profil/spieler/414669
+primera|https://www.transfermarkt.es/lorenzo-monti/profil/spieler/732441
+primera|https://www.transfermarkt.es/valentino-werro/profil/spieler/1105635
+primera|https://www.transfermarkt.es/adrian-arregui/profil/spieler/358016
+primera|https://www.transfermarkt.es/franco-diaz/profil/spieler/748060
+primera|https://www.transfermarkt.es/geronimo-tomasetti/profil/spieler/697064
+primera|https://www.transfermarkt.es/lucas-richarte/profil/spieler/1257767
+primera|https://www.transfermarkt.es/luciano-nieto/profil/spieler/87455
+primera|https://www.transfermarkt.es/alejandro-melo/profil/spieler/373623
+primera|https://www.transfermarkt.es/franco-benitez/profil/spieler/924159
+primera|https://www.transfermarkt.es/fernando-brandan/profil/spieler/358014
+primera|https://www.transfermarkt.es/julian-carrasco/profil/spieler/1111086
+primera|https://www.transfermarkt.es/marcos-echeverria/profil/spieler/1007593
+primera|https://www.transfermarkt.es/facundo-kruger/profil/spieler/755666
+primera|https://www.transfermarkt.es/gabriel-hauche/profil/spieler/54845
+primera|https://www.transfermarkt.es/francisco-silva/profil/spieler/1555462
+# Temperley II (10) + Cristopher Nova
+reserva|https://www.transfermarkt.es/lisandro-morrone/profil/spieler/1129363
+reserva|https://www.transfermarkt.es/matias-calzon/profil/spieler/1310068
+reserva|https://www.transfermarkt.es/franco-tirotta/profil/spieler/1567089
+reserva|https://www.transfermarkt.es/nicolas-avalos/profil/spieler/1514474
+reserva|https://www.transfermarkt.es/rodrigo-stocco/profil/spieler/1307227
+reserva|https://www.transfermarkt.es/santiago-grecco/profil/spieler/1339374
+reserva|https://www.transfermarkt.es/jonathan-diaz/profil/spieler/1514473
+reserva|https://www.transfermarkt.es/elias-quiroga/profil/spieler/1560650
+reserva|https://www.transfermarkt.es/leon-trebotic/profil/spieler/1593578
+reserva|https://www.transfermarkt.es/bautista-fernandez/profil/spieler/1528956
+reserva|https://www.transfermarkt.es/cristopher-nova/profil/spieler/1384314
+# Jugaron en el ciclo de Domingo (2026) y ya no están en el plantel — sacados de
+# /ca-temperley/leistungsdaten/verein/14542/reldata/%262025. R. Baigorria (API 560467) no
+# está en TM y nunca entró a la cancha (solo banco), así que no se incluye.
+baja|https://www.transfermarkt.es/gabriel-esparza/profil/spieler/322115
+baja|https://www.transfermarkt.es/gian-nardelli/profil/spieler/830853
+baja|https://www.transfermarkt.es/nicolas-molina/profil/spieler/986221
+baja|https://www.transfermarkt.es/santiago-flores/profil/spieler/1011266
