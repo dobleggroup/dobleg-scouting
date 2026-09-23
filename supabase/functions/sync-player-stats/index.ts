@@ -35,7 +35,10 @@ serve(async () => {
 
         for (const lineup of lineups) {
           const formation = lineup.formation;
-          for (const entry of lineup.startXI) {
+          // API-Football a veces devuelve la alineación sin startXI/substitutes (partidos
+          // viejos o incompletos). Antes eso tiraba "is not iterable", el partido quedaba sin
+          // marcar y se reintentaba para siempre. Sin alineación se sigue con las stats.
+          for (const entry of lineup.startXI ?? []) {
             gridMap.set(entry.player.id, {
               grid: entry.player.grid,
               formation,
@@ -43,7 +46,7 @@ serve(async () => {
               isSub: false,
             });
           }
-          for (const entry of lineup.substitutes) {
+          for (const entry of lineup.substitutes ?? []) {
             gridMap.set(entry.player.id, {
               grid: entry.player.grid,
               formation,
