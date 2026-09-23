@@ -7,6 +7,7 @@ import {
   computeHomegrownUsage, summarizeHomegrownUsage,
   type HomegrownIndex, type HomegrownMatchUsage, type HomegrownSummary, type MatchInput,
 } from '@/features/coaches/homegrown/homegrownMatchUsage'
+import { homegrownGoalsByMatch, starterAgeByMatch } from '@/features/coaches/homegrown/homegrownInsights'
 
 export interface HomegrownUsageResult {
   tenureStart: string
@@ -16,6 +17,10 @@ export interface HomegrownUsageResult {
   careers: SquadCareer[]
   /** Surgidos que debutaron en Primera con este DT, durante su ciclo. */
   debutedWithCoach: SquadCareer[]
+  /** Edad promedio de los titulares por partido (mismo orden que `usage`). */
+  starterAges: { fixtureId: number; avgAge: number | null; known: number }[]
+  /** Goles de chicos del club por partido (fixtureId -> goles). */
+  goalsByFixture: Map<number, { playerId: number; name: string; minute: number }[]>
 }
 
 export function resolveTenureStart(coach: AgencyCoach, apiStart: string | null): string | null {
@@ -79,12 +84,22 @@ export async function loadHomegrownUsage(coach: AgencyCoach): Promise<HomegrownU
   })
 
   const homegrownCareers = careers.filter(c => c.homegrown)
-  const usage = computeHomegrownUsage(matches, teamId, buildHomegrownIndex(homegrownCareers))
+  const homegrownIndex = buildHomegrownIndex(homegrownCareers)
+  const usage = computeHomegrownUsage(matches, teamId, homegrownIndex)
+  // Fecha de nacimiento de TODO el plantel enriquecido (no solo los surgidos), por id de
+  // API-Football incluidos los alias, para la edad de los titulares.
+  const birthByApiId = new Map<number, string>()
+  for (const c of careers) {
+    if (!c.birthDate) continue
+    for (const id of [c.apiPlayerId, ...c.apiPlayerAliasIds]) if (id !== null) birthByApiId.set(id, c.birthDate)
+  }
   return {
     tenureStart,
     usage,
     summary: summarizeHomegrownUsage(usage),
     careers: homegrownCareers,
     debutedWithCoach: debutedWithCoach(homegrownCareers, coach.fullName, tenureStart),
+    starterAges: starterAgeByMatch(matches, teamId, birthByApiId),
+    goalsByFixture: homegrownGoalsByMatch(matches, teamId, homegrownIndex),
   }
 }

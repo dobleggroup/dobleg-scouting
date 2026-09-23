@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bar, BarChart, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, ComposedChart, LabelList, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { AgencyCoach } from '@/constants/agencyCoaches'
 import { loadHomegrownUsage, type HomegrownUsageResult } from '@/services/homegrownUsageService'
 import type { SquadCareer } from '@/services/squadCareersService'
 import type { HomegrownMatchUsage } from '@/features/coaches/homegrown/homegrownMatchUsage'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { linearTrend, movingAverage } from '@/features/coaches/homegrown/homegrownInsights'
+import { Collapsible, MinutesShareChart, ParticipationMap, StarterAgeChart, TrendChip } from './HomegrownInsightPanels'
 import { useLanguage } from '@/context/LanguageContext'
 import { useTheme } from '@/context/ThemeContext'
 import { LANGUAGE_LOCALES } from '@/constants/translations'
@@ -19,10 +21,11 @@ type LoadState =
 // skill dataviz contra la superficie del panel en cada modo. Titulares siempre llevan el
 // verde de marca de ese modo (ver --color-brand-green en index.css).
 const PALETTE = {
-  light: { starters: '#15803D', subs: '#22C55E', noData: '#D2D2D7', surface: '#F6F6F8', debut: '#15803D', label: '#6E6E73' },
-  dark: { starters: '#22C55E', subs: '#15803D', noData: '#28282C', surface: '#0B0B0D', debut: '#22C55E', label: '#86868B' },
+  light: { starters: '#15803D', subs: '#22C55E', noData: '#D2D2D7', surface: '#F6F6F8', debut: '#15803D', label: '#6E6E73', trend: '#8E8E93' },
+  dark: { starters: '#22C55E', subs: '#15803D', noData: '#28282C', surface: '#0B0B0D', debut: '#22C55E', label: '#86868B', trend: '#A1A1A6' },
 }
 const AXIS_TICK = { fontSize: 9, fill: '#9CA3AF' }
+const TREND_WINDOW = 5 // partidos del promedio móvil de las líneas de tendencia
 const MIN_BAR_SLOT_PX = 30 // ancho mínimo por partido: con más de ~15 partidos el gráfico scrollea dentro del panel
 
 interface ChartRow {
@@ -33,6 +36,8 @@ interface ChartRow {
   noData: number
   /** Apellidos de los chicos que debutaron en Primera en este partido. */
   debutNames: string[]
+  /** Promedio móvil (5 partidos) de chicos del club usados: la línea de tendencia. */
+  trend: number | null
   match: HomegrownMatchUsage
 }
 
@@ -107,13 +112,16 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
   const rows: ChartRow[] = useMemo(() => {
     if (state.status !== 'ready') return []
     const debuts = debutFixtureByPlayer(state.data.usage, state.data.debutedWithCoach)
-    return state.data.usage.map(u => ({
+    const counts = state.data.usage.map(u => (u.hasData ? u.starters.length + u.subsIn.length : null))
+    const trend = movingAverage(counts, TREND_WINDOW)
+    return state.data.usage.map((u, i) => ({
       fixtureId: u.fixtureId,
       label: new Date(u.date).toLocaleDateString(locale, { day: '2-digit', month: '2-digit' }),
       startersCount: u.starters.length,
       subsCount: u.subsIn.length,
       noData: u.hasData ? 0 : 0.4,
       debutNames: debuts.get(u.fixtureId) ?? [],
+      trend: trend[i],
       match: u,
     }))
   }, [state, locale])
@@ -147,6 +155,43 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
   const chartMinWidth = rows.length * MIN_BAR_SLOT_PX
   const maxCount = Math.max(1, ...rows.map(r => r.startersCount + r.subsCount))
   const maxDebutsInMatch = Math.max(0, ...rows.map(r => r.debutNames.length))
+  const num = (v: number, digits = 1) => v.toLocaleString(locale, { minimumFractionDigits: digits, maximumFractionDigits: digits })
+  const matchCaption = (u: HomegrownMatchUsage) =>
+    `${cleanClub(u.rival)}${u.score ? ` ${u.score}` : ''} · ${fmtDate(u.date, { day: 'numeric', month: 'short' })}`
+
+  // Tendencia de chicos usados por partido (recta sobre todos los partidos del ciclo).
+  const countTrend = linearTrend(rows.map(r => (r.match.hasData ? r.startersCount + r.subsCount : null)))
+
+  // % de los minutos del equipo jugados por chicos del club, con su promedio móvil.
+  const minutesPct = data.usage.map(u => (u.hasData && u.teamMinutes > 0 ? (u.totalMinutes / u.teamMinutes) * 100 : null))
+  const minutesPctAvg = movingAverage(minutesPct, TREND_WINDOW)
+  const minutesTrend = linearTrend(minutesPct)
+  const minutesRows = data.usage.map((u, i) => ({
+    label: rows[i].label,
+    value: minutesPct[i] === null ? null : Math.round((minutesPct[i] as number) * 10) / 10,
+    trend: minutesPctAvg[i],
+    tooltip: `${matchCaption(u)}\n${minutesPct[i] === null ? 'Sin alineación' : `${num(minutesPct[i] as number, 0)}% de los minutos del equipo (${u.totalMinutes.toLocaleString(locale)}')`}`,
+  }))
+
+  // Edad promedio de los titulares, con su promedio móvil.
+  const ages = data.starterAges.map(a => a.avgAge)
+  const agesAvg = movingAverage(ages, TREND_WINDOW)
+  const ageTrend = linearTrend(ages)
+  const ageRows = data.usage.map((u, i) => ({
+    label: rows[i].label,
+    value: ages[i] === null ? null : Math.round((ages[i] as number) * 10) / 10,
+    trend: agesAvg[i],
+    tooltip: `${matchCaption(u)}\n${ages[i] === null ? 'Sin datos suficientes' : `Edad promedio de los titulares: ${num(ages[i] as number)} años`}`,
+  }))
+
+  // Partido del debut de cada debutante (para la estrella del mapa) y goles de los chicos.
+  const debutByPlayer = new Map<number, number>()
+  for (const c of data.debutedWithCoach) {
+    const first = data.usage.find(u => [...u.starters, ...u.subsIn].some(p => p.apiPlayerId === c.apiPlayerId))
+    if (first && c.apiPlayerId !== null) debutByPlayer.set(c.apiPlayerId, first.fixtureId)
+  }
+  const totalGoals = [...data.goalsByFixture.values()].reduce((s, g) => s + g.length, 0)
+  const trendColors = { accent: colors.starters, trend: colors.trend, surface: colors.surface }
 
   const renderTooltip = ({ active, payload }: { active?: boolean; payload?: { payload?: ChartRow }[] }) => {
     const row = active ? payload?.[0]?.payload : undefined
@@ -227,7 +272,7 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
             </span></>
           )}
         </p>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
           <StatTile
             label={t('coachDetail.homegrownPromedio')}
             value={summary.avgPlayersPerMatch.toLocaleString(locale, { maximumFractionDigits: 1, minimumFractionDigits: 1 })}
@@ -239,6 +284,7 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
             detail={`${(summary.minutesShare * 100).toLocaleString(locale, { maximumFractionDigits: 1 })}% ${t('coachDetail.homegrownPctMinutos')}`}
           />
           <StatTile label={t('coachDetail.homegrownJugadores')} value={String(summary.players.length)} />
+          <StatTile label="Goles de chicos del club" value={String(totalGoals)} />
         </div>
 
         {data.debutedWithCoach.length > 0 && (
@@ -265,6 +311,11 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
         )}
 
         <div className="bg-apple-gray-50 dark:bg-apple-gray-900/40 rounded-apple-lg p-3 sm:p-4">
+          {countTrend && (
+            <div className="mb-3">
+              <TrendChip start={countTrend.start} end={countTrend.end} format={v => num(v)} unit="chicos por partido" threshold={0.3} />
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-2 text-2xs text-apple-gray-500 dark:text-apple-gray-400">
             <LegendSwatch color={colors.starters} label={t('coachDetail.homegrownTitulares')} />
             <LegendSwatch color={colors.subs} label={t('coachDetail.homegrownIngresados')} />
@@ -274,6 +325,10 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
                 {t('coachDetail.homegrownMarcaDebut')}
               </span>
             )}
+            <span className="flex items-center gap-1.5">
+              <svg width="18" height="6" aria-hidden="true"><line x1="0" y1="3" x2="18" y2="3" stroke={colors.trend} strokeWidth="1.5" strokeDasharray="4 3" /></svg>
+              Tendencia (promedio de {TREND_WINDOW} partidos)
+            </span>
           </div>
 
           <div ref={scrollerRef} className="overflow-x-auto overflow-y-hidden -mx-1 px-1">
@@ -281,7 +336,7 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
               <p className="text-2xs font-medium text-apple-gray-500 dark:text-apple-gray-400">{t('coachDetail.homegrownJugadoresPartido')}</p>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={rows} margin={{ top: 18 + maxDebutsInMatch * 21, right: 4, bottom: 0, left: 4 }} barCategoryGap="22%">
+                  <ComposedChart data={rows} margin={{ top: 18 + maxDebutsInMatch * 21, right: 4, bottom: 0, left: 4 }} barCategoryGap="22%">
                     <XAxis dataKey="label" tick={AXIS_TICK} tickLine={false} axisLine={false} interval={0} height={20} />
                     {/* El número va arriba de cada barra: el eje Y sería redundante. */}
                     <YAxis hide allowDecimals={false} domain={[0, maxCount]} />
@@ -291,12 +346,50 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
                     <Bar dataKey="subsCount" stackId="n" fill={colors.subs} stroke={colors.surface} strokeWidth={1} radius={[4, 4, 0, 0]} isAnimationActive={false}>
                       <LabelList dataKey="subsCount" content={renderBarTop} />
                     </Bar>
-                  </BarChart>
+                    <Line type="monotone" dataKey="trend" stroke={colors.trend} strokeWidth={1.75} strokeDasharray="5 4" dot={false} activeDot={false} isAnimationActive={false} connectNulls />
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
 
             </div>
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <Collapsible
+            title="Minutos de los chicos del club"
+            summary={minutesTrend ? `Qué parte de los minutos del equipo jugaron: de ${num(minutesTrend.start, 0)}% a ${num(minutesTrend.end, 0)}% en el ciclo` : 'Qué parte de los minutos del equipo jugaron en cada partido'}
+          >
+            {minutesTrend && (
+              <div className="mb-3">
+                <TrendChip start={minutesTrend.start} end={minutesTrend.end} format={v => `${num(v, 0)}%`} unit="de los minutos" threshold={3} />
+              </div>
+            )}
+            <MinutesShareChart rows={minutesRows} colors={trendColors} minWidth={chartMinWidth} />
+          </Collapsible>
+
+          <Collapsible title="Quién jugó cada partido" summary="Un vistazo a la continuidad de cada chico: minutos, debut y goles, partido por partido">
+            <ParticipationMap
+              players={summary.players}
+              usage={data.usage}
+              labels={rows.map(r => r.label)}
+              debutByPlayer={debutByPlayer}
+              goalsByFixture={data.goalsByFixture}
+              accent={colors.starters}
+            />
+          </Collapsible>
+
+          <Collapsible
+            title="¿Se rejuveneció el equipo?"
+            summary={ageTrend ? `Edad promedio de los titulares: de ${num(ageTrend.start)} a ${num(ageTrend.end)} años` : 'Edad promedio de los titulares en cada partido'}
+          >
+            {ageTrend && (
+              <div className="mb-3">
+                <TrendChip start={ageTrend.start} end={ageTrend.end} format={v => num(v)} unit="años" goodWhenUp={false} threshold={0.4} />
+              </div>
+            )}
+            <StarterAgeChart rows={ageRows} colors={trendColors} minWidth={chartMinWidth} />
+          </Collapsible>
         </div>
       </div>
 
