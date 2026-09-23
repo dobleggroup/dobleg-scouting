@@ -563,29 +563,35 @@ export async function fetchScoreLookup(
 ): Promise<Map<string, ScoreLookupEntry>> {
   const seasons = season ? [season] : currentSeasons();
 
+  // Se pedían ~16 páginas de 1000 una atrás de la otra (≈13 s en el Inicio) y SIN orden:
+  // con OFFSET sin ORDER BY Postgres no garantiza el orden entre páginas, así que podían
+  // repetirse o saltearse filas. Ahora: orden fijo por la clave primaria, la primera página
+  // trae el total y el resto se pide en paralelo.
   const PAGE_SIZE = 1000;
-  let allRows: any[] = [];
-  let from = 0;
-
-  while (true) {
-    const { data, error } = await supabase
+  const confirmedTmIdsPromise = fetchConfirmedTransfermarktIds(); // no depende de los ratings
+  const page = (n: number, withCount: boolean) =>
+    supabase
       .from('player_season_scores')
       .select(`
         player_id, position, avg_rating, percentile, matches_played, season,
         player:players!inner(name, current_team_id, transfermarkt_id, birth_date, primary_position, canonical_id, team:teams(name, logo))
-      `)
+      `, withCount ? { count: 'exact' } : undefined)
       .in('season', seasons)
       .not('avg_rating', 'is', null)
-      .range(from, from + PAGE_SIZE - 1);
+      .order('player_id', { ascending: true })
+      .order('season', { ascending: true })
+      .order('position', { ascending: true })
+      .range(n * PAGE_SIZE, (n + 1) * PAGE_SIZE - 1);
 
-    if (error) throw error;
-    const rows = data ?? [];
-    allRows = allRows.concat(rows);
-    if (rows.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
-  }
+  const first = await page(0, true);
+  if (first.error) throw first.error;
+  const total = first.count ?? (first.data ?? []).length;
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rest = await Promise.all(Array.from({ length: pages - 1 }, (_, i) => page(i + 1, false)));
+  for (const r of rest) if (r.error) throw r.error;
+  let allRows: any[] = [first.data ?? [], ...rest.map(r => r.data ?? [])].flat();
 
-  const confirmedTmIds = await fetchConfirmedTransfermarktIds();
+  const confirmedTmIds = await confirmedTmIdsPromise;
 
   // Solo la fila oficial de cada futbolista (players.canonical_id): el gemelo que no se
   // muestra en ninguna otra pantalla tampoco puede ganar acá.
