@@ -150,6 +150,15 @@ describe('fetchDebutAlerts', () => {
     expect(builder.order).toHaveBeenCalledWith('debut_date', { ascending: false })
     expect(builder.limit).toHaveBeenCalledWith(300)
   })
+
+  it('solo muestra alertas confirmadas con Transfermarkt (no pendientes ni rechazadas)', async () => {
+    const builder = chain({ data: [], error: null })
+    mockFrom.mockReturnValue(builder)
+
+    await fetchDebutAlerts()
+
+    expect(builder.in).toHaveBeenCalledWith('verification', ['confirmed', 'adjusted', 'no_tm'])
+  })
 })
 
 describe('fetchSeguimientoStatus', () => {

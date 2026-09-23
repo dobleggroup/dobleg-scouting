@@ -58,6 +58,9 @@ interface DebutAlertRow {
 // fecha por sí sola no alcance a acotarlo.
 const DAYS_WINDOW = 40
 const SAFETY_LIMIT = 300
+// Solo alertas contrastadas con Transfermarkt (edge function verify-debuts): 'pending' todavía
+// no se revisó y 'rejected' es un jugador que ya había debutado antes.
+export const VISIBLE_VERIFICATIONS = ['confirmed', 'adjusted', 'no_tm'] as const
 
 async function fetchActivitySince(
   playerIds: number[]
@@ -114,6 +117,7 @@ export async function fetchDebutAlerts(): Promise<DebutAlert[]> {
       league:leagues!debut_alerts_league_id_fkey(name)
     `)
     .gte('debut_date', cutoffDate)
+    .in('verification', [...VISIBLE_VERIFICATIONS])
     .order('debut_date', { ascending: false })
     .limit(SAFETY_LIMIT)
 
