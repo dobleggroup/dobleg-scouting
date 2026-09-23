@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bar, BarChart, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { AgencyCoach } from '@/constants/agencyCoaches'
 import { loadHomegrownUsage, type HomegrownUsageResult } from '@/services/homegrownUsageService'
@@ -85,6 +85,10 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
   const colors = PALETTE[theme === 'dark' ? 'dark' : 'light']
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [openPlayer, setOpenPlayer] = useState<number | null>(null)
+  // Con syncId Recharts muestra el tooltip en los dos gráficos: solo lo dibujamos en el que
+  // tiene el mouse (el otro conserva el cursor resaltado) para no duplicarlo ni desbordar.
+  const [hoveredChart, setHoveredChart] = useState<'count' | 'minutes' | null>(null)
+  const scrollerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let active = true
@@ -114,6 +118,13 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
     }))
   }, [state, locale])
 
+  // En pantallas angostas el gráfico scrollea de costado: arrancar mostrando los partidos
+  // más recientes, que son los que importan, en vez de febrero.
+  useEffect(() => {
+    const el = scrollerRef.current
+    if (el) el.scrollLeft = el.scrollWidth
+  }, [rows])
+
   if (state.status === 'hidden') return null
   if (state.status === 'loading') return <LoadingSpinner message={t('coachDetail.homegrownCargando')} />
 
@@ -139,8 +150,8 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
     .replace('{club}', coach.club ?? '')
     .replace('{fecha}', fmtDate(data.tenureStart + 'T12:00:00', { day: 'numeric', month: 'long', year: 'numeric' }))
 
-  const renderTooltip = ({ active, payload }: { active?: boolean; payload?: { payload?: ChartRow }[] }) => {
-    const row = active ? payload?.[0]?.payload : undefined
+  const renderTooltip = (chart: 'count' | 'minutes') => ({ active, payload }: { active?: boolean; payload?: { payload?: ChartRow }[] }) => {
+    const row = active && hoveredChart === chart ? payload?.[0]?.payload : undefined
     if (!row) return null
     const { match } = row
     const players = [...match.starters, ...match.subsIn]
@@ -220,7 +231,7 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
         {data.debutedWithCoach.length > 0 && (
           <div className="rounded-apple-lg border border-brand-green/25 bg-brand-green/[0.06] dark:bg-brand-green/[0.08] p-3 sm:p-4">
             <p className="text-xs font-semibold text-apple-gray-800 dark:text-white mb-2.5">
-              <span className="text-brand-green tabular-nums">{data.debutedWithCoach.length}</span> {t('coachDetail.homegrownDebutaron').toLowerCase()}
+              <span className="text-brand-green tabular-nums">{data.debutedWithCoach.length}</span> {t('coachDetail.homegrownDebutaron')}
             </p>
             <ul className="flex flex-wrap gap-2">
               {data.debutedWithCoach.map(c => (
@@ -255,15 +266,15 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
             )}
           </div>
 
-          <div className="overflow-x-auto -mx-1 px-1">
+          <div ref={scrollerRef} className="overflow-x-auto overflow-y-hidden -mx-1 px-1">
             <div style={{ minWidth: chartMinWidth }}>
               <p className="text-2xs font-medium text-apple-gray-500 dark:text-apple-gray-400">{t('coachDetail.homegrownJugadores')}</p>
-              <div className="h-52">
+              <div className="h-52" onMouseEnter={() => setHoveredChart('count')} onMouseLeave={() => setHoveredChart(null)}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={rows} syncId={chartId} margin={{ top: 14 + maxDebutsInMatch * 21, right: 4, bottom: 0, left: -18 }} barCategoryGap="22%">
                     <XAxis dataKey="label" tick={AXIS_TICK} tickLine={false} axisLine={false} interval={0} height={20} />
                     <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} allowDecimals={false} domain={[0, maxCount]} width={40} />
-                    <Tooltip content={renderTooltip} cursor={{ fill: theme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }} />
+                    <Tooltip content={renderTooltip('count')} cursor={{ fill: theme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }} />
                     <Bar dataKey="noData" stackId="n" fill={colors.noData} radius={[4, 4, 0, 0]} isAnimationActive={false} />
                     <Bar dataKey="startersCount" stackId="n" fill={colors.starters} stroke={colors.surface} strokeWidth={1} isAnimationActive={false} />
                     <Bar dataKey="subsCount" stackId="n" fill={colors.subs} stroke={colors.surface} strokeWidth={1} radius={[4, 4, 0, 0]} isAnimationActive={false}>
@@ -274,12 +285,12 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
               </div>
 
               <p className="text-2xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mt-3">{t('coachDetail.homegrownMinutosPartido')}</p>
-              <div className="h-36">
+              <div className="h-40" onMouseEnter={() => setHoveredChart('minutes')} onMouseLeave={() => setHoveredChart(null)}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={rows} syncId={chartId} margin={{ top: 8, right: 4, bottom: 0, left: -18 }} barCategoryGap="22%">
                     <XAxis dataKey="label" tick={AXIS_TICK} tickLine={false} axisLine={false} interval={0} height={20} />
                     <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} allowDecimals={false} width={40} />
-                    <Tooltip content={renderTooltip} cursor={{ fill: theme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }} />
+                    <Tooltip content={renderTooltip('minutes')} cursor={{ fill: theme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }} />
                     <Bar dataKey="startersMinutes" stackId="m" fill={colors.starters} stroke={colors.surface} strokeWidth={1} isAnimationActive={false} />
                     <Bar dataKey="subsMinutes" stackId="m" fill={colors.subs} stroke={colors.surface} strokeWidth={1} radius={[4, 4, 0, 0]} isAnimationActive={false} />
                   </BarChart>
