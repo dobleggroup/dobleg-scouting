@@ -34,13 +34,22 @@ interface ChartRow {
   noData: number
   startersMinutes: number
   subsMinutes: number
-  debutInitials: string[]
+  /** Apellidos de los chicos que debutaron en Primera en este partido. */
+  debutNames: string[]
   match: HomegrownMatchUsage
 }
 
-function initials(fullName: string): string {
-  const parts = fullName.trim().split(/\s+/)
-  return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase()
+/** "CA Ferrocarril Midland" -> "Ferrocarril Midland": las siglas societarias no le dicen nada al lector. */
+function cleanClub(name: string): string {
+  return name.replace(/^(Club Atlético|Club Social y Deportivo|CA|CS|CSD|AA|Club) /, '')
+}
+
+function StarIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path d="M10 1.8l2.47 5.01 5.53.8-4 3.9.94 5.5L10 14.4l-4.94 2.6.94-5.5-4-3.9 5.53-.8L10 1.8z" />
+    </svg>
+  )
 }
 
 function surname(fullName: string): string {
@@ -54,7 +63,7 @@ function debutFixtureByPlayer(usage: HomegrownMatchUsage[], debutants: SquadCare
   for (const c of debutants) {
     const first = usage.find(u => [...u.starters, ...u.subsIn].some(p => p.apiPlayerId === c.apiPlayerId))
     if (!first) continue
-    byFixture.set(first.fixtureId, [...(byFixture.get(first.fixtureId) ?? []), initials(c.fullName)])
+    byFixture.set(first.fixtureId, [...(byFixture.get(first.fixtureId) ?? []), surname(c.fullName)])
   }
   return byFixture
 }
@@ -113,7 +122,7 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
       noData: u.hasData ? 0 : 0.4,
       startersMinutes: sum(u.starters),
       subsMinutes: sum(u.subsIn),
-      debutInitials: debuts.get(u.fixtureId) ?? [],
+      debutNames: debuts.get(u.fixtureId) ?? [],
       match: u,
     }))
   }, [state, locale])
@@ -144,7 +153,7 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
   const careersById = new Map(data.careers.filter(c => c.apiPlayerId !== null).map(c => [c.apiPlayerId as number, c]))
   const chartMinWidth = rows.length * MIN_BAR_SLOT_PX
   const maxCount = Math.max(1, ...rows.map(r => r.startersCount + r.subsCount))
-  const maxDebutsInMatch = Math.max(0, ...rows.map(r => r.debutInitials.length))
+  const maxDebutsInMatch = Math.max(0, ...rows.map(r => r.debutNames.length))
   const chartId = `homegrown-usage-${coach.key}`
   const subtitle = t('coachDetail.homegrownSubtitulo')
     .replace('{club}', coach.club ?? '')
@@ -158,11 +167,17 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
     return (
       <div className="rounded-lg bg-apple-gray-800 dark:bg-apple-gray-700 text-white px-3 py-2 text-[11px] shadow-apple-md max-w-[240px]">
         <p className="font-semibold">
-          {match.rival}{match.score ? ` · ${match.score}` : ''}
+          {cleanClub(match.rival)}{match.score ? ` · ${match.score}` : ''}
         </p>
         <p className="text-apple-gray-300 mb-1.5">
           {fmtDate(match.date, { day: 'numeric', month: 'short' })} · {match.isHome ? t('coachDetail.homegrownLocal') : t('coachDetail.homegrownVisitante')} · {match.competition}
         </p>
+        {row.debutNames.length > 0 && (
+          <p className="flex items-center gap-1.5 font-semibold mb-1 text-[#4ADE80]">
+            <StarIcon className="w-3 h-3 flex-shrink-0" />
+            {t('coachDetail.homegrownDebutoHoy')}: {row.debutNames.join(', ')}
+          </p>
+        )}
         {!match.hasData && <p className="text-apple-gray-300">{t('coachDetail.homegrownSinDatos')}</p>}
         {players.map(p => (
           <p key={p.apiPlayerId} className="flex justify-between gap-3 tabular-nums">
@@ -183,17 +198,18 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
 
   const renderDebutMarkers = (props: { x?: number | string; y?: number | string; width?: number | string; index?: number }) => {
     const row = props.index !== undefined ? rows[props.index] : undefined
-    if (!row || row.debutInitials.length === 0) return null
+    if (!row || row.debutNames.length === 0) return null
     const cx = Number(props.x) + Number(props.width) / 2
     const top = Number(props.y)
     return (
       <g>
-        {row.debutInitials.map((ini, i) => {
+        {row.debutNames.map((name, i) => {
           const cy = top - 13 - i * 21
           return (
-            <g key={ini + i}>
+            <g key={name + i}>
               <circle cx={cx} cy={cy} r={9.5} fill={colors.surface} stroke={colors.debut} strokeWidth={1.5} />
-              <text x={cx} y={cy + 3} textAnchor="middle" fontSize={8} fontWeight={700} fill={colors.debut}>{ini}</text>
+              <path transform={`translate(${cx - 6} ${cy - 6}) scale(0.6)`} fill={colors.debut}
+                d="M10 1.8l2.47 5.01 5.53.8-4 3.9.94 5.5L10 14.4l-4.94 2.6.94-5.5-4-3.9 5.53-.8L10 1.8z" />
             </g>
           )
         })}
@@ -214,6 +230,17 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
       </div>
 
       <div id={chartId} className="space-y-4 bg-white dark:bg-transparent">
+        <p className="text-sm sm:text-base leading-relaxed text-apple-gray-700 dark:text-apple-gray-200">
+          {t('coachDetail.homegrownResumen')
+            .replace('{partidos}', String(summary.matchesWithData))
+            .replace('{dt}', coach.fullName)
+            .replace('{jugadores}', String(summary.players.length))}
+          {data.debutedWithCoach.length > 0 && (
+            <> <span className="font-semibold text-apple-gray-900 dark:text-white">
+              {t('coachDetail.homegrownResumenDebuts').replace('{n}', String(data.debutedWithCoach.length))}
+            </span></>
+          )}
+        </p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
           <StatTile
             label={t('coachDetail.homegrownPromedio')}
@@ -229,25 +256,22 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
         </div>
 
         {data.debutedWithCoach.length > 0 && (
-          <div className="rounded-apple-lg border border-brand-green/25 bg-brand-green/[0.06] dark:bg-brand-green/[0.08] p-3 sm:p-4">
-            <p className="text-xs font-semibold text-apple-gray-800 dark:text-white mb-2.5">
-              <span className="text-brand-green tabular-nums">{data.debutedWithCoach.length}</span> {t('coachDetail.homegrownDebutaron')}
+          <div className="rounded-apple-lg border border-brand-green/25 bg-brand-green/[0.06] dark:bg-brand-green/[0.08] p-4">
+            <p className="flex items-center gap-2 text-sm font-semibold text-apple-gray-800 dark:text-white mb-3">
+              <StarIcon className="w-4 h-4 text-brand-green flex-shrink-0" />
+              {t('coachDetail.homegrownDebutaron').replace('{dt}', coach.fullName)}
             </p>
-            <ul className="flex flex-wrap gap-2">
+            <ul className="grid gap-x-6 gap-y-2.5 sm:grid-cols-2 lg:grid-cols-3">
               {data.debutedWithCoach.map(c => (
-                <li key={c.tmPlayerId} className="flex items-center gap-2 rounded-full bg-white dark:bg-apple-gray-800 border border-apple-gray-200/70 dark:border-apple-gray-700/50 pl-1 pr-3 py-1">
-                  <span className="w-6 h-6 rounded-full border-[1.5px] border-brand-green text-brand-green text-[9px] font-bold flex items-center justify-center flex-shrink-0">
-                    {initials(c.fullName)}
-                  </span>
-                  <span className="text-xs leading-tight">
-                    <span className="font-semibold text-apple-gray-800 dark:text-white">{c.fullName}</span>
-                    {c.proDebutDate && (
-                      <span className="block text-2xs text-apple-gray-400">
-                        {fmtDate(c.proDebutDate + 'T12:00:00', { day: 'numeric', month: 'short' })}
-                        {c.proDebutOpponent ? ` · vs ${c.proDebutOpponent.replace(/^(CA|CS|CSD|AA|Club Atlético|Club) /, '')}` : ''}
-                      </span>
-                    )}
-                  </span>
+                <li key={c.tmPlayerId} className="text-sm leading-snug">
+                  <span className="font-semibold text-apple-gray-800 dark:text-white">{c.fullName}</span>
+                  {c.proDebutDate && (
+                    <span className="block text-xs text-apple-gray-500 dark:text-apple-gray-400">
+                      {t('coachDetail.homegrownDebutoEl')
+                        .replace('{fecha}', fmtDate(c.proDebutDate + 'T12:00:00', { day: 'numeric', month: 'long' }))
+                        .replace('{rival}', cleanClub(c.proDebutOpponent ?? ''))}
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -260,15 +284,15 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
             <LegendSwatch color={colors.subs} label={t('coachDetail.homegrownIngresados')} />
             {data.debutedWithCoach.length > 0 && (
               <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full border-[1.5px]" style={{ borderColor: colors.debut }} />
-                {t('coachDetail.homegrownDebut')}
+                <StarIcon className="w-3 h-3" style={{ color: colors.debut }} />
+                {t('coachDetail.homegrownMarcaDebut')}
               </span>
             )}
           </div>
 
           <div ref={scrollerRef} className="overflow-x-auto overflow-y-hidden -mx-1 px-1">
             <div style={{ minWidth: chartMinWidth }}>
-              <p className="text-2xs font-medium text-apple-gray-500 dark:text-apple-gray-400">{t('coachDetail.homegrownJugadores')}</p>
+              <p className="text-2xs font-medium text-apple-gray-500 dark:text-apple-gray-400">{t('coachDetail.homegrownJugadoresPartido')}</p>
               <div className="h-52" onMouseEnter={() => setHoveredChart('count')} onMouseLeave={() => setHoveredChart(null)}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={rows} syncId={chartId} margin={{ top: 14 + maxDebutsInMatch * 21, right: 4, bottom: 0, left: -18 }} barCategoryGap="22%">
@@ -354,7 +378,7 @@ function CareerDetail({ career, fmtDate }: { career: SquadCareer; fmtDate: (iso:
         {career.proDebutDate ? (
           <p className="text-apple-gray-700 dark:text-apple-gray-300 leading-relaxed">
             <span className="font-semibold text-apple-gray-800 dark:text-white">{day(career.proDebutDate)}</span>
-            {career.proDebutOpponent && <> vs {career.proDebutOpponent}</>}
+            {career.proDebutOpponent && <> vs {cleanClub(career.proDebutOpponent)}</>}
             {career.proDebutCompetition && <span className="block text-apple-gray-400">{career.proDebutCompetition}</span>}
             {career.proDebutCoach && <span className="block text-apple-gray-400">{t('coachDetail.homegrownDT')}: {career.proDebutCoach}</span>}
           </p>
