@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
-import { usePlayerDetail, usePlayerMatchHistory, usePositionAverages, usePositionMetricAverages, useLeagues, useMarketValueHistory, usePreferredPlayerId } from '@/hooks/usePlayerStats'
+import { usePlayerDetail, usePlayerMatchHistory, usePositionAverages, usePositionMetricAverages, useLeagues, useMarketValueHistory, usePreferredPlayerId, useApiFootballTwinId } from '@/hooks/usePlayerStats'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import EmptyState from '@/components/ui/EmptyState'
 import GaugeScore from '@/components/charts/GaugeScore'
@@ -42,6 +42,7 @@ export default function SupabasePlayerDetail() {
   // partidos, sin traspasos/lesiones) se quedaba pegada a esa versión — mismo fix
   // que ya tiene PlayerDetailPage.tsx para el roster interno.
   const playerId = usePreferredPlayerId(rawPlayerId)
+  const apiFootballTwinId = useApiFootballTwinId(playerId)
   const { data, loading } = usePlayerDetail(playerId)
   const [selectedPosition, setSelectedPosition] = useState<Position | null>(null)
   const { averages: positionAverages } = usePositionAverages()
@@ -336,7 +337,7 @@ export default function SupabasePlayerDetail() {
 
           {/* Actions */}
           <div className="card-apple p-4 space-y-2">
-            <DobleGWidget player={dgPlayer} apiPlayerId={playerId} />
+            <DobleGWidget player={dgPlayer} apiPlayerId={apiFootballTwinId ?? playerId} />
             <TrackingWidget
               playerName={player.name}
               playerDbId={String(player.id)}

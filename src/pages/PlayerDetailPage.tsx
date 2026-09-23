@@ -14,7 +14,7 @@ import MetricEvolutionChart from '@/components/charts/MetricEvolutionChart'
 import { buildInsights } from '@/features/wyscout/wyscoutInsights'
 import { aggregateByMonth, metricIsLowerBetter } from '@/services/wyscoutEvolutionService'
 import type { WyscoutEvolutionData } from '@/services/wyscoutEvolutionService'
-import { usePlayerDetail, usePlayerMatchHistory, usePlayerAllMatches, usePositionAverages, usePositionMetricAverages, useLeagues, useScoreLookup, usePreferredPlayerId } from '@/hooks/usePlayerStats'
+import { usePlayerDetail, usePlayerMatchHistory, usePlayerAllMatches, usePositionAverages, usePositionMetricAverages, useLeagues, useScoreLookup, usePreferredPlayerId, useApiFootballTwinId } from '@/hooks/usePlayerStats'
 import type { Position } from '@/types/scoring'
 import { displayPosition as formatPosition } from '@/types/scoring'
 import MetricsRadarChart from '@/components/charts/MetricsRadarChart'
@@ -847,7 +847,10 @@ export default function PlayerDetailPage() {
     source === 'interno' ? player?.Jugador ?? null : null,
     apiPlayerId,
   )
-  const effectiveApiId = apiPlayerId ?? resolvedApiId
+  // Traspasos y lesiones solo existen en API-Football: la fila oficial puede ser la de
+  // Sofascore, así que se consulta con su gemelo de API-Football.
+  const apiFootballTwinId = useApiFootballTwinId(apiPlayerId)
+  const effectiveApiId = apiFootballTwinId ?? (apiPlayerId && apiPlayerId < 20_000_000 ? apiPlayerId : null) ?? resolvedApiId
   const { injuries: playerInjuries, loading: injuriesLoading } = usePlayerInjuries(effectiveApiId)
   const { transfers: playerTransfers, loading: transfersLoading } = usePlayerTransfers(effectiveApiId)
 

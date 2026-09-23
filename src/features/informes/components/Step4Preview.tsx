@@ -18,7 +18,7 @@ import InformeScatter from './charts/InformeScatter'
 import InformeNumberCard from './charts/InformeNumberCard'
 import { comparisonTable, comparisonWinCounts, topStrengths, parseRating } from '@/features/informes/chartData'
 import { useInformeEnrichment, type InformeEnrichment } from '@/features/informes/useInformeEnrichment'
-import { usePreferredPlayerId } from '@/hooks/usePlayerStats'
+import { useApiFootballTwinId } from '@/hooks/usePlayerStats'
 import { continuityTiles } from '@/features/informes/continuity'
 import { resolveLast5 } from '@/features/informes/last5'
 import { useInformeInsights, DEFAULT_INSIGHTS_CONFIG } from '@/features/informes/useInformeInsights'
@@ -357,7 +357,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
   // ── Historial de traspasos (API-Football, por id de la DB) ──
   // Ojo: el id tiene que ser el de API-Football. Con el duplicado de Sofascore la
   // API devuelve 0 traspasos y la pestaña Carrera queda vacía.
-  const transfersPlayerId = usePreferredPlayerId(informe.dbPlayerId ?? null)
+  const transfersPlayerId = useApiFootballTwinId(informe.dbPlayerId ?? null)
   const [transfers, setTransfers] = useState<PlayerTransfer[]>([])
   useEffect(() => {
     const id = transfersPlayerId

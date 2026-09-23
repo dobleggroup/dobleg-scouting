@@ -9,6 +9,7 @@ import {
   fetchPlayerMatchHistory,
   fetchPlayerAllMatches,
   resolvePreferredPlayerId,
+  resolveApiFootballTwinId,
   fetchScoreLookup,
   fetchMarketValueHistory,
   fetchRecentForm,
@@ -203,10 +204,27 @@ export function usePlayerMatchHistory(playerId: number | null, position?: Positi
 }
 
 /**
- * Id del jugador a usar para leer datos: si el informe quedó linkeado a la fila
- * duplicada de Sofascore (menos partidos, sin traspasos ni lesiones), devuelve la
- * de API-Football. Mientras resuelve devuelve el id original.
+ * Fila oficial del futbolista (players.canonical_id): la misma que muestran todas las
+ * listas. Mientras resuelve devuelve el id original.
  */
+/** Id de API-Football del mismo futbolista, para traspasos y lesiones (solo existen en
+ *  esa API). null si no tiene fila de API-Football o mientras resuelve. */
+export function useApiFootballTwinId(playerId: number | null): number | null {
+  const [twin, setTwin] = useState<number | null>(null);
+
+  useEffect(() => {
+    setTwin(null);
+    if (!playerId) return;
+    let cancelled = false;
+    resolveApiFootballTwinId(playerId)
+      .then(id => { if (!cancelled) setTwin(id); })
+      .catch(() => { /* sin gemelo */ });
+    return () => { cancelled = true; };
+  }, [playerId]);
+
+  return twin;
+}
+
 export function usePreferredPlayerId(playerId: number | null): number | null {
   const [resolved, setResolved] = useState<number | null>(playerId);
 

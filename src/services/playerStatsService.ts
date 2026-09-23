@@ -572,7 +572,7 @@ export async function fetchScoreLookup(
       .from('player_season_scores')
       .select(`
         player_id, position, avg_rating, percentile, matches_played, season,
-        player:players!inner(name, current_team_id, transfermarkt_id, birth_date, primary_position, team:teams(name, logo))
+        player:players!inner(name, current_team_id, transfermarkt_id, birth_date, primary_position, canonical_id, team:teams(name, logo))
       `)
       .in('season', seasons)
       .not('avg_rating', 'is', null)
@@ -586,6 +586,13 @@ export async function fetchScoreLookup(
   }
 
   const confirmedTmIds = await fetchConfirmedTransfermarktIds();
+
+  // Solo la fila oficial de cada futbolista (players.canonical_id): el gemelo que no se
+  // muestra en ninguna otra pantalla tampoco puede ganar acá.
+  allRows = allRows.filter(row => {
+    const canonical = (row as any).player?.canonical_id as number | null | undefined;
+    return canonical == null || canonical === row.player_id;
+  });
 
   const rows: ScoreLookupRow[] = allRows.map(row => {
     const tmId = ((row as any).player?.transfermarkt_id as number | null) ?? null;
@@ -706,66 +713,49 @@ export function isApiFootballPlayer(p: { photo?: string | null }): boolean {
   return (p.photo ?? '').includes('media.api-sports.io');
 }
 
-// Fecha del partido más reciente cargado para un jugador, o null si no tiene
-// ninguno. Se usa para decidir entre las filas "gemelas" API-Football/Sofascore
-// de abajo -- ver por qué en el comentario de `resolvePreferredPlayerId`.
-async function latestMatchDate(playerId: number): Promise<string | null> {
-  const { data } = await supabase
-    .from('player_match_stats')
-    .select('fixture:fixtures(date)')
-    .eq('player_id', playerId)
-    .order('fixture(date)', { ascending: false })
-    .limit(1);
-  const row = data?.[0] as { fixture?: { date: string } | { date: string }[] } | undefined;
-  const fixture = Array.isArray(row?.fixture) ? row?.fixture[0] : row?.fixture;
-  return fixture?.date ?? null;
+// Cuál de los gemelos se muestra lo decide la base, una sola vez y con una sola regla:
+// `players.canonical_id` (ver supabase/migrations/20260923_d_player_canonical_row.sql).
+// Antes cada pantalla elegía a su manera (la lista después de filtrar, la ficha por fecha
+// del último partido, el Inicio siempre API-Football) y el mismo jugador aparecía con dos
+// clubes, dos posiciones y dos ratings -- caso Alan Sosa: lista "VI, Aldosivi, 7.4", ficha
+// "EXT, Gimnasia LP, 6 y pico". No volver a agregar reglas propias acá: si la elección está
+// mal, se corrige en `recompute_player_canonical_ids()`.
+
+const SOFASCORE_ID_OFFSET = 20_000_000;
+const preferredIdCache = new Map<number, number>();
+const apiTwinCache = new Map<number, number | null>();
+
+/** Test-only: limpia las cachés en memoria. */
+export function __resetPlayerIdCaches(): void {
+  preferredIdCache.clear();
+  apiTwinCache.clear();
 }
 
-const preferredIdCache = new Map<number, number>();
-
+/** Fila oficial del futbolista: la que muestran todas las listas y la ficha. */
 export async function resolvePreferredPlayerId(playerId: number): Promise<number> {
   const cached = preferredIdCache.get(playerId);
   if (cached != null) return cached;
-
-  const { data: me } = await supabase
-    .from('players')
-    .select('id, name, birth_date, transfermarkt_id, photo')
-    .eq('id', playerId)
-    .maybeSingle();
-
-  let resolved = playerId;
-
-  if (me && !isApiFootballPlayer(me)) {
-    let query = supabase.from('players').select('id, photo');
-    if (me.transfermarkt_id) {
-      query = query.eq('transfermarkt_id', me.transfermarkt_id);
-    } else if (me.name && me.birth_date) {
-      query = query.eq('name', me.name).eq('birth_date', me.birth_date);
-    } else {
-      query = query.eq('id', playerId); // sin forma de identificarlo: se queda como está
-    }
-    const { data: twins } = await query;
-    const twin = (twins ?? []).find(t => t.id !== playerId && isApiFootballPlayer(t));
-    if (twin) {
-      // Antes esto siempre saltaba a la fila de API-Football. Cuando esa fila
-      // no sigue al día (el jugador se transfirió y API-Football se quedó con
-      // el club viejo), terminaba mostrando un club/liga que ya no es real —
-      // caso real: Nahuel Arena se fue a CA Cerro (Uruguay) y la ficha lo
-      // mostraba en Independ. Rivadavia porque esa fila de API-Football no
-      // tenía partidos desde mayo, mientras Sofascore ya tenía agosto. Ahora
-      // sólo se prefiere API-Football si no está más desactualizada.
-      const [meLatest, twinLatest] = await Promise.all([
-        latestMatchDate(playerId),
-        latestMatchDate(twin.id),
-      ]);
-      if (!meLatest || (twinLatest && twinLatest >= meLatest)) {
-        resolved = twin.id;
-      }
-    }
-  }
-
+  const { data } = await supabase.from('players').select('canonical_id').eq('id', playerId).maybeSingle();
+  const resolved = (data?.canonical_id as number | null | undefined) ?? playerId;
   preferredIdCache.set(playerId, resolved);
   return resolved;
+}
+
+/** Id de API-Football del mismo futbolista, para lo que solo existe en esa API (traspasos,
+ *  lesiones). null si el jugador no tiene fila de API-Football. */
+export async function resolveApiFootballTwinId(playerId: number): Promise<number | null> {
+  if (playerId < SOFASCORE_ID_OFFSET) return playerId;
+  if (apiTwinCache.has(playerId)) return apiTwinCache.get(playerId) ?? null;
+  const canonical = await resolvePreferredPlayerId(playerId);
+  const { data } = await supabase
+    .from('players')
+    .select('id')
+    .eq('canonical_id', canonical)
+    .lt('id', SOFASCORE_ID_OFFSET)
+    .limit(1);
+  const twin = (data?.[0]?.id as number | undefined) ?? null;
+  apiTwinCache.set(playerId, twin);
+  return twin;
 }
 
 // ── Informes / pestaña Impacto ────────────────────────────────────────────────
