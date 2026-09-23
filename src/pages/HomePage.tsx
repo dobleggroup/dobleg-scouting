@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { AGENCY_PLAYERS } from '@/constants/agencyPlayers'
 import { fetchAllAgencyFixtures, getFixturesForDate, groupFixturesByDate } from '@/services/footballApiService'
 import { fetchManualFixtures, manualToAgencyFixtures } from '@/services/agencyManualFixturesService'
+import CoachesHomeWidget from '@/components/dashboard/CoachesHomeWidget'
 import { fetchAgencyPerformanceRows, aggregatePerformance, type PerformancePeriod, type AgencyPlayerPerformance } from '@/services/agencyPerformanceService'
 import type { SquadStatRow } from '@/services/playerStatsService'
 import { fetchDebutAlerts, type DebutAlert } from '@/services/debutAlertsService'
@@ -2285,6 +2286,9 @@ export default function HomePage() {
 
       {/* ── Cumpleaños del plantel ───────────────────────────── */}
       <BirthdaysWidget today={today} internal={internal} />
+
+      {/* ── Nuestros entrenadores (DT de la agencia con club) ── */}
+      <CoachesHomeWidget />
 
       {/* ═══════════════════ SCOUT EXTERNO ═══════════════════ */}
       <SectionDivider
