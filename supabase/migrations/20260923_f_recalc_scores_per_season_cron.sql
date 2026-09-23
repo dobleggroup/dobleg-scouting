@@ -1,8 +1,8 @@
 -- recalc-scores se llamaba cada 6 h sin body, lo que procesa las dos últimas temporadas
--- juntas (año anterior para ligas europeas + año actual para las anuales). Con el volumen
--- actual eso falla por recursos (WORKER_RESOURCE_LIMIT) y NO se recalcula nada: los ratings
--- quedaban congelados (ej. Mastrolía con 26 partidos y rating armado con 17).
--- Verificado 2026-09-23: {"season":2026} sola termina bien (9.238 filas en ~90 s).
+-- juntas (año anterior para ligas europeas + año actual para las anuales) en una sola
+-- ejecución. Venía funcionando (16.064 filas por corrida), pero el 2026-09-23 falló dos
+-- veces seguidas (timeout en backfill_ungridded_positions y WORKER_RESOURCE_LIMIT) con más
+-- datos cargados. Cada temporada sola anda: 2026 = 9.238 filas en ~90 s, 2025 = 6.936 en ~45 s.
 --
 -- Se separa en dos jobs, uno por temporada, para que una falla no arrastre a la otra.
 -- Se reutiliza la URL y el header del job existente (no se copia ninguna key acá).
