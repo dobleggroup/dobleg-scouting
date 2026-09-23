@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { usePlayersList } from '@/hooks/usePlayerStats'
-import { identityKey } from '@/context/DataContext'
 
 /** Los equipos que sincroniza Sofascore (Primera Nacional, Liga Profesional, ...) se guardan
  *  con su id de Sofascore + este offset (ver scripts/sync-sofascore/sync.py). El plantel de
@@ -37,8 +36,48 @@ export interface SquadRating {
   rating: number | null
 }
 
-/** Ratings del plantel actual de un equipo de API-Football, indexados por identityKey del
- *  nombre ("M. Calzon" y "Matías Calzón" dan la misma clave). */
+function nameTokens(name: string): string[] {
+  return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .split(/\s+/)
+    .map(t => t.replace(/\./g, ''))
+    .filter(Boolean)
+}
+
+/** Índice "inicial:apellido" -> jugador con rating, con una entrada por CADA apellido: API-
+ *  Football dice "O. Pacheco" y Sofascore "Oswaldo Enrique Pacheco Oliveros". Si dos
+ *  jugadores comparten clave (misma persona con dos filas en Sofascore) gana el que tiene
+ *  rating. */
+export function buildSquadRatingIndex(players: { id: number; name: string; primary_score: number | null }[]): Map<string, SquadRating> {
+  const index = new Map<string, SquadRating>()
+  for (const p of players) {
+    const tokens = nameTokens(p.name)
+    if (tokens.length < 2) continue
+    const entry: SquadRating = { playerId: p.id, name: p.name, rating: p.primary_score }
+    for (const surname of tokens.slice(1)) {
+      const key = `${tokens[0][0]}:${surname}`
+      const current = index.get(key)
+      if (!current || (current.rating === null && entry.rating !== null)) index.set(key, entry)
+    }
+  }
+  return index
+}
+
+/** Busca a un jugador del plantel ("M. Calzon", "Franco Tirotta") en el índice: prueba con
+ *  la inicial y cada uno de sus apellidos, del último al primero. */
+export function lookupSquadRating(index: Map<string, SquadRating>, name: string): SquadRating | undefined {
+  const tokens = nameTokens(name)
+  if (tokens.length < 2) return undefined
+  for (const surname of tokens.slice(1).reverse()) {
+    const hit = index.get(`${tokens[0][0]}:${surname}`)
+    if (hit) return hit
+  }
+  return undefined
+}
+
+/** Ratings del plantel actual de un equipo de API-Football. Usar con lookupSquadRating. */
 export function useSquadRatings(apiTeamId: number | null | undefined): Map<string, SquadRating> {
   const [ratedTeamId, setRatedTeamId] = useState<number | null>(null)
   useEffect(() => {
@@ -48,9 +87,5 @@ export function useSquadRatings(apiTeamId: number | null | undefined): Map<strin
     return () => { active = false }
   }, [apiTeamId])
   const { players } = usePlayersList(ratedTeamId ? { team_id: ratedTeamId, pageSize: 80 } : { pageSize: 0 })
-  return useMemo(() => {
-    const byKey = new Map<string, SquadRating>()
-    for (const p of players) byKey.set(identityKey(p.name), { playerId: p.id, name: p.name, rating: p.primary_score })
-    return byKey
-  }, [players])
+  return useMemo(() => buildSquadRatingIndex(players), [players])
 }

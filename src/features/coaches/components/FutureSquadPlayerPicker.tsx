@@ -5,8 +5,7 @@ import { getScoreColorClass } from '@/components/ui/ScoreBar'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import type { SquadPlayer } from '@/services/footballApiService'
 import type { SlotEntry } from '@/services/futureSquadService'
-import { useSquadRatings } from '@/services/teamTwinService'
-import { identityKey } from '@/context/DataContext'
+import { useSquadRatings, lookupSquadRating } from '@/services/teamTwinService'
 import { MAX_PER_SLOT } from '@/features/coaches/futureSquadDepth'
 import { POSITION_LABEL_KEY } from '@/features/coaches/squadGrouping'
 import {
@@ -293,7 +292,7 @@ export default function FutureSquadPlayerPicker({
                   const isPlacedElsewhere = usedSquadIds.has(p.id)
                   const fits = fittingGroups.has(p.position ?? '')
                   const firstNonFitting = !fits && (i === 0 || fittingGroups.has(availableSquad[i - 1].position ?? ''))
-                  const score = squadRatings.get(identityKey(p.name))?.rating ?? null
+                  const score = lookupSquadRating(squadRatings, p.name)?.rating ?? null
                   return (
                     <div key={p.id}>
                     {firstNonFitting && fittingGroups.size > 0 && (

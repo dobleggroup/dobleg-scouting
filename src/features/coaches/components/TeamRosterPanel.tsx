@@ -9,7 +9,7 @@ import { normalizeName } from '@/utils/scoring'
 import { mapSquadPositionToSpanish } from '@/features/coaches/manualExternalPlayer'
 import type { EnrichedPlayer } from '@/types'
 import RosterTable from './RosterTable'
-import { useSquadRatings } from '@/services/teamTwinService'
+import { useSquadRatings, lookupSquadRating } from '@/services/teamTwinService'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { useLanguage } from '@/context/LanguageContext'
 
@@ -153,7 +153,7 @@ export default function TeamRosterPanel({ teamId, teamName }: { teamId: number; 
   const openFor = (player: SquadPlayer): (() => void) | null => {
     // Si el jugador tiene ficha con rating (gemelo de Sofascore), esa es la más completa:
     // partidos, rating y percentiles como cualquier jugador de Scout Externo.
-    const rated = ratings.get(identityKey(player.name))
+    const rated = lookupSquadRating(ratings, player.name)
     if (rated && !isAgencyPlayer(player.name)) {
       return () => navigate(`/jugador/${encodeURIComponent(rated.name)}?source=externo&apiId=${rated.playerId}`)
     }
@@ -178,7 +178,7 @@ export default function TeamRosterPanel({ teamId, teamName }: { teamId: number; 
         stats: minutes[player.id],
         profile: profiles[player.id],
         career: careers.get(player.id),
-        rating: ratings.get(identityKey(player.name))?.rating ?? null,
+        rating: lookupSquadRating(ratings, player.name)?.rating ?? null,
         onOpen: openFor(player),
         busy: creatingId === player.id,
       }))}
