@@ -141,7 +141,7 @@ export default function CoachSeasonStatsCard({ coach }: { coach: AgencyCoach }) 
           <CoachHomegrownUsageCard coach={coach} />
           <CoachTeamVsRivalCharts rows={enrichedRows} />
           <CoachMatchMetricsEvolution rows={enrichedRows} />
-          <CoachMatchHistoryTable rows={enrichedRows} />
+          <CoachMatchHistoryTable rows={enrichedRows} fixtures={fixtures} coachKey={coach.key} />
         </div>
       )}
 

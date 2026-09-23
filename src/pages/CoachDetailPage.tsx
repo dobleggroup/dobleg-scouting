@@ -9,13 +9,12 @@ import CoachLeagueTab from '@/features/coaches/components/CoachLeagueTab'
 import CoachCalendarTab from '@/features/coaches/components/CoachCalendarTab'
 import CoachTrainingTab from '@/features/coaches/components/CoachTrainingTab'
 import CoachNotesTab from '@/features/coaches/components/CoachNotesTab'
-import CoachTacticalBoardTab from '@/features/coaches/components/CoachTacticalBoardTab'
 import CoachFutureSquadTab from '@/features/coaches/components/CoachFutureSquadTab'
 import CoachVideoAnalysisTab from '@/features/coaches/components/CoachVideoAnalysisTab'
 import { useLanguage } from '@/context/LanguageContext'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 
-type CoachTab = 'resumen' | 'plantel' | 'liga' | 'calendario' | 'entrenamientos' | 'notas' | 'pizarra' | 'videoanalisis' | 'plantel_futuro' | 'reserva'
+type CoachTab = 'resumen' | 'plantel' | 'liga' | 'calendario' | 'entrenamientos' | 'notas' | 'videoanalisis' | 'plantel_futuro' | 'reserva'
 
 const TAB_LABEL_KEY: Record<Exclude<CoachTab, 'reserva'>, string> = {
   resumen: 'coachDetail.tabResumen',
@@ -24,14 +23,13 @@ const TAB_LABEL_KEY: Record<Exclude<CoachTab, 'reserva'>, string> = {
   calendario: 'coachDetail.tabCalendario',
   entrenamientos: 'coachDetail.tabEntrenamientos',
   notas: 'coachDetail.tabNotas',
-  pizarra: 'coachDetail.tabPizarra',
   videoanalisis: 'coachDetail.tabVideoanalisis',
   plantel_futuro: 'coachDetail.tabPlantelFuturo',
 }
 
-const TAB_IDS: Exclude<CoachTab, 'reserva'>[] = ['resumen', 'plantel', 'liga', 'calendario', 'entrenamientos', 'notas', 'pizarra', 'videoanalisis', 'plantel_futuro']
+const TAB_IDS: Exclude<CoachTab, 'reserva'>[] = ['resumen', 'plantel', 'liga', 'calendario', 'entrenamientos', 'notas', 'videoanalisis', 'plantel_futuro']
 
-const SIN_CLUB_TAB_IDS: CoachTab[] = ['resumen', 'entrenamientos', 'pizarra', 'videoanalisis']
+const SIN_CLUB_TAB_IDS: CoachTab[] = ['resumen', 'entrenamientos', 'videoanalisis']
 
 function initialsOf(fullName: string): string {
   return fullName
@@ -57,7 +55,7 @@ export default function CoachDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const isValidTab = (val: string): val is CoachTab =>
-    ['resumen', 'plantel', 'liga', 'calendario', 'entrenamientos', 'notas', 'pizarra', 'videoanalisis', 'plantel_futuro', 'reserva'].includes(val)
+    ['resumen', 'plantel', 'liga', 'calendario', 'entrenamientos', 'notas', 'videoanalisis', 'plantel_futuro', 'reserva'].includes(val)
   const requestedTab: CoachTab = tabParam && isValidTab(tabParam) ? tabParam : 'resumen'
   const setActiveTab = (tab: CoachTab) => setSearchParams(prev => {
     const next = new URLSearchParams(prev)
@@ -184,7 +182,6 @@ export default function CoachDetailPage() {
       {activeTab === 'calendario' && <CoachCalendarTab key={coach.key} coach={coach} />}
       {activeTab === 'entrenamientos' && <CoachTrainingTab coach={coach} />}
       {activeTab === 'notas' && <CoachNotesTab coach={coach} />}
-      {activeTab === 'pizarra' && <CoachTacticalBoardTab key={coach.key} coach={coach} />}
       {activeTab === 'videoanalisis' && <CoachVideoAnalysisTab key={coach.key} coach={coach} />}
       {activeTab === 'plantel_futuro' && <CoachFutureSquadTab key={coach.key} coach={coach} />}
     </div>
