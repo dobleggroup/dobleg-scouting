@@ -9,6 +9,7 @@ import CoachWyscoutReportPanel from './CoachWyscoutReportPanel'
 import CoachMatchMetricsEvolution, { buildEnrichedMatchRows } from './CoachMatchMetricsEvolution'
 import CoachTeamVsRivalCharts from './CoachTeamVsRivalCharts'
 import CoachDtEfficiencyPanel from './CoachDtEfficiencyPanel'
+import CoachHomegrownUsageCard from './CoachHomegrownUsageCard'
 import CoachMatchHistoryTable from './CoachMatchHistoryTable'
 import { getLatestWyscoutReport } from '@/services/coachWyscoutReportService'
 import type { AgencyCoach } from '@/constants/agencyCoaches'
@@ -137,6 +138,7 @@ export default function CoachSeasonStatsCard({ coach }: { coach: AgencyCoach }) 
           </div>
 
           <CoachDtEfficiencyPanel rows={enrichedRows} stats={stats} />
+          <CoachHomegrownUsageCard coach={coach} />
           <CoachTeamVsRivalCharts rows={enrichedRows} />
           <CoachMatchMetricsEvolution rows={enrichedRows} />
           <CoachMatchHistoryTable rows={enrichedRows} />

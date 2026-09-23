@@ -6,7 +6,6 @@ import { matchOutcome, RESULT_STYLES, RECENT_MATCHES_COUNT } from '../matchResul
 import CoachStreakStrip from './CoachStreakStrip'
 import CoachRivalPanel from './CoachRivalPanel'
 import CoachSeasonStatsCard from './CoachSeasonStatsCard'
-import CoachHomegrownUsageCard from './CoachHomegrownUsageCard'
 import type { AgencyFixture } from '@/types/footballApi'
 import type { AgencyCoach } from '@/constants/agencyCoaches'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -52,7 +51,6 @@ export default function CoachSummaryTab({ coach }: { coach: AgencyCoach }) {
   return (
     <div className="space-y-6 sm:space-y-8 animate-fade-in">
       <CoachSeasonStatsCard coach={coach} />
-      <CoachHomegrownUsageCard coach={coach} />
       {next ? (
         <div className="relative overflow-hidden bg-white dark:bg-apple-gray-800/60 rounded-apple-lg border border-apple-gray-200/60 dark:border-apple-gray-700/40 shadow-apple dark:shadow-apple-dark p-5 sm:p-6">
           <div className="absolute inset-x-0 top-0 h-1 bg-brand-green" />

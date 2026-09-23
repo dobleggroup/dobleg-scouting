@@ -20,8 +20,8 @@ type LoadState =
 // skill dataviz contra la superficie del panel en cada modo. Titulares siempre llevan el
 // verde de marca de ese modo (ver --color-brand-green en index.css).
 const PALETTE = {
-  light: { starters: '#15803D', subs: '#22C55E', noData: '#D2D2D7', surface: '#F6F6F8', debut: '#15803D' },
-  dark: { starters: '#22C55E', subs: '#15803D', noData: '#28282C', surface: '#0B0B0D', debut: '#22C55E' },
+  light: { starters: '#15803D', subs: '#22C55E', noData: '#D2D2D7', surface: '#F6F6F8', debut: '#15803D', label: '#6E6E73' },
+  dark: { starters: '#22C55E', subs: '#15803D', noData: '#28282C', surface: '#0B0B0D', debut: '#22C55E', label: '#86868B' },
 }
 const AXIS_TICK = { fontSize: 9, fill: '#9CA3AF' }
 const MIN_BAR_SLOT_PX = 30 // ancho mínimo por partido: con más de ~15 partidos el gráfico scrollea dentro del panel
@@ -137,7 +137,9 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
   if (state.status === 'hidden') return null
   if (state.status === 'loading') return <LoadingSpinner message={t('coachDetail.homegrownCargando')} />
 
-  const cardClass = 'relative overflow-hidden bg-white dark:bg-apple-gray-800/60 rounded-apple-lg border border-apple-gray-200/60 dark:border-apple-gray-700/40 shadow-apple dark:shadow-apple-dark p-5 sm:p-6'
+  // Va dentro de la tarjeta de temporada (CoachSeasonStatsCard), entre "Local vs. visitante"
+  // y "Nosotros vs. rival": sección sin borde propio, igual que sus vecinas.
+  const cardClass = 'relative'
 
   if (state.status === 'error') {
     return (
@@ -196,15 +198,20 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
     )
   }
 
-  const renderDebutMarkers = (props: { x?: number | string; y?: number | string; width?: number | string; index?: number }) => {
+  /** Arriba de cada barra: cuántos jugadores del club jugaron y, si alguno debutó, una estrella encima. */
+  const renderBarTop = (props: { x?: number | string; y?: number | string; width?: number | string; index?: number }) => {
     const row = props.index !== undefined ? rows[props.index] : undefined
-    if (!row || row.debutNames.length === 0) return null
+    if (!row || !row.match.hasData) return null
     const cx = Number(props.x) + Number(props.width) / 2
     const top = Number(props.y)
+    const total = row.startersCount + row.subsCount
     return (
       <g>
+        <text x={cx} y={top - 5} textAnchor="middle" fontSize={10} fontWeight={600} fill={colors.label} style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {total}
+        </text>
         {row.debutNames.map((name, i) => {
-          const cy = top - 13 - i * 21
+          const cy = top - 27 - i * 21
           return (
             <g key={name + i}>
               <circle cx={cx} cy={cy} r={9.5} fill={colors.surface} stroke={colors.debut} strokeWidth={1.5} />
@@ -219,18 +226,16 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
 
   return (
     <div className={cardClass}>
-      <div className="absolute inset-x-0 top-0 h-1 bg-brand-green" />
-
-      <div className="flex items-start justify-between gap-3 mb-4">
+      <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
-          <h3 className="text-base sm:text-lg font-semibold text-apple-gray-800 dark:text-white">{t('coachDetail.homegrownTitulo')}</h3>
-          <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">{subtitle}</p>
+          <h3 className="text-sm font-semibold text-apple-gray-800 dark:text-white">{t('coachDetail.homegrownTitulo')}</h3>
+          <p className="text-2xs text-apple-gray-400 mt-0.5">{subtitle}</p>
         </div>
         <CopyChartButton targetId={chartId} filename={`surgidos-del-club-${coach.key}`} />
       </div>
 
       <div id={chartId} className="space-y-4 bg-white dark:bg-transparent">
-        <p className="text-sm sm:text-base leading-relaxed text-apple-gray-700 dark:text-apple-gray-200">
+        <p className="text-sm leading-relaxed text-apple-gray-700 dark:text-apple-gray-200">
           {t('coachDetail.homegrownResumen')
             .replace('{partidos}', String(summary.matchesWithData))
             .replace('{dt}', coach.fullName)
@@ -295,14 +300,16 @@ export default function CoachHomegrownUsageCard({ coach }: { coach: AgencyCoach 
               <p className="text-2xs font-medium text-apple-gray-500 dark:text-apple-gray-400">{t('coachDetail.homegrownJugadoresPartido')}</p>
               <div className="h-52" onMouseEnter={() => setHoveredChart('count')} onMouseLeave={() => setHoveredChart(null)}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={rows} syncId={chartId} margin={{ top: 14 + maxDebutsInMatch * 21, right: 4, bottom: 0, left: -18 }} barCategoryGap="22%">
+                  <BarChart data={rows} syncId={chartId} margin={{ top: 18 + maxDebutsInMatch * 21, right: 4, bottom: 0, left: 22 }} barCategoryGap="22%">
                     <XAxis dataKey="label" tick={AXIS_TICK} tickLine={false} axisLine={false} interval={0} height={20} />
-                    <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} allowDecimals={false} domain={[0, maxCount]} width={40} />
+                    {/* El número va arriba de cada barra: el eje Y sería redundante. Oculto pero con el mismo
+                        ancho que el del gráfico de minutos, para que las barras de los dos queden alineadas. */}
+                    <YAxis hide allowDecimals={false} domain={[0, maxCount]} />
                     <Tooltip content={renderTooltip('count')} cursor={{ fill: theme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }} />
                     <Bar dataKey="noData" stackId="n" fill={colors.noData} radius={[4, 4, 0, 0]} isAnimationActive={false} />
                     <Bar dataKey="startersCount" stackId="n" fill={colors.starters} stroke={colors.surface} strokeWidth={1} isAnimationActive={false} />
                     <Bar dataKey="subsCount" stackId="n" fill={colors.subs} stroke={colors.surface} strokeWidth={1} radius={[4, 4, 0, 0]} isAnimationActive={false}>
-                      <LabelList dataKey="subsCount" content={renderDebutMarkers} />
+                      <LabelList dataKey="subsCount" content={renderBarTop} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
