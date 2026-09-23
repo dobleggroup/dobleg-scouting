@@ -98,6 +98,32 @@ function DraggableSquadRow({
   )
 }
 
+/** Cómo va quedando el equipo armado: titulares definidos, refuerzos (con su rating
+ *  promedio de Scout Externo) y bajas planificadas. */
+function FutureSquadSummary({ slots, bajasCount }: { slots: FutureSquadSlot[]; bajasCount: number }) {
+  const { t } = useLanguage()
+  const filled = slots.filter(s => s.source !== null).length
+  const altas = slots.filter(s => s.source === 'candidate')
+  const rated = altas.filter(s => s.rating !== null)
+  const avgRating = rated.length ? rated.reduce((sum, s) => sum + (s.rating as number), 0) / rated.length : null
+  const tiles = [
+    { label: t('coachFutureSquad.resumenTitulares'), value: `${filled}/${slots.length}` },
+    { label: t('coachFutureSquad.resumenAltas'), value: String(altas.length), accent: altas.length > 0 },
+    { label: t('coachFutureSquad.resumenBajas'), value: String(bajasCount) },
+    { label: t('coachFutureSquad.resumenRating'), value: avgRating !== null ? avgRating.toFixed(1) : '—' },
+  ]
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+      {tiles.map(tile => (
+        <div key={tile.label} className="bg-white dark:bg-apple-gray-800/60 border border-apple-gray-200/60 dark:border-apple-gray-700/40 rounded-apple-lg px-3 py-3 text-center">
+          <p className={`text-lg sm:text-xl font-bold tabular-nums ${tile.accent ? 'text-brand-green' : 'text-apple-gray-800 dark:text-white'}`}>{tile.value}</p>
+          <p className="text-[10px] font-semibold text-apple-gray-400 uppercase tracking-wide mt-0.5">{tile.label}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function CoachFutureSquadTab({ coach }: { coach: AgencyCoach }) {
   const { t } = useLanguage()
   const [squad, setSquad] = useState<SquadPlayer[]>([])
@@ -335,10 +361,12 @@ export default function CoachFutureSquadTab({ coach }: { coach: AgencyCoach }) {
         </button>
       </div>
 
+      <FutureSquadSummary slots={slots} bajasCount={bajas.length} />
+
       {/* Cancha a la izquierda (ancho fijo, cómoda), plantel + bajas a la derecha usando el
           espacio que sobra en desktop. En mobile se apila: cancha arriba, plantel abajo. */}
       <div className="lg:flex lg:items-start lg:gap-6">
-        <div className="lg:flex-1 lg:max-w-2xl mx-auto">
+        <div className="lg:flex-1 lg:max-w-2xl mx-auto lg:mx-0">
           <FutureSquadPitch
             formationType={formationType}
             slots={slots}
@@ -351,7 +379,7 @@ export default function CoachFutureSquadTab({ coach }: { coach: AgencyCoach }) {
           />
         </div>
 
-        <div className="mt-4 lg:mt-0 lg:w-80 lg:flex-shrink-0 space-y-4">
+        <div className="mt-4 lg:mt-0 lg:flex-1 lg:min-w-[20rem] space-y-4">
           <div className="bg-white dark:bg-apple-gray-800/60 rounded-apple-lg border border-apple-gray-200/60 dark:border-apple-gray-700/40 p-3 max-h-[28rem] overflow-y-auto">
             <h3 className="text-sm font-semibold text-apple-gray-800 dark:text-white px-1.5 mb-2">{t('coachFutureSquad.plantel')}</h3>
             {rosterGroups.length === 0 ? (

@@ -135,10 +135,7 @@ function ContractBadge({ iso }: { iso: string }) {
 function HomegrownBadge() {
   const { t } = useLanguage()
   return (
-    <span className="inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap border border-brand-green/40 text-brand-green">
-      <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-        <path d="M10 1.8l2.47 5.01 5.53.8-4 3.9.94 5.5L10 14.4l-4.94 2.6.94-5.5-4-3.9 5.53-.8L10 1.8z" />
-      </svg>
+    <span className="inline-flex items-center text-2xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap bg-brand-green/10 text-brand-green">
       {t('teamRoster.surgidoClub')}
     </span>
   )

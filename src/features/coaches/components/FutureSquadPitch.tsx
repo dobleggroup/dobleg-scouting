@@ -148,14 +148,12 @@ export default function FutureSquadPitch({
               )}
             </div>
 
-            {occupied && !isCandidate && (
-              <p className="mt-1 text-center whitespace-nowrap text-2xs font-semibold text-white/90">
+            {occupied && (
+              <p className="mt-1 flex items-center justify-center gap-1 whitespace-nowrap text-2xs font-semibold text-white/90">
                 {slot!.playerName!.split(' ').slice(-1)[0]}
-              </p>
-            )}
-            {occupied && isCandidate && slot!.rating !== null && (
-              <p className="mt-1 text-center whitespace-nowrap text-2xs font-bold text-sky-200">
-                {slot!.rating!.toFixed(1)}
+                {isCandidate && slot!.rating !== null && (
+                  <span className="px-1 rounded bg-sky-500/90 text-white text-[10px] font-bold tabular-nums">{slot!.rating!.toFixed(1)}</span>
+                )}
               </p>
             )}
           </div>

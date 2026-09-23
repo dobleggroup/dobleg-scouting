@@ -17,6 +17,30 @@ import { useLanguage } from '@/context/LanguageContext'
 
 type PickerTab = 'plantel' | 'sugeridos' | 'buscar'
 
+/** Grupo genérico de API-Football (lo único que trae el plantel crudo) que sirve para cada
+ *  una de nuestras posiciones: ordena primero a los que pueden jugar en el puesto elegido. */
+const API_GROUPS_FOR_POSITION: Record<Position, string[]> = {
+  ARQ: ['Goalkeeper'],
+  LD: ['Defender'], CB: ['Defender'], LI: ['Defender'],
+  VC: ['Midfielder'], VI: ['Midfielder'],
+  EXT: ['Midfielder', 'Attacker'], DEL: ['Attacker'],
+}
+
+const POSITION_LABEL: Record<Position, string> = {
+  ARQ: 'teamRoster.posArquero', LD: 'teamRoster.posLateralDerecho', CB: 'teamRoster.posDefensorCentral',
+  LI: 'teamRoster.posLateralIzquierdo', VC: 'teamRoster.posVolanteCentral', VI: 'teamRoster.posVolanteInterno',
+  EXT: 'teamRoster.posExtremo', DEL: 'teamRoster.posDelantero',
+}
+
+function ageFrom(birthDate: string | null): number | null {
+  if (!birthDate) return null
+  const b = new Date(birthDate)
+  const now = new Date()
+  let age = now.getFullYear() - b.getFullYear()
+  if (now < new Date(now.getFullYear(), b.getMonth(), b.getDate())) age -= 1
+  return age
+}
+
 export default function FutureSquadPlayerPicker({
   slotKey,
   formationType,
@@ -46,9 +70,17 @@ export default function FutureSquadPlayerPicker({
   const [searchQuery, setSearchQuery] = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
   const [suggestedLeagueId, setSuggestedLeagueId] = useState<number | null>(null)
+  const [leagueTouched, setLeagueTouched] = useState(false)
   const [suggestedMaxValue, setSuggestedMaxValue] = useState<number | null>(null)
   const [suggestedCountry, setSuggestedCountry] = useState<string | null>(null)
   const leagues = useLeagues()
+  // Sugeridos arranca en la primera división argentina: con "todas las ligas" el ranking
+  // global propone a figuras de Europa, que no sirven para armar un plantel de acá.
+  useEffect(() => {
+    if (leagueTouched || suggestedLeagueId !== null || leagues.length === 0) return
+    const argentina = leagues.filter(l => l.country === 'Argentina').sort((a, b) => a.tier - b.tier)[0]
+    if (argentina) setSuggestedLeagueId(argentina.id)
+  }, [leagues, leagueTouched, suggestedLeagueId])
 
   const displayName =
     FORMATION_DISPLAY_OVERRIDES[formationType]?.[slotKey] ?? POSITION_DISPLAY_NAME[slotKey] ?? slotKey
@@ -60,11 +92,16 @@ export default function FutureSquadPlayerPicker({
   // occupying another slot ARE shown (so picking one moves them here instead of hiding them),
   // but sorted after the still-unplaced ones and flagged via usedSquadIds for the "ya en la
   // cancha" badge below.
+  const fittingGroups = useMemo(
+    () => new Set(allowedPositions.flatMap(pos => API_GROUPS_FOR_POSITION[pos] ?? [])),
+    [allowedPositions],
+  )
   const availableSquad = useMemo(() => {
-    const unplaced = squad.filter(p => !bajaPlayerIds.has(p.id) && !usedSquadIds.has(p.id))
-    const placed = squad.filter(p => !bajaPlayerIds.has(p.id) && usedSquadIds.has(p.id))
-    return [...unplaced, ...placed]
-  }, [squad, usedSquadIds, bajaPlayerIds])
+    // Orden: los que sirven para el puesto y están libres, los que sirven pero ya están en
+    // la cancha, y después el resto -- así "Delantero" no arranca mostrando al arquero.
+    const rank = (p: SquadPlayer) => (fittingGroups.has(p.position ?? '') ? 0 : 2) + (usedSquadIds.has(p.id) ? 1 : 0)
+    return squad.filter(p => !bajaPlayerIds.has(p.id)).sort((a, b) => rank(a) - rank(b))
+  }, [squad, usedSquadIds, bajaPlayerIds, fittingGroups])
 
   // Rating del plantel actual -- consulta acotada por equipo, no bloquea el render de la
   // pestaña "Plantel" (arranca vacia, se completa cuando llega la respuesta).
@@ -115,32 +152,58 @@ export default function FutureSquadPlayerPicker({
 
   function renderCandidateCard(p: PlayerWithScore) {
     const score = p.primary_score
+    const age = ageFrom(p.birth_date)
+    const details = [
+      p.primary_position ? t(POSITION_LABEL[p.primary_position]) : null,
+      age != null ? `${age} ${t('externo.anios')}` : null,
+      p.market_value_eur ? formatMarketValueInCurrency(p.market_value_eur, currency, rate) : null,
+    ].filter(Boolean)
     return (
-      <button
-        key={p.id}
-        type="button"
-        onClick={() => onSelectCandidate(p)}
-        className="w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700 border border-apple-gray-100 dark:border-apple-gray-700 hover:border-brand-green/50"
-      >
-        {p.photo ? (
-          <img src={p.photo} alt="" className="w-10 h-10 rounded-lg object-cover bg-apple-gray-200" />
-        ) : (
-          <div className="w-10 h-10 rounded-lg bg-apple-gray-200 dark:bg-apple-gray-600 flex items-center justify-center text-sm font-bold text-apple-gray-500">
-            {p.name.split(' ').map(w => w[0]).slice(0, 2).join('')}
-          </div>
-        )}
-        <div className="flex-1 min-w-0">
-          <p className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">{p.name}</p>
-          <p className="text-xs text-apple-gray-500 truncate">{p.team?.name ?? '—'}</p>
-        </div>
-        <div className="text-right flex-shrink-0">
-          {score !== null ? (
-            <p className={`text-sm font-bold ${getScoreColorClass(score, '10')}`}>{score.toFixed(1)}</p>
+      <div key={p.id} className="flex items-stretch rounded-xl border border-apple-gray-100 dark:border-apple-gray-700 hover:border-brand-green/50 transition-colors">
+        <button
+          type="button"
+          onClick={() => onSelectCandidate(p)}
+          className="flex-1 min-w-0 flex items-center gap-3 p-3 rounded-l-xl text-left hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700/60 transition-colors"
+        >
+          {p.photo ? (
+            <img src={p.photo} alt="" className="w-10 h-10 rounded-lg object-cover bg-apple-gray-200 flex-shrink-0" />
           ) : (
-            <p className="text-sm font-bold text-apple-gray-400">—</p>
+            <div className="w-10 h-10 rounded-lg bg-apple-gray-200 dark:bg-apple-gray-600 flex items-center justify-center text-sm font-bold text-apple-gray-500 flex-shrink-0">
+              {p.name.split(' ').map(w => w[0]).slice(0, 2).join('')}
+            </div>
           )}
-        </div>
-      </button>
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-apple-gray-800 dark:text-white text-sm truncate">{p.name}</p>
+            <p className="text-xs text-apple-gray-500 truncate flex items-center gap-1">
+              {p.team?.logo && <img src={p.team.logo} alt="" className="w-3.5 h-3.5 object-contain flex-shrink-0" />}
+              {p.team?.name ?? '—'}
+            </p>
+            {details.length > 0 && <p className="text-2xs text-apple-gray-400 truncate">{details.join(' · ')}</p>}
+          </div>
+          <div className="text-right flex-shrink-0">
+            {score !== null ? (
+              <>
+                <p className={`text-base font-bold tabular-nums ${getScoreColorClass(score, '10')}`}>{score.toFixed(1)}</p>
+                <p className="text-[10px] text-apple-gray-400">{t('futureSquadPicker.rating')}</p>
+              </>
+            ) : (
+              <p className="text-sm font-bold text-apple-gray-400">—</p>
+            )}
+          </div>
+        </button>
+        <a
+          href={`/jugador/${encodeURIComponent(p.name)}?source=externo&apiId=${p.id}`}
+          target="_blank"
+          rel="noreferrer"
+          title={t('futureSquadPicker.verFicha')}
+          aria-label={`${t('futureSquadPicker.verFicha')}: ${p.name}`}
+          className="flex items-center px-3 rounded-r-xl text-apple-gray-400 hover:text-brand-green hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700/60 transition-colors border-l border-apple-gray-100 dark:border-apple-gray-700"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
+        </a>
+      </div>
     )
   }
 
@@ -182,12 +245,17 @@ export default function FutureSquadPlayerPicker({
               <p className="text-center text-apple-gray-500 py-8 text-sm">{t('futureSquadPicker.sinPlantel')}</p>
             ) : (
               <div className="space-y-2">
-                {availableSquad.map(p => {
+                {availableSquad.map((p, i) => {
                   const isPlacedElsewhere = usedSquadIds.has(p.id)
+                  const fits = fittingGroups.has(p.position ?? '')
+                  const firstNonFitting = !fits && (i === 0 || fittingGroups.has(availableSquad[i - 1].position ?? ''))
                   const score = squadScoreById.get(p.id)
                   return (
+                    <div key={p.id}>
+                    {firstNonFitting && fittingGroups.size > 0 && (
+                      <p className="text-2xs font-semibold uppercase tracking-wide text-apple-gray-400 pt-2 pb-1 px-1">{t('futureSquadPicker.otrasPosiciones')}</p>
+                    )}
                     <button
-                      key={p.id}
                       type="button"
                       onClick={() => onSelectSquad(p)}
                       className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left border hover:border-brand-green/50 ${
@@ -225,6 +293,7 @@ export default function FutureSquadPlayerPicker({
                         )}
                       </div>
                     </button>
+                    </div>
                   )
                 })}
               </div>
@@ -234,7 +303,10 @@ export default function FutureSquadPlayerPicker({
               <div className="flex flex-wrap gap-2 mb-3">
                 <select
                   value={suggestedLeagueId ?? ''}
-                  onChange={e => setSuggestedLeagueId(e.target.value ? Number(e.target.value) : null)}
+                  onChange={e => {
+                    setLeagueTouched(true)
+                    setSuggestedLeagueId(e.target.value ? Number(e.target.value) : null)
+                  }}
                   className="min-h-[32px] rounded-lg border border-apple-gray-200 dark:border-apple-gray-700 bg-white dark:bg-apple-gray-900 px-2 text-2xs text-apple-gray-700 dark:text-apple-gray-300"
                 >
                   <option value="">{t('futureSquadPicker.todasLasLigas')}</option>
