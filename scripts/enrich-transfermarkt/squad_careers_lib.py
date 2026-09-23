@@ -84,7 +84,11 @@ def _label_value(page_html, label):
 def parse_profile_html(page_html):
     m = re.search(r'itemprop="nationality"(.*?)</span>', page_html, re.S)
     nationalities = re.findall(r'title="([^"]+)"', m.group(1)) if m else []
+    # El agente es un link a su agencia: /<slug>/beraterfirma/berater/<id>">Nombre
+    agent = re.search(r'/beraterfirma/berater/(\d+)"[^>]*>\s*([^<]+?)\s*<', page_html)
     return {
+        "agent": unescape(agent.group(2)) if agent else None,
+        "agent_tm_id": int(agent.group(1)) if agent else None,
         "nationality": " / ".join(unescape(n) for n in nationalities) or None,
         "position": _label_value(page_html, "Posición:"),
         "foot": _label_value(page_html, "Pie:"),

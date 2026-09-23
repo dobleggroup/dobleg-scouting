@@ -136,6 +136,7 @@ def enrich(entry, api_players, api_aliases):
         "position": profile_html["position"], "birth_date": (profile.get("lifeDates") or {}).get("dateOfBirth"),
         "nationality": profile_html["nationality"], "height_cm": round(height * 100) if height else None,
         "foot": profile_html["foot"], "photo_url": profile.get("portraitUrl"),
+        "agent": profile_html["agent"], "agent_tm_id": profile_html["agent_tm_id"],
         "market_value_eur": mv, "contract_until": profile_html["contract_until"],
         "joined_at": profile_html["joined_at"],
         "joined_from": transfers[-1]["from_name"] if transfers else None,

@@ -43,6 +43,13 @@ class ParseProfile(unittest.TestCase):
         self.assertEqual(p["foot"], "Izquierdo")
         self.assertEqual(p["joined_at"], "2023-01-01")
         self.assertEqual(p["contract_until"], "2026-12-31")
+        self.assertIsNone(p["agent"])
+        self.assertIsNone(p["agent_tm_id"])
+
+    def test_agente_tomasetti(self):
+        p = lib.parse_profile_html(read("tomasetti_profile.html"))
+        self.assertEqual(p["agent"], "Score Futbol")
+        self.assertEqual(p["agent_tm_id"], 1705)
 
 
 RAW_HISTORY = {"history": {"terminated": [
