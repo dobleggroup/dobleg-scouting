@@ -1,0 +1,464 @@
+[
+ {
+  "time": {
+   "elapsed": 3,
+   "extra": null
+  },
+  "team": {
+   "id": 454,
+   "name": "Temperley",
+   "logo": "https://media.api-sports.io/football/teams/454.png"
+  },
+  "player": {
+   "id": 58439,
+   "name": "B. Negro"
+  },
+  "assist": {
+   "id": null,
+   "name": null
+  },
+  "type": "Goal",
+  "detail": "Own Goal",
+  "comments": null
+ },
+ {
+  "time": {
+   "elapsed": 6,
+   "extra": null
+  },
+  "team": {
+   "id": 482,
+   "name": "Almagro",
+   "logo": "https://media.api-sports.io/football/teams/482.png"
+  },
+  "player": {
+   "id": 356278,
+   "name": "F. De La Vega"
+  },
+  "assist": {
+   "id": 37464,
+   "name": "J. Marchioni"
+  },
+  "type": "Goal",
+  "detail": "Normal Goal",
+  "comments": null
+ },
+ {
+  "time": {
+   "elapsed": 9,
+   "extra": null
+  },
+  "team": {
+   "id": 454,
+   "name": "Temperley",
+   "logo": "https://media.api-sports.io/football/teams/454.png"
+  },
+  "player": {
+   "id": 6586,
+   "name": "G. Tomasetti"
+  },
+  "assist": {
+   "id": 6544,
+   "name": "F. Brandan"
+  },
+  "type": "subst",
+  "detail": "Substitution 1",
+  "comments": null
+ },
+ {
+  "time": {
+   "elapsed": 19,
+   "extra": null
+  },
+  "team": {
+   "id": 454,
+   "name": "Temperley",
+   "logo": "https://media.api-sports.io/football/teams/454.png"
+  },
+  "player": {
+   "id": 651816,
+   "name": "M. Calzon"
+  },
+  "assist": {
+   "id": null,
+   "name": null
+  },
+  "type": "Card",
+  "detail": "Yellow Card",
+  "comments": null
+ },
+ {
+  "time": {
+   "elapsed": 29,
+   "extra": null
+  },
+  "team": {
+   "id": 454,
+   "name": "Temperley",
+   "logo": "https://media.api-sports.io/football/teams/454.png"
+  },
+  "player": {
+   "id": 6672,
+   "name": "A. Arregui"
+  },
+  "assist": {
+   "id": 647644,
+   "name": "N. Avalos"
+  },
+  "type": "subst",
+  "detail": "Substitution 2",
+  "comments": null
+ },
+ {
+  "time": {
+   "elapsed": 39,
+   "extra": null
+  },
+  "team": {
+   "id": 482,
+   "name": "Almagro",
+   "logo": "https://media.api-sports.io/football/teams/482.png"
+  },
+  "player": {
+   "id": 651360,
+   "name": "J. Flores"
+  },
+  "assist": {
+   "id": null,
+   "name": null
+  },
+  "type": "Card",
+  "detail": "Yellow Card",
+  "comments": null
+ },
+ {
+  "time": {
+   "elapsed": 42,
+   "extra": null
+  },
+  "team": {
+   "id": 454,
+   "name": "Temperley",
+   "logo": "https://media.api-sports.io/football/teams/454.png"
+  },
+  "player": {
+   "id": 647644,
+   "name": "N. Avalos"
+  },
+  "assist": {
+   "id": null,
+   "name": null
+  },
+  "type": "Card",
+  "detail": "Yellow Card",
+  "comments": null
+ },
+ {
+  "time": {
+   "elapsed": 43,
+   "extra": null
+  },
+  "team": {
+   "id": 454,
+   "name": "Temperley",
+   "logo": "https://media.api-sports.io/football/teams/454.png"
+  },
+  "player": {
+   "id": 6730,
+   "name": "G. Hauche"
+  },
+  "assist": {
+   "id": null,
+   "name": null
+  },
+  "type": "Card",
+  "detail": "Yellow Card",
+  "comments": null
+ },
+ {
+  "time": {
+   "elapsed": 45,
+   "extra": null
+  },
+  "team": {
+   "id": 454,
+   "name": "Temperley",
+   "logo": "https://media.api-sports.io/football/teams/454.png"
+  },
+  "player": {
+   "id": 6544,
+   "name": "F. Brandan"
+  },
+  "assist": {
+   "id": null,
+   "name": null
+  },
+  "type": "Card",
+  "detail": "Yellow Card",
+  "comments": null
+ },
+ {
+  "time": {
+   "elapsed": 56,
+   "extra": null
+  },
+  "team": {
+   "id": 454,
+   "name": "Temperley",
+   "logo": "https://media.api-sports.io/football/teams/454.png"
+  },
+  "player": {
+   "id": 195758,
+   "name": "F. Kruger"
+  },
+  "assist": {
+   "id": null,
+   "name": null
+  },
+  "type": "Goal",
+  "detail": "Normal Goal",
+  "comments": null
+ },
+ {
+  "time": {
+   "elapsed": 59,
+   "extra": null
+  },
+  "team": {
+   "id": 482,
+   "name": "Almagro",
+   "logo": "https://media.api-sports.io/football/teams/482.png"
+  },
+  "player": {
+   "id": 75912,
+   "name": "E. Martinez"
+  },
+  "assist": {
+   "id": null,
+   "name": null
+  },
+  "type": "Card",
+  "detail": "Yellow Card",
+  "comments": null
+ },
+ {
+  "time": {
+   "elapsed": 65,
+   "extra": null
+  },
+  "team": {
+   "id": 454,
+   "name": "Temperley",
+   "logo": "https://media.api-sports.io/football/teams/454.png"
+  },
+  "player": {
+   "id": 195758,
+   "name": "F. Kruger"
+  },
+  "assist": {
+   "id": 6544,
+   "name": "F. Brandan"
+  },
+  "type": "Goal",
+  "detail": "Normal Goal",
+  "comments": null
+ },
+ {
+  "time": {
+   "elapsed": 67,
+   "extra": null
+  },
+  "team": {
+   "id": 482,
+   "name": "Almagro",
+   "logo": "https://media.api-sports.io/football/teams/482.png"
+  },
+  "player": {
+   "id": 651360,
+   "name": "J. Flores"
+  },
+  "assist": {
+   "id": 6076,
+   "name": "G. Asis"
+  },
+  "type": "subst",
+  "detail": "Substitution 1",
+  "comments": null
+ },
+ {
+  "time": {
+   "elapsed": 67,
+   "extra": null
+  },
+  "team": {
+   "id": 482,
+   "name": "Almagro",
+   "logo": "https://media.api-sports.io/football/teams/482.png"
+  },
+  "player": {
+   "id": 75912,
+   "name": "E. Martinez"
+  },
+  "assist": {
+   "id": 567492,
+   "name": "J. Bustos"
+  },
+  "type": "subst",
+  "detail": "Substitution 2",
+  "comments": null
+ },
+ {
+  "time": {
+   "elapsed": 67,
+   "extra": null
+  },
+  "team": {
+   "id": 482,
+   "name": "Almagro",
+   "logo": "https://media.api-sports.io/football/teams/482.png"
+  },
+  "player": {
+   "id": 422232,
+   "name": "J. Orlando"
+  },
+  "assist": {
+   "id": 405995,
+   "name": "T. Dornell"
+  },
+  "type": "subst",
+  "detail": "Substitution 3",
+  "comments": null
+ },
+ {
+  "time": {
+   "elapsed": 72,
+   "extra": null
+  },
+  "team": {
+   "id": 454,
+   "name": "Temperley",
+   "logo": "https://media.api-sports.io/football/teams/454.png"
+  },
+  "player": {
+   "id": 325045,
+   "name": "F. Benitez"
+  },
+  "assist": {
+   "id": 73824,
+   "name": "D. Trebotic"
+  },
+  "type": "subst",
+  "detail": "Substitution 3",
+  "comments": null
+ },
+ {
+  "time": {
+   "elapsed": 72,
+   "extra": null
+  },
+  "team": {
+   "id": 454,
+   "name": "Temperley",
+   "logo": "https://media.api-sports.io/football/teams/454.png"
+  },
+  "player": {
+   "id": 6730,
+   "name": "G. Hauche"
+  },
+  "assist": {
+   "id": 5243,
+   "name": "A. Melo"
+  },
+  "type": "subst",
+  "detail": "Substitution 4",
+  "comments": null
+ },
+ {
+  "time": {
+   "elapsed": 72,
+   "extra": null
+  },
+  "team": {
+   "id": 454,
+   "name": "Temperley",
+   "logo": "https://media.api-sports.io/football/teams/454.png"
+  },
+  "player": {
+   "id": 195758,
+   "name": "F. Kruger"
+  },
+  "assist": {
+   "id": 65972,
+   "name": "L. Nieto"
+  },
+  "type": "subst",
+  "detail": "Substitution 5",
+  "comments": null
+ },
+ {
+  "time": {
+   "elapsed": 80,
+   "extra": null
+  },
+  "team": {
+   "id": 482,
+   "name": "Almagro",
+   "logo": "https://media.api-sports.io/football/teams/482.png"
+  },
+  "player": {
+   "id": 37464,
+   "name": "J. Marchioni"
+  },
+  "assist": {
+   "id": 642899,
+   "name": "J. Fernandes"
+  },
+  "type": "subst",
+  "detail": "Substitution 4",
+  "comments": null
+ },
+ {
+  "time": {
+   "elapsed": 80,
+   "extra": null
+  },
+  "team": {
+   "id": 482,
+   "name": "Almagro",
+   "logo": "https://media.api-sports.io/football/teams/482.png"
+  },
+  "player": {
+   "id": 356278,
+   "name": "F. De La Vega"
+  },
+  "assist": {
+   "id": 96656,
+   "name": "C. Salto"
+  },
+  "type": "subst",
+  "detail": "Substitution 5",
+  "comments": null
+ },
+ {
+  "time": {
+   "elapsed": 82,
+   "extra": null
+  },
+  "team": {
+   "id": 482,
+   "name": "Almagro",
+   "logo": "https://media.api-sports.io/football/teams/482.png"
+  },
+  "player": {
+   "id": 393202,
+   "name": "S. Chamorro"
+  },
+  "assist": {
+   "id": null,
+   "name": null
+  },
+  "type": "Card",
+  "detail": "Yellow Card",
+  "comments": null
+ }
+]
