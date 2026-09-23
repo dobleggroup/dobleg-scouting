@@ -11,4 +11,6 @@ export interface AgencyCoach {
   leagueSeason?: number | null
   coachApiId?: number | null
   relationship: 'propio' | 'intermediado'
+  /** Fecha (YYYY-MM-DD) en que el DT asumió en su club actual. Null = usar la de API-Football. */
+  tenureStart?: string | null
 }

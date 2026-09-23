@@ -14,6 +14,7 @@ interface AgencyCoachRow {
   league_season: number | null
   coach_api_id: number | null
   relationship: 'propio' | 'intermediado'
+  tenure_start?: string | null
 }
 
 function mapRow(row: AgencyCoachRow): AgencyCoach {
@@ -30,6 +31,7 @@ function mapRow(row: AgencyCoachRow): AgencyCoach {
     leagueSeason: row.league_season,
     coachApiId: row.coach_api_id,
     relationship: row.relationship,
+    tenureStart: row.tenure_start ?? null,
   }
 }
 
