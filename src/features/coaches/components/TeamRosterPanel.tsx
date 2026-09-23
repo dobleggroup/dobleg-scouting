@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { fetchSquadCached, type SquadPlayer } from '@/services/footballApiService'
 import { fetchSquadMinutes, fetchExistingPlayerIds, fetchSquadProfiles, type SquadPlayerProfile } from '@/services/coachService'
+import { listSquadCareers, type SquadCareer } from '@/services/squadCareersService'
 import { useData, identityKey } from '@/context/DataContext'
 import { makeAgencyMatcher } from '@/utils/agencyFilter'
 import { normalizeName } from '@/utils/scoring'
@@ -38,6 +39,12 @@ function formatContractBadge(contractEndDate: string, t: (key: string) => string
   return { label, colorClass }
 }
 
+/** "275 mil €" / "1,2 M€": como lo muestra Transfermarkt en castellano. */
+function formatMarketValue(eur: number): string {
+  if (eur >= 1_000_000) return `${(eur / 1_000_000).toLocaleString('es-AR', { maximumFractionDigits: 1 })} M€`
+  return `${Math.round(eur / 1000)} mil €`
+}
+
 function EmptyState({ message }: { message: string }) {
   return (
     <div className="flex items-center justify-center py-16 px-4 text-center">
@@ -67,6 +74,7 @@ function RosterPlayerRow({
   player,
   stats,
   profile,
+  career,
   link,
   creating,
   onCreateClick,
@@ -74,6 +82,8 @@ function RosterPlayerRow({
   player: SquadPlayer
   stats?: { minutes: number; matches: number }
   profile?: SquadPlayerProfile
+  /** Carrera enriquecida desde Transfermarkt (club_squad_careers): completa lo que falta en `players`. */
+  career?: SquadCareer
   link: PlayerLink
   creating: boolean
   onCreateClick: () => void
@@ -84,8 +94,19 @@ function RosterPlayerRow({
     : player.position
       ? POSITION_LABEL_KEY[player.position]
       : null
-  const positionLabel = positionLabelKey ? t(positionLabelKey) : (profile?.primary_position ?? player.position ?? null)
-  const contractBadge = profile?.contract_end_date ? formatContractBadge(profile.contract_end_date, t) : null
+  const positionLabel = profile?.primary_position
+    ? (positionLabelKey ? t(positionLabelKey) : profile.primary_position)
+    : career?.position ?? (positionLabelKey ? t(positionLabelKey) : player.position ?? null)
+  const contractEnd = profile?.contract_end_date ?? career?.contractUntil ?? null
+  const contractBadge = contractEnd ? formatContractBadge(contractEnd, t) : null
+  const agent = profile?.agent ?? career?.agent ?? null
+  const marketValue = profile?.market_value_eur ?? career?.marketValueEur ?? null
+  const details = [
+    agent ? t('teamRoster.agente').replace('{name}', agent) : null,
+    marketValue ? formatMarketValue(marketValue) : null,
+    career?.heightCm ? `${(career.heightCm / 100).toLocaleString('es-AR', { minimumFractionDigits: 2 })} m` : null,
+    career?.foot ? t('teamRoster.pie').replace('{pie}', career.foot.toLowerCase()) : null,
+  ].filter(Boolean)
 
   const content = (
     <>
@@ -109,13 +130,17 @@ function RosterPlayerRow({
           {positionLabel ?? '—'}
           {player.number != null && ` · #${player.number}`}
           {player.age != null && ` · ${player.age} ${t('externo.anios')}`}
+          {career?.nationality && ` · ${career.nationality}`}
         </p>
-        {profile?.agent && (
-          <p className="text-2xs text-apple-gray-400 truncate hidden sm:block">
-            {t('teamRoster.agente').replace('{name}', profile.agent)}
-          </p>
+        {details.length > 0 && (
+          <p className="text-2xs text-apple-gray-400 truncate hidden sm:block">{details.join(' · ')}</p>
         )}
       </div>
+      {career?.homegrown && (
+        <span className="hidden sm:inline-flex flex-shrink-0 text-2xs font-semibold px-2 py-1 rounded-full whitespace-nowrap border border-brand-green/40 text-brand-green">
+          {t('teamRoster.surgidoClub')}
+        </span>
+      )}
       {contractBadge && (
         <span className={`hidden md:inline-flex flex-shrink-0 text-2xs font-medium px-2 py-1 rounded-full whitespace-nowrap ${contractBadge.colorClass}`}>
           {contractBadge.label}
@@ -184,6 +209,7 @@ export default function TeamRosterPanel({ teamId, teamName }: { teamId: number; 
   const [profiles, setProfiles] = useState<Record<number, SquadPlayerProfile>>({})
   const [existingPlayerIds, setExistingPlayerIds] = useState<Set<number>>(new Set())
   const [creatingId, setCreatingId] = useState<number | null>(null)
+  const [careers, setCareers] = useState<Map<number, SquadCareer>>(new Map())
   const { internal, external, agencyPlayers, createManualPlayerAndRefresh, loading } = useData()
   const navigate = useNavigate()
 
@@ -193,6 +219,16 @@ export default function TeamRosterPanel({ teamId, teamName }: { teamId: number; 
     setMinutes({})
     setProfiles({})
     setExistingPlayerIds(new Set())
+    setCareers(new Map())
+    listSquadCareers(teamId).then(list => {
+      if (!active || !list) return
+      // Por id de API-Football, incluidos los alias (misma persona con otro id).
+      const byId = new Map<number, SquadCareer>()
+      for (const c of list) {
+        for (const id of [c.apiPlayerId, ...c.apiPlayerAliasIds]) if (id !== null) byId.set(id, c)
+      }
+      setCareers(byId)
+    })
     fetchSquadCached(teamId).then(async players => {
       if (!active) return
       setSquad(players)
@@ -282,6 +318,7 @@ export default function TeamRosterPanel({ teamId, teamName }: { teamId: number; 
                 player={player}
                 stats={minutes[player.id]}
                 profile={profiles[player.id]}
+                career={careers.get(player.id)}
                 link={resolveLink(player)}
                 creating={creatingId === player.id}
                 onCreateClick={() => void handleCreate(player)}
