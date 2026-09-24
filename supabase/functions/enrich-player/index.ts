@@ -311,45 +311,82 @@ async function enrichSingle(supabase: ReturnType<typeof getSupabaseAdmin>, playe
   return { status: 'enriched', player: player.name, fields: Object.keys(patch) };
 }
 
+// Tanda de refresco de Transfermarkt. Antes recorría los ~14.000 jugadores de una en una
+// sola llamada: el servidor la cortaba a los pocos minutos y casi nadie se actualizaba (los
+// de la agencia quedaban con valores de meses atrás). Ahora cada llamada procesa lo que
+// entra en TIME_BUDGET_MS, primero la agencia (una vez por día) y después el resto por
+// orden de antigüedad, así que el cron horario va rotando por todos. Un id de Transfermarkt
+// se consulta una sola vez y el dato se escribe en TODAS sus filas (API-Football, Sofascore,
+// agencia): antes cada fila tenía un valor distinto para la misma persona.
+const TIME_BUDGET_MS = 100_000;
+const AGENCY_REFRESH_HOURS = 20;
+
 async function refreshAll(supabase: ReturnType<typeof getSupabaseAdmin>) {
-  const { data: players } = await supabase
-    .from('players')
-    .select('id, name, transfermarkt_id, current_team_id')
-    .not('transfermarkt_id', 'is', null);
-
-  if (!players || players.length === 0) return { status: 'no_players' };
-
-  const results = { updated: 0, errors: 0, history_inserted: 0 };
+  const startedAt = Date.now();
+  const results = { tm_ids: 0, rows_updated: 0, errors: 0, history_inserted: 0, agency_pending: 0 };
   const today = new Date().toISOString().split('T')[0];
+  const agencyCutoff = new Date(Date.now() - AGENCY_REFRESH_HOURS * 3600_000).toISOString();
 
-  for (const player of players) {
+  // 1) Agencia: por agente o por la lista fija de ids, si no se refrescó en las últimas horas.
+  const { data: agencyRows } = await supabase
+    .from('players')
+    .select('transfermarkt_id, tm_refreshed_at')
+    .not('transfermarkt_id', 'is', null)
+    .or(`agent.eq.Doble G Sports Group,transfermarkt_id.in.(${[...DG_TM_IDS].join(',')})`);
+  // 2) Resto: los más viejos primero (sobra margen: la tanda corta por tiempo).
+  const { data: staleRows } = await supabase
+    .from('players')
+    .select('transfermarkt_id')
+    .not('transfermarkt_id', 'is', null)
+    .order('tm_refreshed_at', { ascending: true, nullsFirst: true })
+    .limit(1000);
+
+  // Un id está pendiente si CUALQUIERA de sus filas no se refrescó en las últimas horas.
+  const agencyIds = new Set(
+    (agencyRows ?? [])
+      .filter((r: any) => !r.tm_refreshed_at || r.tm_refreshed_at < agencyCutoff)
+      .map((r: any) => r.transfermarkt_id as number),
+  );
+  const queue = [...new Set([
+    ...agencyIds,
+    ...(staleRows ?? []).map((r: any) => r.transfermarkt_id as number),
+  ])];
+
+  const visited = new Set<number>();
+  for (const tmId of queue) {
+    if (Date.now() - startedAt > TIME_BUDGET_MS) break;
+    visited.add(tmId);
     try {
-      const profile = await tmProfile(player.transfermarkt_id);
-      if (!profile) { results.errors++; continue; }
-
-      const mv = extractMarketValue(profile);
-      const contractEnd = extractContractEnd(profile);
-      const agent = extractAgent(profile);
-
-      const patch: Record<string, any> = {};
-      if (mv !== null) patch.market_value_eur = mv;
-      if (contractEnd) patch.contract_end_date = contractEnd;
-      if (agent) patch.agent = agent;
-
-      if (Object.keys(patch).length > 0) {
-        await supabase.from('players').update(patch).eq('id', player.id);
-        results.updated++;
+      const profile = await tmProfile(tmId);
+      const patch: Record<string, any> = { tm_refreshed_at: new Date().toISOString() };
+      let mv: number | null = null;
+      if (profile) {
+        mv = extractMarketValue(profile);
+        const contractEnd = extractContractEnd(profile);
+        const agent = extractAgent(profile);
+        if (mv !== null) patch.market_value_eur = mv;
+        if (contractEnd) patch.contract_end_date = contractEnd;
+        if (agent) patch.agent = agent;
+      } else {
+        results.errors++; // se marca igual como visitado para no trabar la rotación
       }
 
-      if (mv !== null && DG_TM_IDS.has(player.transfermarkt_id)) {
+      const { data: updated } = await supabase
+        .from('players').update(patch).eq('transfermarkt_id', tmId).select('id, current_team_id');
+      results.tm_ids++;
+      results.rows_updated += updated?.length ?? 0;
+
+      if (mv !== null && agencyIds.has(tmId) && updated && updated.length > 0) {
+        // Historial: una sola fila por jugador (la primera), como antes.
+        const row = updated[0];
         let clubName: string | null = null;
-        if (player.current_team_id) {
+        if (row.current_team_id) {
           const { data: team } = await supabase
-            .from('teams').select('name').eq('id', player.current_team_id).single();
+            .from('teams').select('name').eq('id', row.current_team_id).single();
           clubName = team?.name ?? null;
         }
         await supabase.from('market_value_history').upsert({
-          player_id: player.id,
+          player_id: row.id,
           recorded_at: today,
           value_eur: mv,
           club_name: clubName,
@@ -357,11 +394,19 @@ async function refreshAll(supabase: ReturnType<typeof getSupabaseAdmin>) {
         results.history_inserted++;
       }
 
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 300));
     } catch {
       results.errors++;
     }
   }
+  results.agency_pending = [...agencyIds].filter(id => !visited.has(id)).length;
+
+  await supabase.from('sync_log').insert({
+    function_name: 'refresh-transfermarkt',
+    status: results.errors > results.tm_ids / 2 ? 'error' : 'success',
+    error_message: results.errors > 0 ? `${results.errors} perfiles sin respuesta` : null,
+    fixtures_processed: results.tm_ids,
+  });
 
   return { status: 'done', ...results };
 }
