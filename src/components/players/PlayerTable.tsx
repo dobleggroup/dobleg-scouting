@@ -8,6 +8,7 @@ import EmptyState from '@/components/ui/EmptyState'
 import ScoutsGGBadge from '@/components/ui/ScoutsGGBadge'
 import { useData } from '@/context/DataContext'
 import { FILTER_POSITION_MAP } from '@/constants/scoring'
+import { useCanSeeVideoStatus } from '@/hooks/useCanSeeVideoStatus'
 import { useScoreLookup } from '@/hooks/usePlayerStats'
 import { normalizeName, formatMarketValueInCurrency } from '@/utils/scoring'
 import { useCurrency } from '@/context/CurrencyContext'
@@ -101,6 +102,8 @@ export default function PlayerTable({ players, source, isLoading }: PlayerTableP
   const { lookup: scoreLookup } = useScoreLookup()
   const { classifications } = useAgencyClassifications()
   const { currency, rate } = useCurrency()
+  const canSeeVideo = useCanSeeVideoStatus()
+  const showVideo = source === 'interno' && canSeeVideo
   const [sort, setSort] = useState<SortState>({ column: 'rating', direction: 'desc' })
   const [page, setPage] = useState(1)
 
@@ -119,9 +122,11 @@ export default function PlayerTable({ players, source, isLoading }: PlayerTableP
   }
 
   const columns = useMemo(() => {
-    const base = source === 'interno' ? BASE_COLUMNS_INTERNAL : BASE_COLUMNS
+    const base = source === 'interno'
+      ? BASE_COLUMNS_INTERNAL.filter(c => c.key !== 'videoFreshness' || showVideo)
+      : BASE_COLUMNS
     return [...base, SCORE_COLUMN]
-  }, [source])
+  }, [source, showVideo])
 
   const handleSort = (col: string) => {
     setSort(prev =>
@@ -197,7 +202,7 @@ export default function PlayerTable({ players, source, isLoading }: PlayerTableP
                   </div>
                   <p className="text-xs text-apple-gray-500 truncate mt-0.5 flex items-center gap-1.5">
                     <span className="truncate">{[player.Liga, player.Equipo, player.Edad ? `${player.Edad}a` : null].filter(Boolean).join(' · ')}</span>
-                    {source === 'interno' && (
+                    {showVideo && (
                       <span className="inline-flex items-center gap-1 text-2xs text-apple-gray-400 flex-shrink-0">
                         Video
                         <span className={`inline-block w-2 h-2 rounded-full ${FRESH_DOT[videoFreshnessByKey.get(playerVideoKey(player.Jugador)) ?? 'none']}`} />
@@ -302,8 +307,8 @@ export default function PlayerTable({ players, source, isLoading }: PlayerTableP
                       <span className="text-apple-gray-500 dark:text-apple-gray-400 text-xs">{player.Liga || '—'}</span>
                     </td>
                   )}
-                  {/* Video Cargado (internal only) */}
-                  {source === 'interno' && (
+                  {/* Video Cargado (internal only, solo Marcos y Matías) */}
+                  {showVideo && (
                     <td className="px-3 py-3 text-center">
                       {(() => {
                         const fr: VideoFreshness = videoFreshnessByKey.get(playerVideoKey(player.Jugador)) ?? 'none'
@@ -401,8 +406,8 @@ export default function PlayerTable({ players, source, isLoading }: PlayerTableP
         </div>
       )}
 
-      {/* Referencias de los puntitos de frescura de video (solo interno) */}
-      {source === 'interno' && (
+      {/* Referencias de los puntitos de frescura de video (solo interno, solo Marcos y Matías) */}
+      {showVideo && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1 pt-3 mt-1 border-t border-apple-gray-100 dark:border-apple-gray-800 text-xs text-apple-gray-500 dark:text-apple-gray-400">
           <span className="font-medium text-apple-gray-600 dark:text-apple-gray-300">Videos:</span>
           {(['green', 'amber', 'red', 'none'] as VideoFreshness[]).map(fr => (

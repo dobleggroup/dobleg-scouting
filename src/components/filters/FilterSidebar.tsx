@@ -207,7 +207,7 @@ export default function FilterSidebar({ players, filters, onChange, onReset, sho
     filters.pie,
     filters.minHeight > 0 && filters.minHeight > minHeight,
     filters.maxHeight > 0 && filters.maxHeight < maxHeight,
-    (filters.videoFreshness || []).length > 0,
+    showVideoFreshness && (filters.videoFreshness || []).length > 0,
     (filters.agencyClass || []).length > 0,
   ].filter(Boolean).length
 

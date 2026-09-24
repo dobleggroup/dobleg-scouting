@@ -86,6 +86,7 @@ TOURNAMENTS = {
     128: 155,     # Argentina Liga Profesional
     262: [11620, 11621],  # Liga MX (Clausura, Apertura)
     234: [11614, 11613],  # Honduras Liga Nacional (Clausura, Apertura)
+    240: 1238,    # Colombia Primera B (Torneo DIMAYOR) — API-Football no trae stats de jugadores
 }
 ID_OFFSET = 20_000_000
 FETCH_DELAY = float(os.environ.get("FETCH_DELAY", "2.0"))

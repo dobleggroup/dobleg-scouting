@@ -40,6 +40,19 @@ export async function fetchFinishedFixtures(
   });
 }
 
+/**
+ * Temporada en curso de una liga según API-Football (año + fecha de inicio). null si la
+ * API no marca ninguna como actual.
+ */
+export async function fetchCurrentSeason(leagueId: number): Promise<{ year: number; start: string } | null> {
+  const res = await apiFetch<Array<{ seasons: Array<{ year: number; start: string; current: boolean }> }>>('/leagues', {
+    id: String(leagueId),
+    current: 'true',
+  });
+  const season = res[0]?.seasons?.find(s => s.current);
+  return season ? { year: season.year, start: season.start } : null;
+}
+
 export async function fetchLineups(fixtureId: number) {
   return apiFetch<Array<{ team: { id: number; name: string }; formation: string | null; startXI: Array<{ player: { id: number; name: string; number: number; pos: string; grid: string | null } }>; substitutes: Array<{ player: { id: number; name: string; number: number; pos: string; grid: string | null } }> }>>('/fixtures/lineups', {
     fixture: String(fixtureId),

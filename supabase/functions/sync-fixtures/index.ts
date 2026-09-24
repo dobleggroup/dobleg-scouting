@@ -1,13 +1,14 @@
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
 import { getSupabaseAdmin } from '../_shared/supabase-client.ts';
-import { fetchFinishedFixtures } from '../_shared/api-football.ts';
+import { fetchCurrentSeason, fetchFinishedFixtures } from '../_shared/api-football.ts';
 
 serve(async (req) => {
   const supabase = getSupabaseAdmin();
-  const results = { processed: 0, inserted: 0, errors: [] as string[] };
+  const results = { processed: 0, inserted: 0, errors: [] as string[], seasonChanges: [] as string[] };
 
   let leagueIds: number[] | undefined;
   let fromDateOverride: string | undefined;
+  let checkSeasons = new Date().getUTCHours() === 6; // una vez por día alcanza
   try {
     const body = await req.json().catch(() => ({}));
     if (body.league_ids && Array.isArray(body.league_ids)) {
@@ -16,6 +17,7 @@ serve(async (req) => {
     if (body.from_date && typeof body.from_date === 'string') {
       fromDateOverride = body.from_date;
     }
+    if (body.check_seasons === true) checkSeasons = true;
   } catch { /* empty body is fine */ }
 
   try {
@@ -44,13 +46,28 @@ serve(async (req) => {
             ? new Date(league.last_synced_at).toISOString().split('T')[0]
             : new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0]);
 
-        const fixtures = await fetchFinishedFixtures(league.id, league.season, fromDate, today);
+        // La temporada de cada liga se cargaba a mano y las europeas quedaron en 2025
+        // cuando arrancó la 2026/27 (sin partidos nuevos desde julio). Si API-Football
+        // marca una temporada más nueva, se pasa a esa y se trae desde su inicio.
+        let season = league.season;
+        let seasonFrom = fromDate;
+        if (checkSeasons) {
+          const current = await fetchCurrentSeason(league.id);
+          if (current && current.year > league.season) {
+            season = current.year;
+            seasonFrom = fromDateOverride ?? current.start;
+            await supabase.from('leagues').update({ season }).eq('id', league.id);
+            results.seasonChanges.push(`${league.id}: ${league.season} -> ${season}`);
+          }
+        }
+
+        const fixtures = await fetchFinishedFixtures(league.id, season, seasonFrom, today);
 
         for (const f of fixtures) {
           const { error } = await supabase.from('fixtures').upsert({
             id: f.fixture.id,
             league_id: league.id,
-            season: league.season,
+            season,
             date: f.fixture.date,
             home_team_id: f.teams.home.id,
             away_team_id: f.teams.away.id,

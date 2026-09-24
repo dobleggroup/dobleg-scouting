@@ -70,6 +70,33 @@ export function identityKey(name: string): string {
   return nameKey(name.normalize('NFD').replace(/[̀-ͯ]/g, ''))
 }
 
+/**
+ * Busca primero por nombre completo exacto y después por `identityKey`, pero solo si esa
+ * clave es de UNA persona: "F. Paradela" es Federico y Francesco, y con la clave sola el
+ * último le pisaba nombre, club y valor al otro.
+ */
+function buildAgencyMatcher<T>(
+  entries: { names: string[]; value: T }[],
+): (name: string, keyFallback?: boolean) => T | undefined {
+  // Ante filas repetidas de la misma persona (mismo nombre) gana la primera.
+  const byExact = new Map<string, T>()
+  const byKey = new Map<string, T>()
+  const ambiguous = new Set<string>()
+  const owner = new Map<string, string>()
+  for (const e of entries) {
+    const person = normalizeName(e.names[0] ?? '')
+    for (const n of e.names) {
+      if (!byExact.has(normalizeName(n))) byExact.set(normalizeName(n), e.value)
+      const k = identityKey(n)
+      if (!owner.has(k)) { owner.set(k, person); byKey.set(k, e.value) }
+      else if (owner.get(k) !== person) ambiguous.add(k)
+    }
+  }
+  return (name, keyFallback = true) =>
+    byExact.get(normalizeName(name))
+    ?? (keyFallback && !ambiguous.has(identityKey(name)) ? byKey.get(identityKey(name)) : undefined)
+}
+
 /** internal base + jugadores Doble G agregados que no estén ya en internal. */
 export function mergeAgencyIntoInternal(
   baseInternal: EnrichedPlayer[],
@@ -125,24 +152,28 @@ export function mergeAgencyIntoInternal(
  * legacy — que nadie actualiza — queda pisando al dato real para siempre.
  */
 function applyAgencyOverrides(players: EnrichedPlayer[], agencyPlayers: AgencyPlayer[]): EnrichedPlayer[] {
-  const byKey = new Map<string, { fullName?: string; team?: string; contractEnd?: string; position?: string }>()
-  for (const a of agencyPlayers) {
-    const patch = {
+  type Patch = { fullName?: string; team?: string; contractEnd?: string; position?: string }
+  const entries: { names: string[]; value: Patch }[] = agencyPlayers.map(a => ({
+    names: [a.fullName, a.shortName],
+    value: {
       fullName: a.fullName,
       team: a.team || undefined,
       contractEnd: a.contractEnd ?? undefined,
       position: a.position ?? undefined,
-    }
-    byKey.set(identityKey(a.fullName), patch)
-    byKey.set(identityKey(a.shortName), patch)
-  }
+    },
+  }))
+  const findAgency = buildAgencyMatcher(entries)
   for (const o of AGENCY_OVERRIDES) {
-    byKey.set(identityKey(o.name), { ...byKey.get(identityKey(o.name)), ...o })
+    const { name, ...patch } = o
+    const target = findAgency(name)
+    if (target) Object.assign(target, patch)
+    else entries.push({ names: [name], value: patch })
   }
-  if (byKey.size === 0) return players
+  if (entries.length === 0) return players
+  const findPatch = buildAgencyMatcher(entries)
 
   return players.map(p => {
-    const o = byKey.get(identityKey(p.Jugador))
+    const o = findPatch(p.Jugador)
     if (!o) return p
     const patched = { ...p }
     // Algunas filas viejas del CSV interno quedaron con el nombre corto tipo
@@ -183,11 +214,15 @@ export function applyLiveAgencyData(
   liveRows: AgencyLiveDataRow[],
 ): EnrichedPlayer[] {
   if (liveRows.length === 0) return players
-  const byKey = new Map<string, AgencyLiveDataRow>()
-  for (const r of liveRows) byKey.set(identityKey(r.name), r)
+  const findLive = buildAgencyMatcher(liveRows.map(r => ({ names: [r.name], value: r })))
+  // `liveRows` trae primero la fila oficial de cada jugador (fetchAgencyLiveData), así que
+  // ante filas repetidas del mismo jugador gana esa.
+  // Si dos jugadores de la lista comparten inicial y apellido, solo vale el nombre exacto.
+  const keyCount = new Map<string, number>()
+  for (const p of players) keyCount.set(identityKey(p.Jugador), (keyCount.get(identityKey(p.Jugador)) ?? 0) + 1)
 
   return players.map(p => {
-    const live = byKey.get(identityKey(p.Jugador))
+    const live = findLive(p.Jugador, keyCount.get(identityKey(p.Jugador)) === 1)
     if (!live) return p
     const patch: {
       marketValueRaw?: number; marketValueFormatted?: string; Transfermkt?: string
