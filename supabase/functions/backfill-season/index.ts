@@ -11,8 +11,10 @@ serve(async (req) => {
       ? [{ id: league_id, season }]
       : (await supabase.from('leagues').select('id, season').eq('has_player_stats', true)).data ?? [];
     // Una copa no es la liga del equipo: sus partidos se cargan, pero no le cambian la liga.
-    const { data: cups } = await supabase.from('leagues').select('id').eq('is_cup', true);
-    const cupIds = new Set((cups ?? []).map((c: { id: number }) => c.id));
+    // Un torneo con liga madre (Apertura de Paraguay) asigna los equipos a la madre.
+    const { data: meta } = await supabase.from('leagues').select('id, is_cup, parent_league_id');
+    const cupIds = new Set((meta ?? []).filter((l: any) => l.is_cup).map((l: any) => l.id as number));
+    const parentOf = new Map((meta ?? []).filter((l: any) => l.parent_league_id).map((l: any) => [l.id as number, l.parent_league_id as number]));
 
     let totalInserted = 0;
 
@@ -23,7 +25,7 @@ serve(async (req) => {
       const fixtures = await fetchFinishedFixtures(league.id, league.season, fromDate, toDate);
 
       for (const f of fixtures) {
-        const teamLeague = cupIds.has(league.id) ? {} : { league_id: league.id };
+        const teamLeague = cupIds.has(league.id) ? {} : { league_id: parentOf.get(league.id) ?? league.id };
         await supabase.from('teams').upsert([
           { id: f.teams.home.id, name: f.teams.home.name, logo: f.teams.home.logo, ...teamLeague },
           { id: f.teams.away.id, name: f.teams.away.name, logo: f.teams.away.logo, ...teamLeague },

@@ -23,7 +23,7 @@ serve(async (req) => {
   try {
     let query = supabase
       .from('leagues')
-      .select('id, season, last_synced_at, has_player_stats, is_cup')
+      .select('id, season, last_synced_at, has_player_stats, is_cup, parent_league_id')
       .neq('source', 'sofascore')
       .order('id');
 
@@ -51,10 +51,20 @@ serve(async (req) => {
 
     for (const league of leagues) {
       try {
-        const fromDate = fromDateOverride
+        // Se vuelve a mirar desde 3 días antes de la última pasada: un partido nocturno
+        // sudamericano termina pasada la medianoche UTC con fecha del día anterior, y
+        // arrancando desde el día de la última pasada quedaba afuera para siempre (faltaban
+        // decenas de partidos por liga). Los que ya están no se tocan (ignoreDuplicates).
+        // Una liga recién agregada (sin pasadas) arranca desde el inicio de su temporada.
+        const OVERLAP_DAYS = 3;
+        let fromDate = fromDateOverride
           ?? (league.last_synced_at
-            ? new Date(league.last_synced_at).toISOString().split('T')[0]
-            : new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0]);
+            ? new Date(new Date(league.last_synced_at).getTime() - OVERLAP_DAYS * 86400000).toISOString().split('T')[0]
+            : null);
+        if (!fromDate) {
+          const current = await fetchCurrentSeason(league.id);
+          fromDate = current?.start ?? `${league.season}-01-01`;
+        }
 
         // La temporada de cada liga se cargaba a mano y las europeas quedaron en 2025
         // cuando arrancó la 2026/27 (sin partidos nuevos desde julio). Si API-Football
@@ -84,16 +94,18 @@ serve(async (req) => {
             score_home: f.goals.home,
             score_away: f.goals.away,
             stats_synced: false,
-          }, { onConflict: 'id', ignoreDuplicates: false });
+          }, { onConflict: 'id', ignoreDuplicates: true }); // no volver a pedir stats ya cargadas
 
           if (!error) results.inserted++;
 
           // Una copa (Libertadores, Sudamericana...) no es la liga del equipo: sus partidos
-          // cuentan para las estadísticas del jugador, pero no le cambian la liga.
+          // cuentan para las estadísticas del jugador, pero no le cambian la liga. Un torneo
+          // con liga madre (Apertura de Paraguay) asigna los equipos a la madre.
+          const teamLeagueId = league.parent_league_id ?? league.id;
           if (league.has_player_stats && !league.is_cup) {
             await supabase.from('teams').upsert([
-              { id: f.teams.home.id, name: f.teams.home.name, logo: f.teams.home.logo, league_id: league.id },
-              { id: f.teams.away.id, name: f.teams.away.name, logo: f.teams.away.logo, league_id: league.id },
+              { id: f.teams.home.id, name: f.teams.home.name, logo: f.teams.home.logo, league_id: teamLeagueId },
+              { id: f.teams.away.id, name: f.teams.away.name, logo: f.teams.away.logo, league_id: teamLeagueId },
             ], { onConflict: 'id' });
           } else {
             await supabase.from('teams').upsert([
