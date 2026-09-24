@@ -103,6 +103,21 @@ function parseSubjectiveRating(row: RawRow): number {
   return 0
 }
 
+/**
+ * Si dos filas comparten el nombre corto ("F. Paradela" = Federico y Francesco), cada una
+ * pasa a usar su "Nombre completo": todo el cruce posterior es por nombre, y con el mismo
+ * nombre corto uno le pisaba nombre, club y valor al otro.
+ */
+export function disambiguateShortNames<T extends Record<string, string | undefined>>(rows: T[]): T[] {
+  const key = (r: T) => (r['Jugador'] ?? '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  const counts = new Map<string, number>()
+  for (const r of rows) counts.set(key(r), (counts.get(key(r)) ?? 0) + 1)
+  return rows.map(r => {
+    const full = r['Nombre completo']?.trim()
+    return (counts.get(key(r)) ?? 0) > 1 && full ? { ...r, Jugador: full } : r
+  })
+}
+
 // ─── PUBLIC LOADERS ───────────────────────────────────────────────────────────
 
 export interface MasDatosEntry {
@@ -173,7 +188,9 @@ export async function loadAllData(): Promise<AllRawData> {
     ...resolveAliases(arqueroRaw).filter(r => r['Jugador']?.trim()),
   ]
   const external = deduplicatePlayers(externalCombined) as RawExternalPlayer[]
-  const internal = resolveAliases(intRaw).filter(r => r['Jugador']?.trim()) as RawInternalPlayer[]
+  const internal = disambiguateShortNames(
+    resolveAliases(intRaw).filter(r => r['Jugador']?.trim()),
+  ) as RawInternalPlayer[]
 
   const monitoring: MonitoringPlayer[] = []
 

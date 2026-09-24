@@ -199,11 +199,16 @@ export interface AgencyLiveDataRow {
 export async function fetchAgencyLiveData(): Promise<AgencyLiveDataRow[]> {
   const { data, error } = await supabase
     .from('players')
-    .select('name, market_value_eur, transfermarkt_url, birth_date, nationality')
+    .select('id, canonical_id, name, market_value_eur, transfermarkt_url, birth_date, nationality')
     .eq('agent', 'Doble G Sports Group');
 
   if (error) throw error;
-  return (data ?? []).map((r: any) => ({
+  // Un mismo jugador puede tener varias filas (la vieja de la agencia y las de cada
+  // proveedor) con datos distintos. Va primero la fila oficial (players.canonical_id), que
+  // es la que gana en applyLiveAgencyData — la misma regla que el resto de la plataforma.
+  const isOfficial = (r: any) => r.canonical_id == null || r.canonical_id === r.id;
+  const rows = [...(data ?? [])].sort((a: any, b: any) => Number(isOfficial(b)) - Number(isOfficial(a)));
+  return rows.map((r: any) => ({
     name: r.name as string,
     market_value_eur: typeof r.market_value_eur === 'number' && r.market_value_eur > 0 ? r.market_value_eur : null,
     transfermarkt_url: r.transfermarkt_url || null,

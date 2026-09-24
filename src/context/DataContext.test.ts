@@ -106,6 +106,53 @@ describe('mergeAgencyIntoInternal', () => {
   })
 })
 
+describe('dos jugadores de la agencia con la misma inicial y apellido (Federico y Francesco Paradela)', () => {
+  const roster = [
+    agency({ shortName: 'F. Paradela', fullName: 'Federico Paradela', team: 'Gimnasia Jujuy' }),
+    agency({ shortName: 'F. Paradela', fullName: 'Francesco Paradela', team: 'Gimnasia La Plata' }),
+  ]
+
+  it('cada uno conserva su nombre y su club (antes Federico salía como Francesco de Gimnasia La Plata)', () => {
+    const baseInternal = [
+      player({ Jugador: 'Federico Paradela', Equipo: 'Gimnasia Jujuy', Edad: '25' }),
+      player({ Jugador: 'Francesco Paradela', Equipo: 'Gimnasia La Plata Res.', Edad: '18' }),
+    ]
+
+    const merged = mergeAgencyIntoInternal(baseInternal, [], roster)
+
+    expect(merged.map(p => [p.Jugador, p.Equipo, p.Edad])).toEqual([
+      ['Federico Paradela', 'Gimnasia Jujuy', '25'],
+      ['Francesco Paradela', 'Gimnasia La Plata', '18'],
+    ])
+  })
+
+  it('el valor de mercado vivo de uno no se le pega al otro', () => {
+    const players = [
+      player({ Jugador: 'Federico Paradela', marketValueRaw: 0 }),
+      player({ Jugador: 'Francesco Paradela', marketValueRaw: 0 }),
+    ]
+
+    const result = applyLiveAgencyData(players, [liveRow({ name: 'Federico Paradela', market_value_eur: 75000 })])
+
+    expect(result[0].marketValueRaw).toBe(75000)
+    expect(result[1].marketValueRaw).toBe(0)
+  })
+})
+
+describe('applyLiveAgencyData con filas repetidas del mismo jugador', () => {
+  it('usa la primera fila (la oficial) ante filas repetidas (caso real Agustín Mulet: €300k oficial vs €175k vieja)', () => {
+    // fetchAgencyLiveData trae primero la fila oficial (players.canonical_id).
+    const live = [
+      liveRow({ name: 'Agustín Mulet', market_value_eur: 300000 }),
+      liveRow({ name: 'Agustín Mulet', market_value_eur: 175000 }),
+    ]
+
+    const result = applyLiveAgencyData([player({ Jugador: 'Agustín Mulet' })], live)
+
+    expect(result[0].marketValueRaw).toBe(300000)
+  })
+})
+
 describe('applyLiveAgencyData', () => {
   it('pisa el valor de mercado stale del Sheet con el vivo de Supabase (caso real: Prestianni €12.00m en el Sheet, €20M en Transfermarkt/Supabase)', () => {
     const players = [player({ Jugador: 'G. Prestianni', marketValueRaw: 12_000_000, marketValueFormatted: '€12.00m' })]
