@@ -1,5 +1,7 @@
 // supabase/functions/_shared/api-football.ts
 
+import { apiResponseError } from './api-response.ts';
+
 const API_KEY = Deno.env.get('API_FOOTBALL_KEY')!;
 const BASE_URL = Deno.env.get('API_FOOTBALL_BASE_URL') || 'https://v3.football.api-sports.io';
 
@@ -22,6 +24,8 @@ async function apiFetch<T>(endpoint: string, params: Record<string, string>): Pr
   }
 
   const json = await res.json();
+  const apiError = apiResponseError(json);
+  if (apiError) throw new Error(apiError);
   return json.response as T;
 }
 
