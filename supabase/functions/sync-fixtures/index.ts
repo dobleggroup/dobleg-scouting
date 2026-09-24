@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
 import { getSupabaseAdmin } from '../_shared/supabase-client.ts';
-import { fetchCurrentSeason, fetchFinishedFixtures } from '../_shared/api-football.ts';
+import { fetchCurrentSeason, fetchFinishedFixtures, fetchTeamCountry } from '../_shared/api-football.ts';
 
 serve(async (req) => {
   const supabase = getSupabaseAdmin();
@@ -23,7 +23,7 @@ serve(async (req) => {
   try {
     let query = supabase
       .from('leagues')
-      .select('id, season, last_synced_at, has_player_stats')
+      .select('id, season, last_synced_at, has_player_stats, is_cup')
       .neq('source', 'sofascore')
       .order('id');
 
@@ -38,6 +38,16 @@ serve(async (req) => {
     }
 
     const today = new Date().toISOString().split('T')[0];
+
+    // Liga "de casa" por país (solo si el país tiene una única liga con estadísticas),
+    // para ubicar a un equipo que solo aparece en una copa.
+    const { data: domestic } = await supabase
+      .from('leagues').select('id, country').eq('has_player_stats', true).eq('is_cup', false);
+    const leagueByCountry = new Map<string, number | null>();
+    for (const l of domestic ?? []) {
+      leagueByCountry.set(l.country, leagueByCountry.has(l.country) ? null : l.id);
+    }
+    const checkedTeams = new Set<number>();
 
     for (const league of leagues) {
       try {
@@ -78,7 +88,9 @@ serve(async (req) => {
 
           if (!error) results.inserted++;
 
-          if (league.has_player_stats) {
+          // Una copa (Libertadores, Sudamericana...) no es la liga del equipo: sus partidos
+          // cuentan para las estadísticas del jugador, pero no le cambian la liga.
+          if (league.has_player_stats && !league.is_cup) {
             await supabase.from('teams').upsert([
               { id: f.teams.home.id, name: f.teams.home.name, logo: f.teams.home.logo, league_id: league.id },
               { id: f.teams.away.id, name: f.teams.away.name, logo: f.teams.away.logo, league_id: league.id },
@@ -88,6 +100,19 @@ serve(async (req) => {
               { id: f.teams.home.id, name: f.teams.home.name, logo: f.teams.home.logo },
               { id: f.teams.away.id, name: f.teams.away.name, logo: f.teams.away.logo },
             ], { onConflict: 'id', ignoreDuplicates: true });
+            if (league.is_cup) {
+              for (const team of [f.teams.home, f.teams.away]) {
+                if (checkedTeams.has(team.id)) continue;
+                checkedTeams.add(team.id);
+                const { data: row } = await supabase.from('teams').select('league_id').eq('id', team.id).single();
+                if (row?.league_id != null) continue;
+                const country = await fetchTeamCountry(team.id);
+                const home = country ? leagueByCountry.get(country) : null;
+                if (home != null) {
+                  await supabase.from('teams').update({ league_id: home }).eq('id', team.id);
+                }
+              }
+            }
           }
         }
 

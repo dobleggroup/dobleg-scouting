@@ -24,6 +24,7 @@ import {
 import { getScoreColorClass, type ScoreScale } from '@/components/ui/ScoreBar'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useLanguage } from '@/context/LanguageContext'
+import { leagueLabel } from '@/utils/leagueLabels'
 
 // ─── Age helper ──────────────────────────────────────────────────────────────
 
@@ -584,7 +585,7 @@ export default function FormationPage() {
               >
                 <option value="">{t('formacion.todasLasLigas')}</option>
                 {allLeagues.map(l => (
-                  <option key={l.id} value={l.id}>{l.name} ({l.country})</option>
+                  <option key={l.id} value={l.id}>{leagueLabel(l)}</option>
                 ))}
               </select>
             </div>

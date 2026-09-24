@@ -10,6 +10,9 @@ serve(async (req) => {
     const leagues = league_id
       ? [{ id: league_id, season }]
       : (await supabase.from('leagues').select('id, season').eq('has_player_stats', true)).data ?? [];
+    // Una copa no es la liga del equipo: sus partidos se cargan, pero no le cambian la liga.
+    const { data: cups } = await supabase.from('leagues').select('id').eq('is_cup', true);
+    const cupIds = new Set((cups ?? []).map((c: { id: number }) => c.id));
 
     let totalInserted = 0;
 
@@ -20,9 +23,10 @@ serve(async (req) => {
       const fixtures = await fetchFinishedFixtures(league.id, league.season, fromDate, toDate);
 
       for (const f of fixtures) {
+        const teamLeague = cupIds.has(league.id) ? {} : { league_id: league.id };
         await supabase.from('teams').upsert([
-          { id: f.teams.home.id, name: f.teams.home.name, logo: f.teams.home.logo, league_id: league.id },
-          { id: f.teams.away.id, name: f.teams.away.name, logo: f.teams.away.logo, league_id: league.id },
+          { id: f.teams.home.id, name: f.teams.home.name, logo: f.teams.home.logo, ...teamLeague },
+          { id: f.teams.away.id, name: f.teams.away.name, logo: f.teams.away.logo, ...teamLeague },
         ], { onConflict: 'id' });
 
         const { error } = await supabase.from('fixtures').upsert({

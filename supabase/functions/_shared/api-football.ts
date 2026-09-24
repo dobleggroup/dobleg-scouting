@@ -53,6 +53,12 @@ export async function fetchCurrentSeason(leagueId: number): Promise<{ year: numb
   return season ? { year: season.year, start: season.start } : null;
 }
 
+/** País de un equipo según API-Football (ej. "Uruguay"). null si no lo encuentra. */
+export async function fetchTeamCountry(teamId: number): Promise<string | null> {
+  const res = await apiFetch<Array<{ team: { country: string | null } }>>('/teams', { id: String(teamId) });
+  return res[0]?.team?.country ?? null;
+}
+
 export async function fetchLineups(fixtureId: number) {
   return apiFetch<Array<{ team: { id: number; name: string }; formation: string | null; startXI: Array<{ player: { id: number; name: string; number: number; pos: string; grid: string | null } }>; substitutes: Array<{ player: { id: number; name: string; number: number; pos: string; grid: string | null } }> }>>('/fixtures/lineups', {
     fixture: String(fixtureId),

@@ -32,7 +32,10 @@ serve(async (req) => {
     const { data: domesticLeagues } = await supabase
       .from('leagues')
       .select('id, season')
-      .eq('has_player_stats', true);
+      .eq('has_player_stats', true)
+      // Las copas no son ligas: sus partidos ya entran por los equipos de cada liga
+      // (se toman todos sus partidos, de cualquier competencia).
+      .eq('is_cup', false);
 
     if (!domesticLeagues || domesticLeagues.length === 0) {
       return new Response(JSON.stringify({ message: 'No leagues found' }), { status: 200 });
