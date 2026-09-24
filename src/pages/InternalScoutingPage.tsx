@@ -14,6 +14,7 @@ import { playerVideoKey } from '@/services/playerVideosService'
 import { useLanguage } from '@/context/LanguageContext'
 import { LANGUAGE_LOCALES } from '@/constants/translations'
 import { useAgencyClassifications } from '@/hooks/useAgencyClassifications'
+import { useCanSeeVideoStatus } from '@/hooks/useCanSeeVideoStatus'
 import { agencyPlayerKey } from '@/services/agencyClassificationService'
 
 const DEFAULT_FILTERS: FilterState = {
@@ -116,6 +117,9 @@ export default function InternalScoutingPage() {
   const { language, t } = useLanguage()
   const { internal, loading, error, videoFreshnessByKey } = useData()
   const { classifications } = useAgencyClassifications()
+  // El estado de los videos solo lo ven Marcos y Matías; para el resto, un filtro de
+  // video que haya quedado guardado no esconde jugadores.
+  const canSeeVideo = useCanSeeVideoStatus()
   const [filters, setFilters] = useState<FilterState>(loadFiltersFromStorage)
   const [showMobileFilters, setShowMobileFilters] = useState(false)
 
@@ -134,7 +138,7 @@ export default function InternalScoutingPage() {
     filters.pie,
     filters.minHeight > 0,
     filters.maxHeight > 0,
-    filters.videoFreshness && filters.videoFreshness.length > 0,
+    canSeeVideo && filters.videoFreshness && filters.videoFreshness.length > 0,
     filters.agencyClass && filters.agencyClass.length > 0,
   ].filter(Boolean).length
 
@@ -144,8 +148,8 @@ export default function InternalScoutingPage() {
   }, [filters])
 
   const filtered = useMemo(
-    () => applyFilters(internal, filters, videoFreshnessByKey, classifications),
-    [internal, filters, videoFreshnessByKey, classifications],
+    () => applyFilters(internal, filters, canSeeVideo ? videoFreshnessByKey : undefined, classifications),
+    [internal, filters, canSeeVideo, videoFreshnessByKey, classifications],
   )
   const handleReset = useCallback(() => {
     setFilters(DEFAULT_FILTERS)
@@ -191,7 +195,7 @@ export default function InternalScoutingPage() {
       {/* Layout */}
       <div className="flex gap-6">
         <div className="hidden lg:block">
-          <FilterSidebar players={internal} filters={filters} onChange={setFilters} onReset={handleReset} showVideoFreshness showAgencyClass />
+          <FilterSidebar players={internal} filters={filters} onChange={setFilters} onReset={handleReset} showVideoFreshness={canSeeVideo} showAgencyClass />
         </div>
         <div className="flex-1 min-w-0">
           <PlayerTable players={filtered} source="interno" />
@@ -201,7 +205,7 @@ export default function InternalScoutingPage() {
       {/* Mobile filter button + panel */}
       <MobileFilterButton onClick={() => setShowMobileFilters(true)} activeCount={activeFiltersCount} />
       <MobileFilterPanel isOpen={showMobileFilters} onClose={() => setShowMobileFilters(false)} activeCount={activeFiltersCount}>
-        <FilterSidebar players={internal} filters={filters} onChange={setFilters} onReset={handleReset} showVideoFreshness showAgencyClass inPanel />
+        <FilterSidebar players={internal} filters={filters} onChange={setFilters} onReset={handleReset} showVideoFreshness={canSeeVideo} showAgencyClass inPanel />
         <div className="flex items-center gap-2 mt-5">
           {activeFiltersCount > 0 && (
             <button

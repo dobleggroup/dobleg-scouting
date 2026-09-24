@@ -427,6 +427,10 @@ function identityKey(row: ScoreLookupRow): string {
 export function buildScoreLookup(
   rows: ScoreLookupRow[],
   agencyPlayers: { fullName: string; shortName: string; apiTeamId: number | null }[],
+  /** Nombre completo normalizado del jugador de agencia → id de su fila oficial en
+   *  `players` (ver `fetchAgencyPlayerLinks`). Es el vínculo por identidad: no depende
+   *  de cómo escribe el nombre cada proveedor. */
+  agencyLinks: Map<string, number> = new Map(),
 ): Map<string, ScoreLookupEntry> {
   const norm = (s: string) =>
     s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -519,9 +523,23 @@ export function buildScoreLookup(
   const bestByMatches = (candidates: ScoreLookupRow[]): ScoreLookupRow =>
     candidates.reduce((best, r) => (r.matches_played > best.matches_played ? r : best));
 
+  const pick = (candidates: ScoreLookupRow[]): ScoreLookupRow =>
+    candidates.reduce((best, r) => (isNewerRepresentative(r, best) ? r : best));
+
   for (const ap of agencyPlayers) {
     const fullKey = norm(ap.fullName);
-    if (ap.apiTeamId) {
+    const shortKey = norm(ap.shortName);
+    // La fila oficial suele tener el nombre abreviado del proveedor ("F. Watson"), así que
+    // buscarla por nombre completo fallaba. Primero el vínculo por id; si no hay, el
+    // nombre abreviado pero solo en el equipo actual (un "F. Paradela" suelto puede ser
+    // Federico o Francesco).
+    const linkedId = agencyLinks.get(fullKey);
+    const linkedRows = linkedId != null ? rows.filter(r => r.player_id === linkedId) : [];
+    if (linkedRows.length > 0) {
+      const best = pick(linkedRows);
+      winnerRow.set(fullKey, best);
+      map.set(fullKey, toEntry(best));
+    } else if (ap.apiTeamId) {
       const currentWinner = winnerRow.get(fullKey);
       if (!currentWinner || currentWinner.current_team_id !== ap.apiTeamId) {
         const teamRows = representatives.filter(r => norm(r.name) === fullKey && r.current_team_id === ap.apiTeamId);
@@ -531,8 +549,15 @@ export function buildScoreLookup(
           map.set(fullKey, toEntry(best));
         }
       }
+      if (!map.has(fullKey) && shortKey !== fullKey) {
+        const shortRows = rows.filter(r => r.name && norm(r.name) === shortKey && r.current_team_id === ap.apiTeamId);
+        if (shortRows.length > 0) {
+          const best = pick(shortRows);
+          winnerRow.set(fullKey, best);
+          map.set(fullKey, toEntry(best));
+        }
+      }
     }
-    const shortKey = norm(ap.shortName);
     const entry = map.get(fullKey);
     if (entry && shortKey !== fullKey) {
       map.set(shortKey, entry);
@@ -569,6 +594,7 @@ export async function fetchScoreLookup(
   // trae el total y el resto se pide en paralelo.
   const PAGE_SIZE = 1000;
   const confirmedTmIdsPromise = fetchConfirmedTransfermarktIds(); // no depende de los ratings
+  const agencyLinksPromise = fetchAgencyPlayerLinks();
   const page = (n: number, withCount: boolean) =>
     supabase
       .from('player_season_scores')
@@ -621,7 +647,35 @@ export async function fetchScoreLookup(
   });
 
   const { AGENCY_PLAYERS } = await import('@/constants/agencyPlayers');
-  return buildScoreLookup(rows, AGENCY_PLAYERS);
+  return buildScoreLookup(rows, AGENCY_PLAYERS, await agencyLinksPromise);
+}
+
+/**
+ * Jugador de agencia → id de su fila oficial (players.canonical_id). Sale de las filas
+ * propias de la agencia (ids desde 99000000, una por jugador del plantel base) y de las
+ * altas hechas desde la plataforma (`agency_players.supabase_player_id`). Clave: nombre
+ * completo en minúsculas y sin acentos. Si falla, devuelve vacío y el lookup sigue por nombre.
+ */
+export async function fetchAgencyPlayerLinks(): Promise<Map<string, number>> {
+  const norm = (s: string) =>
+    s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const links = new Map<string, number>();
+  const [legacy, overlay] = await Promise.all([
+    supabase.from('players').select('name, canonical_id').gte('id', 99000000),
+    supabase
+      .from('agency_players')
+      .select('full_name, player:players!agency_players_supabase_player_id_fkey(canonical_id)')
+      .eq('kind', 'add')
+      .not('supabase_player_id', 'is', null),
+  ]);
+  for (const r of (legacy.data ?? []) as { name: string | null; canonical_id: number | null }[]) {
+    if (r.name && r.canonical_id != null) links.set(norm(r.name), r.canonical_id);
+  }
+  for (const r of (overlay.data ?? []) as any[]) {
+    const canonical = r.player?.canonical_id as number | null | undefined;
+    if (r.full_name && canonical != null) links.set(norm(r.full_name), canonical);
+  }
+  return links;
 }
 
 export async function fetchPlayerMatchHistory(

@@ -218,6 +218,47 @@ describe('buildScoreLookup', () => {
 
     expect(map.get('julian lopez')?.score).toBe(4.8)
   })
+
+  it('fila oficial con nombre abreviado: el vínculo de la agencia la encuentra por id (caso real Franco Watson = "F. Watson")', () => {
+    const rows = [row({ player_id: 202082, name: 'F. Watson', current_team_id: 446, matches_played: 21, score: 6.2 })]
+    const agencyPlayers = [{ fullName: 'Franco Watson', shortName: 'F. Watson', apiTeamId: 446 }]
+    const links = new Map([['franco watson', 202082]])
+
+    const map = buildScoreLookup(rows, agencyPlayers, links)
+
+    expect(map.get('franco watson')?.score).toBe(6.2)
+    expect(map.get('f. watson')?.player_id).toBe(202082)
+  })
+
+  it('el vínculo por id le gana a un homónimo con más partidos', () => {
+    const rows = [
+      row({ player_id: 129877, name: 'Francesco Lo Celso', current_team_id: 1, matches_played: 3, score: 6.4 }),
+      row({ player_id: 777, name: 'Francesco Lo Celso', current_team_id: 2, matches_played: 30, score: 7.5 }),
+    ]
+    const agencyPlayers = [{ fullName: 'Francesco Lo Celso', shortName: 'F. Lo Celso', apiTeamId: null }]
+
+    const map = buildScoreLookup(rows, agencyPlayers, new Map([['francesco lo celso', 129877]]))
+
+    expect(map.get('francesco lo celso')?.player_id).toBe(129877)
+  })
+
+  it('sin vínculo: el nombre abreviado sirve si coincide el equipo (caso real Mateo Carabajal = "M. Carabajal")', () => {
+    const rows = [row({ player_id: 5196, name: 'M. Carabajal', current_team_id: 478, matches_played: 28, score: 7.1 })]
+    const agencyPlayers = [{ fullName: 'Mateo Carabajal', shortName: 'M. Carabajal', apiTeamId: 478 }]
+
+    const map = buildScoreLookup(rows, agencyPlayers)
+
+    expect(map.get('mateo carabajal')?.player_id).toBe(5196)
+  })
+
+  it('sin vínculo ni equipo que coincida: un nombre abreviado compartido NO se asigna (F. Paradela = Federico o Francesco)', () => {
+    const rows = [row({ player_id: 313080, name: 'F. Paradela', current_team_id: 999, matches_played: 9 })]
+    const agencyPlayers = [{ fullName: 'Francesco Paradela', shortName: 'F. Paradela', apiTeamId: 434 }]
+
+    const map = buildScoreLookup(rows, agencyPlayers)
+
+    expect(map.get('francesco paradela')).toBeUndefined()
+  })
 })
 
 describe('currentSeasons', () => {
