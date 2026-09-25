@@ -48,11 +48,11 @@ export const RANKING_WIDGETS: RankingWidgetDef[] = [
   },
   {
     id: 'asistidores', title: 'Asistidores',
-    description: 'Asistencias, asistencias esperadas (xA) y jugadas clave cada 90 minutos.',
+    description: 'Asistencias, asistencias esperadas (xA) y chances creadas (asistencias a tiro) cada 90 minutos.',
     columns: [
       { key: 'assists', label: 'Asist.', format: 'int', perMinute: false },
       { key: 'xa', label: 'xA', format: 'dec2', perMinute: false },
-      { key: 'key_passes_p90', label: 'Jug. clave/90', format: 'dec2', perMinute: true },
+      { key: 'key_passes_p90', label: 'Chances creadas/90', format: 'dec2', perMinute: true },
     ],
     requires: ['assists'],
   },
@@ -219,5 +219,5 @@ export const FULL_TABLE_COLUMNS: MetricColumn[] = [
   { key: 'duels_p90', label: 'Duelos/90', format: 'dec1', perMinute: true },
   { key: 'interceptions_p90', label: 'Intercep./90', format: 'dec1', perMinute: true },
   { key: 'shots_p90', label: 'Remates/90', format: 'dec2', perMinute: true },
-  { key: 'key_passes_p90', label: 'Jug. clave/90', format: 'dec2', perMinute: true },
+  { key: 'key_passes_p90', label: 'Chances creadas/90', format: 'dec2', perMinute: true },
 ]

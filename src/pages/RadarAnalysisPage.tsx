@@ -25,7 +25,7 @@ const METRIC_CATEGORIES = {
     { key: 'Gambetas completadas/90', label: 'Gambetas' },
     { key: 'Duelos atacantes ganados/90', label: 'Duelos ofensivos' },
     { key: 'Acciones de ataque exitosas/90', label: 'Acciones de ataque' },
-    { key: 'Jugadas claves/90', label: 'Jugadas claves' },
+    { key: 'Jugadas claves/90', label: 'Chances creadas' },
     { key: 'Carreras en progresión/90', label: 'Progresiones' },
     { key: 'Toques en el área de penalti/90', label: 'Toques en area' },
     { key: 'Centros precisos/90', label: 'Centros precisos' },

@@ -389,7 +389,7 @@ function generateResponse(criteria: SearchCriteria, results: EnrichedPlayer[]): 
         .replace('Duelos defensivos ganados', 'defensa en duelos')
         .replace('Gambetas completadas', 'gambeta')
         .replace('Pases progresivos exitosos', 'pases en profundidad')
-        .replace('Jugadas claves', 'creación de juego')
+        .replace('Jugadas claves', 'chances creadas')
         .replace('Interceptaciones', 'recuperación')
         .replace('Acciones de ataque exitosas', 'contribución ofensiva')
         .replace('Centros precisos', 'centros')

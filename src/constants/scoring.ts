@@ -501,7 +501,7 @@ export const METRIC_ABBREVIATIONS: Record<string, string> = {
   'Duelos atacantes ganados/90':          'Duelos ofensivos /90',
   'Toques en el área de penalti/90':      'Toques en área /90',
   'Faltas recibidas/90':                  'Faltas recibidas /90',
-  'Jugadas claves/90':                    'Jugadas claves /90',
+  'Jugadas claves/90':                    'Chances creadas /90',
   'Ataque en profundidad/90':             'En profundidad /90',
   'Acciones defensivas realizadas/90':    'Acc. defensivas /90',
   'Entradas/90':                          'Entradas /90',

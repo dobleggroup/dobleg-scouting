@@ -65,16 +65,16 @@ export const SCATTER_DEFS: ScatterDef[] = [
     y: p90('prog_passes_acc_p90', 'Pases progresivos acertados/90'),
   },
   {
-    id: 'volantes-crea', group: 'volantes', title: 'Volantes: jugadas clave y carreras en progresión',
-    question: 'Jugadas clave contra carreras en progresión, cada 90 minutos.',
-    x: p90('key_passes_p90', 'Jugadas clave/90'),
+    id: 'volantes-crea', group: 'volantes', title: 'Volantes: chances creadas y carreras en progresión',
+    question: 'Chances creadas (asistencias a tiro) contra carreras en progresión, cada 90 minutos.',
+    x: p90('key_passes_p90', 'Chances creadas (asistencias a tiro)/90'),
     y: p90('prog_runs_p90', 'Carreras en progresión/90'),
   },
   {
-    id: 'extremos-desequilibrio', group: 'extremos', title: 'Extremos: gambetas y jugadas clave',
-    question: 'Gambetas completadas contra jugadas clave, cada 90 minutos.',
+    id: 'extremos-desequilibrio', group: 'extremos', title: 'Extremos: gambetas y chances creadas',
+    question: 'Gambetas completadas contra chances creadas (asistencias a tiro), cada 90 minutos.',
     x: p90('dribbles_won_p90', 'Gambetas completadas/90'),
-    y: p90('key_passes_p90', 'Jugadas clave/90'),
+    y: p90('key_passes_p90', 'Chances creadas (asistencias a tiro)/90'),
   },
   {
     id: 'extremos-uno-contra-uno', group: 'extremos', title: 'Extremos: duelos en ataque y carreras en progresión',

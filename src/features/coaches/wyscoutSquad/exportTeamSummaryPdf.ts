@@ -399,7 +399,7 @@ export async function buildTeamSummaryPdf(input: TeamSummaryPdfInput): Promise<J
     const H = pdf.internal.pageSize.getHeight()
     const W = pdf.internal.pageSize.getWidth()
     d.line(M, H - 30, W - M, H - 30)
-    d.text('Doble G Sports Group  ·  Fuentes: API-Football, Wyscout', M, H - 18, { size: 7, color: C.faint })
+    d.text('Doble G Sports Group', M, H - 18, { size: 7, color: C.faint })
     d.text(`Página ${i} de ${total}`, W - M, H - 18, { size: 7, color: C.faint, align: 'right' })
   }
   return pdf
