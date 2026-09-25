@@ -8,25 +8,15 @@ import type { AgencyFixture } from '@/types/footballApi'
 import type { SeasonStats } from '@/features/coaches/seasonStats'
 import { matchOutcome } from '@/features/coaches/matchResult'
 import { planPages } from './pdfLayout'
+import { C, M, HEADER_BOTTOM, FOOTER_TOP, GAP, LOCALE, Doc, TITLE_H, ROW_H, HEAD_H, blockTitle, descHeight, drawHead, drawCells, tiles, type Block, type Col } from './pdfDoc'
 import { metricValue, rankBy, squadProfile } from './squadMetrics'
 import { FULL_TABLE_COLUMNS, RANKING_WIDGETS, formatMetric, type RankingWidgetDef } from './widgetDefs'
 import type { WyscoutSquadData } from './wyscoutSquadTypes'
-
-const C = {
-  ink: '#1D1D1F', text: '#3A3A3C', muted: '#6E6E73', faint: '#A1A1A6', line: '#E5E5EA',
-  tile: '#F5F5F7', green: '#15803D', greenBar: '#22C55E', greenTint: '#EDF7F0',
-  red: '#DC2626', redTint: '#FDECEC', grayChip: '#D2D2D7', white: '#FFFFFF',
-}
-const M = 36
-const HEADER_BOTTOM = 70
-const FOOTER_TOP = 40 // desde abajo
-const GAP = 18
-const LOCALE = 'es-AR'
-
-/** La fuente estandar de jsPDF es Latin-1: los signos que no entran se reemplazan. */
-function clean(s: string): string {
-  return s.replace(/[−–—]/g, '-').replace(/…/g, '...').replace(/[“”]/g, '"').replace(/[‘’]/g, "'")
-}
+import type { EnrichedMatchRow } from '@/features/coaches/components/CoachMatchMetricsEvolution'
+import type { WyscoutReportData } from '@/features/coaches/wyscoutReport/wyscoutReportTypes'
+import type { HomegrownReport } from '@/features/coaches/homegrown/homegrownReport'
+import { appendHomegrownPages } from '@/features/coaches/homegrown/exportHomegrownPdf'
+import { efficiencyBlock, evolutionBlock, formationsBlock, historyBlock, vsRivalBlock, zonesBlock } from './teamChartsPdf'
 
 const dmy = (iso: string) =>
   new Date(iso).toLocaleDateString(LOCALE, { day: '2-digit', month: '2-digit' })
@@ -48,119 +38,17 @@ export interface TeamSummaryPdfInput {
   squad: WyscoutSquadData | null
   teamMatches: number
   widgetIds: string[]
+  /** Partidos con estadisticas del equipo (archivo Team Stats), en orden cronologico. */
+  matchRows: EnrichedMatchRow[]
+  /** Ultimo informe PDF de Wyscout cargado (formaciones y zonas). */
+  wyscoutReport: WyscoutReportData | null
+  /** Informe de "surgidos del club" (solo si se eligio). */
+  homegrown: HomegrownReport | null
   logoDataUrl?: string
   crestDataUrl?: string
 }
 
-class Doc {
-  constructor(public pdf: JsPdf, private title: string, private logo?: { url: string; w: number; h: number }) {}
-
-  get W() { return this.pdf.internal.pageSize.getWidth() }
-  get H() { return this.pdf.internal.pageSize.getHeight() }
-  get CW() { return this.W - M * 2 }
-  get contentH() { return this.H - FOOTER_TOP - HEADER_BOTTOM - 8 }
-
-  font(size: number, bold = false, color = C.ink) {
-    this.pdf.setFont('helvetica', bold ? 'bold' : 'normal')
-    this.pdf.setFontSize(size)
-    this.pdf.setTextColor(color)
-  }
-
-  text(str: string, x: number, y: number, o: { size?: number; bold?: boolean; color?: string; align?: 'left' | 'center' | 'right' } = {}) {
-    this.font(o.size ?? 9, o.bold, o.color ?? C.ink)
-    this.pdf.text(clean(str), x, y, { align: o.align ?? 'left', baseline: 'alphabetic' })
-  }
-
-  width(str: string, size: number, bold = false) {
-    this.font(size, bold)
-    return this.pdf.getTextWidth(clean(str))
-  }
-
-  fit(str: string, maxW: number, size: number, bold = false) {
-    if (this.width(str, size, bold) <= maxW) return str
-    let s = str
-    while (s.length > 1 && this.width(s + '...', size, bold) > maxW) s = s.slice(0, -1)
-    return s.trimEnd() + '...'
-  }
-
-  wrap(str: string, maxW: number, size: number) {
-    this.font(size)
-    return this.pdf.splitTextToSize(clean(str), maxW) as string[]
-  }
-
-  rect(x: number, y: number, w: number, h: number, fill: string, r = 0) {
-    this.pdf.setFillColor(fill)
-    if (r > 0) this.pdf.roundedRect(x, y, w, h, r, r, 'F')
-    else this.pdf.rect(x, y, w, h, 'F')
-  }
-
-  line(x1: number, y1: number, x2: number, y2: number, color = C.line, width = 0.6) {
-    this.pdf.setDrawColor(color)
-    this.pdf.setLineWidth(width)
-    this.pdf.line(x1, y1, x2, y2)
-  }
-
-  newPage(orientation: 'portrait' | 'landscape' = 'portrait') {
-    this.pdf.addPage('a4', orientation)
-    this.header()
-  }
-
-  header() {
-    this.text('DOBLE G SPORTS GROUP', M, 30, { size: 7, bold: true, color: C.green })
-    this.text(this.title, M, 42, { size: 8, color: C.muted })
-    if (this.logo) this.pdf.addImage(this.logo.url, 'PNG', this.W - M - this.logo.w, 20, this.logo.w, this.logo.h)
-    this.line(M, 52, this.W - M, 52)
-  }
-}
-
 /* ------------------------------------------------------------ bloques */
-
-interface Block { h: number; draw: (d: Doc, y: number) => void }
-
-const TITLE_H = 22
-
-function blockTitle(d: Doc, y: number, title: string, description?: string): number {
-  d.text(title, M, y + 13, { size: 12.5, bold: true })
-  let h = TITLE_H
-  if (description) {
-    const lines = d.wrap(description, d.CW, 8.2)
-    lines.forEach((l, i) => d.text(l, M, y + h + 6 + i * 11, { size: 8.2, color: C.muted }))
-    h += lines.length * 11 + 6
-  }
-  return h
-}
-
-function descHeight(d: Doc, description?: string) {
-  return TITLE_H + (description ? d.wrap(description, d.CW, 8.2).length * 11 + 6 : 0)
-}
-
-interface Col { title: string; w: number; align?: 'left' | 'right' | 'center' }
-
-const ROW_H = 18
-const HEAD_H = 18
-
-function drawHead(d: Doc, cols: Col[], y: number, x0 = M) {
-  const total = cols.reduce((s, c) => s + c.w, 0)
-  d.rect(x0, y, total, HEAD_H, C.tile, 3)
-  let x = x0
-  for (const c of cols) {
-    const tx = c.align === 'right' ? x + c.w - 6 : c.align === 'center' ? x + c.w / 2 : x + 6
-    d.text(c.title.toUpperCase(), tx, y + 12, { size: 6.4, bold: true, color: C.muted, align: c.align ?? 'left' })
-    x += c.w
-  }
-}
-
-function drawCells(d: Doc, cols: Col[], cells: string[], y: number, o: { bold?: number[]; x0?: number; size?: number; colors?: (string | undefined)[] } = {}) {
-  let x = o.x0 ?? M
-  const size = o.size ?? 8.4
-  cells.forEach((s, i) => {
-    const c = cols[i]
-    const tx = c.align === 'right' ? x + c.w - 6 : c.align === 'center' ? x + c.w / 2 : x + 6
-    const bold = o.bold?.includes(i)
-    d.text(d.fit(s, c.w - 10, size, bold), tx, y + 12, { size, bold, color: o.colors?.[i] ?? (bold ? C.ink : C.text), align: c.align ?? 'left' })
-    x += c.w
-  })
-}
 
 function rankingBlock(d: Doc, def: RankingWidgetDef, input: TeamSummaryPdfInput): Block | null {
   const squad = input.squad!
@@ -281,17 +169,6 @@ function fixturesBlock(d: Doc, title: string, description: string, fixtures: Age
       }
     },
   }
-}
-
-function tiles(d: Doc, y: number, items: [string, string][]) {
-  const gap = 8
-  const w = (d.CW - gap * (items.length - 1)) / items.length
-  items.forEach(([value, label], i) => {
-    const x = M + i * (w + gap)
-    d.rect(x, y, w, 48, C.tile, 6)
-    d.text(value, x + w / 2, y + 23, { size: 15, bold: true, align: 'center' })
-    d.text(label.toUpperCase(), x + w / 2, y + 38, { size: 6.4, bold: true, color: C.muted, align: 'center' })
-  })
 }
 
 function seasonBlock(d: Doc, input: TeamSummaryPdfInput): Block | null {
@@ -444,7 +321,15 @@ export async function buildTeamSummaryPdf(input: TeamSummaryPdfInput): Promise<J
   const groups: { title: string; blocks: (Block | null)[] }[] = [
     {
       title: 'Datos del equipo',
-      blocks: [want.has('temporada') ? seasonBlock(d, input) : null],
+      blocks: [
+        want.has('temporada') ? seasonBlock(d, input) : null,
+        want.has('eficacia') ? efficiencyBlock(d, input.matchRows, input.seasonStats) : null,
+        want.has('vsRival') ? vsRivalBlock(d, input.matchRows) : null,
+        want.has('evolucion') ? evolutionBlock(d, input.matchRows) : null,
+        want.has('historial') ? historyBlock(d, input.matchRows) : null,
+        want.has('formaciones') ? formationsBlock(d, input.wyscoutReport) : null,
+        want.has('zonas') ? zonesBlock(d, input.wyscoutReport) : null,
+      ],
     },
     {
       title: 'Tabla y partidos',
@@ -464,36 +349,49 @@ export async function buildTeamSummaryPdf(input: TeamSummaryPdfInput): Promise<J
     },
   ]
 
-  const blocks: Block[] = []
-  for (const g of groups) {
+  const sections = groups.map(g => {
     const list = g.blocks.filter((b): b is Block => b !== null)
-    if (!list.length) continue
+    if (!list.length) return [] as Block[]
     const head = sectionBlock(g.title)
     // El titulo de seccion y su primer bloque se miden juntos para que nunca queden separados.
-    blocks.push({ h: head.h + list[0].h, draw: (d, y) => { head.draw(d, y); list[0].draw(d, y + head.h) } }, ...list.slice(1))
-  }
+    return [{ h: head.h + list[0].h, draw: (d: Doc, y: number) => { head.draw(d, y); list[0].draw(d, y + head.h) } }, ...list.slice(1)]
+  })
 
-  // Primera hoja: portada arriba y despues los bloques.
+  // Primera hoja: portada arriba y despues los bloques del equipo.
   d.header()
   const coverH = coverHeight()
   drawCover(d, input, HEADER_BOTTOM - 10)
-  const firstPageRoom = d.contentH - coverH
-  let startIdx = 0
-  let y = HEADER_BOTTOM - 10 + coverH
-  while (startIdx < blocks.length && (y - (HEADER_BOTTOM - 10 + coverH)) + blocks[startIdx].h <= firstPageRoom) {
-    blocks[startIdx].draw(d, y)
-    y += blocks[startIdx].h + GAP
-    startIdx++
-  }
-  const rest = blocks.slice(startIdx)
-  for (const page of planPages(rest.map(b => b.h), d.contentH, GAP)) {
-    d.newPage()
-    let py = HEADER_BOTTOM
-    for (const i of page) {
-      rest[i].draw(d, py)
-      py += rest[i].h + GAP
+  let cursor = { y: HEADER_BOTTOM - 10 + coverH, bottom: HEADER_BOTTOM + d.contentH }
+
+  /** Dibuja bloques seguidos: llena la hoja actual y despues reparte el resto en hojas nuevas. */
+  function renderBlocks(blocks: Block[]) {
+    let i = 0
+    while (i < blocks.length && cursor.y + blocks[i].h <= cursor.bottom) {
+      blocks[i].draw(d, cursor.y)
+      cursor.y += blocks[i].h + GAP
+      i++
+    }
+    const rest = blocks.slice(i)
+    for (const page of planPages(rest.map(b => b.h), d.contentH, GAP)) {
+      d.newPage()
+      let py = HEADER_BOTTOM
+      for (const k of page) {
+        rest[k].draw(d, py)
+        py += rest[k].h + GAP
+      }
+      cursor = { y: py, bottom: HEADER_BOTTOM + d.contentH }
     }
   }
+
+  renderBlocks(sections[0])
+  // "Surgidos del club": sus propias hojas apaisadas, dentro de los datos del equipo.
+  if (want.has('surgidos') && input.homegrown) {
+    appendHomegrownPages(pdf, input.homegrown, { today: input.today, logoDataUrl: input.logoDataUrl })
+    // Lo que sigue arranca en una hoja vertical nueva (si no hay nada mas, no se agrega).
+    cursor = { y: 0, bottom: -1 }
+  }
+  renderBlocks(sections[1])
+  renderBlocks(sections[2])
 
   if (input.squad && want.has('tablaCompleta')) drawFullTable(d, input)
 

@@ -11,6 +11,9 @@ import { LANGUAGE_LOCALES } from '@/constants/translations'
 import { listCoachMatchTeamStats, type CoachMatchTeamStats } from '@/services/coachService'
 import { computeSeasonStats } from '@/features/coaches/seasonStats'
 import { getLatestSquadStats, type SquadStatsRecord } from '@/services/wyscoutSquadService'
+import { getLatestWyscoutReport } from '@/services/coachWyscoutReportService'
+import type { WyscoutReportData } from '@/features/coaches/wyscoutReport/wyscoutReportTypes'
+import { buildEnrichedMatchRows } from './CoachMatchMetricsEvolution'
 import { filterByMinutes } from '@/features/coaches/wyscoutSquad/squadMetrics'
 import { RANKING_WIDGETS } from '@/features/coaches/wyscoutSquad/widgetDefs'
 import SummaryToolbar from './summary/SummaryToolbar'
@@ -124,6 +127,7 @@ export default function CoachSummaryTab({ coach }: { coach: AgencyCoach }) {
   const [showTeamUpload, setShowTeamUpload] = useState(false)
   const [showPdf, setShowPdf] = useState(false)
   const [minMinutes, setMinMinutes] = useState(DEFAULT_MIN_MINUTES)
+  const [wyscoutReport, setWyscoutReport] = useState<WyscoutReportData | null>(null)
   const standings = useStandings(coach.leagueApiId, coach.leagueSeason)
 
   useEffect(() => {
@@ -133,6 +137,7 @@ export default function CoachSummaryTab({ coach }: { coach: AgencyCoach }) {
     fetchSeasonFixtures(coach.apiTeamId, season).then(f => { if (active) setSeasonFixtures(f) })
     listCoachMatchTeamStats(coach.key).then(r => { if (active) setStatsRows(r) })
     getLatestSquadStats(coach.key).then(r => { if (active) setSquadRecord(r) })
+    getLatestWyscoutReport(coach.key).then(r => { if (active) setWyscoutReport(r) })
     return () => { active = false }
   }, [coach.apiTeamId, coach.key, season])
 
@@ -160,6 +165,7 @@ export default function CoachSummaryTab({ coach }: { coach: AgencyCoach }) {
   const upcoming = sorted.filter(f => !isMatchFinished(f.statusShort)).slice(0, 5)
   const myGroup = standings.groups?.find(g => g.some(r => r.teamId === coach.apiTeamId)) ?? null
   const seasonStats = seasonFixtures.length ? computeSeasonStats(seasonFixtures, statsRows) : null
+  const matchRows = buildEnrichedMatchRows(seasonFixtures, statsRows)
 
   const dataDate = squadRecord?.uploaded_at ?? null
   const dataLabel = dataDate
@@ -167,7 +173,12 @@ export default function CoachSummaryTab({ coach }: { coach: AgencyCoach }) {
     : 'Todavía no se cargó el archivo de Wyscout'
 
   const available = new Set<string>([
-    ...(seasonStats && seasonStats.played > 0 ? ['temporada'] : []),
+    ...(seasonStats && seasonStats.played > 0 ? ['temporada', 'eficacia'] : []),
+    ...(coach.apiTeamId ? ['surgidos'] : []),
+    ...(matchRows.length >= 2 ? ['vsRival', 'evolucion'] : []),
+    ...(matchRows.length ? ['historial'] : []),
+    ...(wyscoutReport?.formations.length ? ['formaciones'] : []),
+    ...(wyscoutReport?.zoneGrids.length ? ['zonas'] : []),
     ...(next ? ['proximo'] : []),
     ...(myGroup ? ['tabla'] : []),
     'ultimos', 'proximos',
@@ -177,9 +188,18 @@ export default function CoachSummaryTab({ coach }: { coach: AgencyCoach }) {
   async function generatePdf(widgetIds: string[]) {
     const { exportTeamSummaryPdf, loadImageDataUrl } = await import('@/features/coaches/wyscoutSquad/exportTeamSummaryPdf')
     const crestUrl = [...fixtures!].map(f => (f.homeTeam.id === coach.apiTeamId ? f.homeTeam.logo : f.awayTeam.logo))[0]
-    const [logoDataUrl, crestDataUrl] = await Promise.all([
+    const wantsHomegrown = widgetIds.includes('surgidos')
+    const [logoDataUrl, crestDataUrl, homegrown] = await Promise.all([
       loadImageDataUrl('/brand/logo-black.png'),
       crestUrl ? loadImageDataUrl(crestUrl) : Promise.resolve(undefined),
+      wantsHomegrown
+        ? Promise.all([import('@/services/homegrownUsageService'), import('@/features/coaches/homegrown/homegrownReport')])
+          .then(async ([svc, rep]) => {
+            const data = await svc.loadHomegrownUsage(coach)
+            return data ? rep.buildHomegrownReport(data, coach) : null
+          })
+          .catch(() => null)
+        : Promise.resolve(null),
     ])
     await exportTeamSummaryPdf({
       coachName: coach.fullName,
@@ -198,6 +218,9 @@ export default function CoachSummaryTab({ coach }: { coach: AgencyCoach }) {
       squad,
       teamMatches,
       widgetIds,
+      matchRows,
+      wyscoutReport,
+      homegrown,
       logoDataUrl,
       crestDataUrl,
     })

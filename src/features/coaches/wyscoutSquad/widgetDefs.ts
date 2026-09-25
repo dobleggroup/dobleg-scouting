@@ -166,6 +166,13 @@ export const RANKING_WIDGETS: RankingWidgetDef[] = [
 
 export const ALL_WIDGETS: WidgetInfo[] = [
   { id: 'temporada', section: 'equipo', title: 'Números de la temporada' },
+  { id: 'eficacia', section: 'equipo', title: 'Eficacia del DT (local/visitante y puntos acumulados)' },
+  { id: 'surgidos', section: 'equipo', title: 'Jugadores surgidos del club' },
+  { id: 'vsRival', section: 'equipo', title: 'Nosotros vs. rival' },
+  { id: 'evolucion', section: 'equipo', title: 'Evolución de métricas' },
+  { id: 'historial', section: 'equipo', title: 'Partido por partido' },
+  { id: 'formaciones', section: 'equipo', title: 'Formaciones usadas' },
+  { id: 'zonas', section: 'equipo', title: 'Dónde pasan las cosas (zonas)' },
   { id: 'proximo', section: 'partidos', title: 'Próximo partido' },
   { id: 'tabla', section: 'partidos', title: 'Tabla de posiciones' },
   { id: 'ultimos', section: 'partidos', title: 'Últimos partidos' },

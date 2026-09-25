@@ -7,6 +7,33 @@ import { buildTeamSummaryPdf, teamSummaryFileName, type TeamSummaryPdfInput } fr
 import { ALL_WIDGETS } from './widgetDefs'
 import type { AgencyFixture } from '@/types/footballApi'
 import type { StandingRow } from '@/services/footballApiService'
+import type { EnrichedMatchRow } from '@/features/coaches/components/CoachMatchMetricsEvolution'
+import type { WyscoutReportData } from '@/features/coaches/wyscoutReport/wyscoutReportTypes'
+
+// PDF_REAL=<json con { matchRows, report }> usa datos reales (revision visual a mano).
+const real = process.env.PDF_REAL ? JSON.parse(readFileSync(process.env.PDF_REAL, 'utf-8')) as { matchRows: EnrichedMatchRow[]; report: WyscoutReportData } : null
+
+function matchRows(): EnrichedMatchRow[] {
+  if (real) return real.matchRows
+  return Array.from({ length: 6 }, (_, i) => ({
+    fixtureId: 100 + i, date: `2026-0${3 + i}-10T18:00:00Z`, opponent: `Rival ${i + 1}`, opponentLogo: '', isHome: i % 2 === 0,
+    scoreLabel: '1 - 0', result: (['G', 'E', 'P'] as const)[i % 3],
+    stats: {
+      id: i, coach_key: 'domingo', fixture_id: 100 + i, possession_pct: 45 + i, xg_for: 1 + i / 10, xg_against: 1.2 - i / 10,
+      raw_metrics: { 'tiros_/_a_la_porteria_2': 3 + i, 'tiros_en_contra_/_a_la_porteria_2': 2, 'duelos_/_ganados_3': 48 + i, 'duelos_aereos_/_ganados_3': 50 },
+      source_file: null, created_at: '', updated_at: '',
+    },
+  }))
+}
+
+function report(): WyscoutReportData | null {
+  if (real) return real.report
+  return {
+    matches: [], players: [], eventMaps: [], setPieces: [], sourceFileName: 'x.pdf', matchCountWindow: 10,
+    formations: [{ scheme: '4-2-3-1', usagePct: 60, teamStats: [], averagePositions: [{ x: 50, y: 100, label: 'Mastrolía' }, { x: 20, y: 60, label: 'Souto' }] }],
+    zoneGrids: [{ category: 'recuperaciones', cells: Array.from({ length: 9 }, (_, i) => ({ row: Math.floor(i / 3), col: i % 3, pct: 5 + i * 2, reference: null })) }],
+  } as unknown as WyscoutReportData
+}
 
 function squad() {
   const buf = readFileSync(fileURLToPath(new URL('./__fixtures__/temperley-2026-09-25.xlsx', import.meta.url)))
@@ -49,7 +76,7 @@ function input(widgetIds: string[]): TeamSummaryPdfInput {
     ],
     upcoming: [fixture(1, '2026-09-27T18:00:00Z', 'Atlético de Rafaela', true, null, null)],
     seasonStats: { played: 31, won: 12, drawn: 11, lost: 8, points: 47, possiblePoints: 93, goalsFor: 38, goalsAgainst: 30, avgPossession: 51.2, avgXgFor: 1.21, avgXgAgainst: 1.02 },
-    squad: squad(), teamMatches: 30, widgetIds,
+    squad: squad(), teamMatches: 30, widgetIds, matchRows: matchRows(), wyscoutReport: report(), homegrown: null,
   }
 }
 
@@ -59,6 +86,11 @@ describe('buildTeamSummaryPdf', () => {
     const pages = pdf.getNumberOfPages()
     expect(pages).toBeGreaterThan(2)
     if (process.env.PDF_OUT) writeFileSync(process.env.PDF_OUT, Buffer.from(pdf.output('arraybuffer')))
+  })
+
+  it('sin partidos cargados ni informe no dibuja los graficos del equipo', async () => {
+    const pdf = await buildTeamSummaryPdf({ ...input(['vsRival', 'evolucion', 'historial', 'formaciones', 'zonas']), matchRows: [], wyscoutReport: null })
+    expect(pdf.getNumberOfPages()).toBe(1)
   })
 
   it('con pocos widgets entra en una hoja', async () => {
