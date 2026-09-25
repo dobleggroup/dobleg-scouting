@@ -3,6 +3,7 @@
 // asi lo que se ve y lo que se exporta es exactamente lo mismo.
 import type { AnyMetric } from './squadMetrics'
 import type { SquadMetricKey } from './wyscoutSquadTypes'
+import { SCATTER_DEFS } from './scatterPlots'
 
 export type MetricFormat = 'int' | 'dec1' | 'dec2' | 'pct' | 'signed'
 
@@ -121,14 +122,13 @@ export const RANKING_WIDGETS: RankingWidgetDef[] = [
   },
   {
     id: 'creacion', title: 'Pases progresivos',
-    description: 'Qué porcentaje de sus pases progresivos (los que hacen avanzar al equipo) llega bien. Al lado, cuántos intenta cada 90 minutos y la precisión en el último tercio.',
+    description: 'Pases progresivos acertados cada 90 minutos: los que hacen avanzar al equipo y llegan bien. Al lado, cuántos intenta y con qué precisión.',
     columns: [
-      { key: 'prog_passes_acc_pct', label: 'Precisión', format: 'pct', perMinute: true },
+      { key: 'prog_passes_acc_p90', label: 'Acertados/90', format: 'dec1', perMinute: true },
       { key: 'prog_passes_p90', label: 'Intentados/90', format: 'dec1', perMinute: true },
-      { key: 'final_third_acc_pct', label: 'Últ. tercio %', format: 'pct', perMinute: true },
+      { key: 'prog_passes_acc_pct', label: 'Precisión', format: 'pct', perMinute: true },
     ],
     requires: ['prog_passes_p90', 'prog_passes_acc_pct'],
-    minAttempts: { per90: 'prog_passes_p90', min: 30, label: 'pases progresivos' },
   },
   {
     id: 'regates', title: 'Regates',
@@ -178,6 +178,7 @@ export const ALL_WIDGETS: WidgetInfo[] = [
   { id: 'ultimos', section: 'partidos', title: 'Últimos partidos' },
   { id: 'proximos', section: 'partidos', title: 'Próximos partidos' },
   ...RANKING_WIDGETS.map(w => ({ id: w.id, section: 'jugadores' as const, title: w.title })),
+  ...SCATTER_DEFS.map(d => ({ id: d.id, section: 'jugadores' as const, title: `Dispersión · ${d.title}` })),
   { id: 'perfil', section: 'jugadores', title: 'Perfil del plantel' },
   { id: 'tablaCompleta', section: 'jugadores', title: 'Todos los jugadores' },
 ]
@@ -218,7 +219,7 @@ export const FULL_TABLE_COLUMNS: MetricColumn[] = [
   { key: 'dribbles_won_pct', label: 'Regates %', format: 'pct', perMinute: true },
   { key: 'crosses_acc_pct', label: 'Centros %', format: 'pct', perMinute: true },
   { key: 'passes_acc_pct', label: 'Pases %', format: 'pct', perMinute: true },
-  { key: 'prog_passes_acc_pct', label: 'Pases prog. %', format: 'pct', perMinute: true },
+  { key: 'prog_passes_acc_p90', label: 'Pases prog. acert./90', format: 'dec1', perMinute: true },
   { key: 'duels_p90', label: 'Duelos/90', format: 'dec1', perMinute: true },
   { key: 'interceptions_p90', label: 'Intercep./90', format: 'dec1', perMinute: true },
   { key: 'shots_p90', label: 'Remates/90', format: 'dec2', perMinute: true },

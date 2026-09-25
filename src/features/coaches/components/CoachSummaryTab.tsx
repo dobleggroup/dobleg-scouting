@@ -22,6 +22,8 @@ import MinutesFilter from './summary/MinutesFilter'
 import RankingWidget from './summary/RankingWidget'
 import SquadProfileWidget from './summary/SquadProfileWidget'
 import SquadTableWidget from './summary/SquadTableWidget'
+import ScatterWidget from './summary/ScatterWidget'
+import { SCATTER_DEFS } from '@/features/coaches/wyscoutSquad/scatterPlots'
 import PdfExportPanel from './summary/PdfExportPanel'
 import { SectionHeading } from './summary/WidgetCard'
 import { LastMatchesWidget, StandingsWidget, UpcomingWidget, useStandings } from './summary/TeamWidgets'
@@ -182,7 +184,7 @@ export default function CoachSummaryTab({ coach }: { coach: AgencyCoach }) {
     ...(next ? ['proximo'] : []),
     ...(myGroup ? ['tabla'] : []),
     'ultimos', 'proximos',
-    ...(squad ? [...rankingWidgets.map(w => w.id), 'perfil', 'tablaCompleta'] : []),
+    ...(squad ? [...rankingWidgets.map(w => w.id), ...SCATTER_DEFS.map(d => d.id), 'perfil', 'tablaCompleta'] : []),
   ])
 
   async function generatePdf(widgetIds: string[]) {
@@ -293,6 +295,17 @@ export default function CoachSummaryTab({ coach }: { coach: AgencyCoach }) {
               <RankingWidget key={def.id} def={def} players={squad.players} teamMatches={teamMatches} minMinutes={minMinutes} />
             ))}
             <SquadProfileWidget players={squad.players} />
+          </div>
+          <div className="pt-2">
+            <h3 className="text-base font-semibold text-apple-gray-800 dark:text-white">Comparaciones por puesto</h3>
+            <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mt-0.5">
+              Cada punto es un jugador. Los que quedan en el recuadro verde, arriba a la derecha, están por encima del resto de su puesto en las dos cosas.
+            </p>
+          </div>
+          <div className="grid gap-5 sm:gap-6 lg:grid-cols-2">
+            {SCATTER_DEFS.map(def => (
+              <ScatterWidget key={def.id} def={def} players={squad.players} teamMatches={teamMatches} minMinutes={minMinutes} />
+            ))}
           </div>
           <SquadTableWidget players={squad.players} teamMatches={teamMatches} minMinutes={minMinutes} />
         </>

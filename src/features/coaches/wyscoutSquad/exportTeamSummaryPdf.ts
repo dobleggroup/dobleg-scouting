@@ -16,6 +16,8 @@ import type { EnrichedMatchRow } from '@/features/coaches/components/CoachMatchM
 import type { WyscoutReportData } from '@/features/coaches/wyscoutReport/wyscoutReportTypes'
 import type { HomegrownReport } from '@/features/coaches/homegrown/homegrownReport'
 import { appendHomegrownPages } from '@/features/coaches/homegrown/exportHomegrownPdf'
+import { scatterBlock } from './scatterPdf'
+import { SCATTER_DEFS } from './scatterPlots'
 import { efficiencyBlock, evolutionBlock, formationsBlock, historyBlocks, vsRivalBlock, zonesBlock } from './teamChartsPdf'
 
 const dmy = (iso: string) =>
@@ -296,6 +298,21 @@ function drawCover(d: Doc, input: TeamSummaryPdfInput, y: number) {
 
 /* ------------------------------------------------------------ entrada */
 
+/** Subtitulo que va pegado al primer bloque (nunca queda solo al pie de una hoja). */
+function withHeading(title: string, subtitle: string, blocks: Block[]): Block[] {
+  if (!blocks.length) return []
+  const [first, ...rest] = blocks
+  const headH = 40
+  return [{
+    h: headH + first.h,
+    draw: (d, y) => {
+      d.text(title, M, y + 14, { size: 14, bold: true })
+      d.text(subtitle, M, y + 28, { size: 8.2, color: C.muted })
+      first.draw(d, y + headH)
+    },
+  }, ...rest]
+}
+
 function sectionBlock(title: string): Block {
   return {
     h: 26,
@@ -349,10 +366,15 @@ export async function buildTeamSummaryPdf(input: TeamSummaryPdfInput): Promise<J
     },
     {
       title: 'Los jugadores (datos de Wyscout)',
-      blocks: input.squad ? pairColumns(d, [
-        ...RANKING_WIDGETS.filter(w => want.has(w.id)).map(def => (w: number) => rankingBlock(def, input, d, w)),
-        ...(want.has('perfil') ? [(w: number) => profileBlock(input, d, w)] : []),
-      ]) : [],
+      blocks: input.squad ? [
+        ...pairColumns(d, [
+          ...RANKING_WIDGETS.filter(w => want.has(w.id)).map(def => (w: number) => rankingBlock(def, input, d, w)),
+          ...(want.has('perfil') ? [(w: number) => profileBlock(input, d, w)] : []),
+        ]),
+        ...withHeading('Comparaciones por puesto', 'Cada punto es un jugador. En el recuadro verde, arriba a la derecha, quedan los que están por encima del resto de su puesto en las dos cosas.',
+          pairColumns(d, SCATTER_DEFS.filter(s => want.has(s.id)).map(def => (w: number) =>
+            scatterBlock(def, input.squad!.players, { minMinutes: input.minMinutes, teamMatches: input.teamMatches }, d, w)))),
+      ] : [],
     },
   ]
 

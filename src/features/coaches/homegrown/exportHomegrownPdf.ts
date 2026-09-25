@@ -186,11 +186,7 @@ function drawSummary(d: Doc, r: HomegrownReport, clubName: string) {
   const sub = [r.coachName, clubName].filter(Boolean).join('  ·  ')
   d.text(sub, M, d.y, { size: 12, color: C.muted })
   d.y += 16
-  d.y += d.paragraph(
-    `Se considera surgido del club al jugador que debutó como profesional en ${clubName || 'el club'}, aunque haya hecho inferiores en otro lado o se haya ido y vuelto.`,
-    M, d.y + 4, CONTENT_W, { size: 8.5, color: C.faint },
-  )
-  d.y += 14
+  d.y += 10
 
   let summary = `En ${r.matchesWithData} partidos, ${r.coachName} usó ${r.players.length} jugadores surgidos del club.`
   if (r.debutants.length) summary += ` ${r.debutants.length} de ellos debutaron en Primera con él.`
