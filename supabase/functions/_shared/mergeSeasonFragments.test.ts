@@ -80,3 +80,16 @@ Deno.test('mergeSeasonScoreFragments: campo null en TODOS los fragmentos queda n
   assertEquals(result.length, 1);
   assertEquals(result[0].penalty_saved_avg, null);
 });
+
+Deno.test('mergeSeasonScoreFragments: partidos en otro puesto se suman al puesto principal (caso Messi)', () => {
+  const rows = [
+    makeRow({ position: 'DEL', league_id: 253, matches_played: 12, total_goals: 11, avg_rating: 7.5 }),
+    makeRow({ position: 'EXT', league_id: 253, matches_played: 10, total_goals: 9, avg_rating: 7.0 }),
+  ];
+  const primary = 'DEL';
+  const result = mergeSeasonScoreFragments(rows.map(r => ({ ...r, position: primary })));
+  assertEquals(result.length, 1);
+  assertEquals(result[0].position, 'DEL');
+  assertEquals(result[0].matches_played, 22);
+  assertEquals(result[0].total_goals, 20);
+});

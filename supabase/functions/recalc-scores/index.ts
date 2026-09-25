@@ -26,8 +26,16 @@ serve(async (req) => {
     // Corrige posiciones adivinadas a ciegas en partidos sin dato de grilla
     // (tipico de entradas de banco) ANTES de calcular distribucion y scores de
     // esta misma corrida, para que ya salgan bien en esta pasada.
+    // Si se pasa de tiempo no frena el recalculo entero (el 2026-09-25 corto dos
+    // corridas seguidas y las fichas quedaron sin actualizar): se sigue y se avisa.
     const { error: backfillError } = await supabase.rpc('backfill_ungridded_positions');
-    if (backfillError) throw new Error(`backfill_ungridded_positions: ${backfillError.message}`);
+    if (backfillError) {
+      await supabase.from('sync_log').insert({
+        function_name: 'recalc-scores',
+        status: 'warning',
+        error_message: `backfill_ungridded_positions (se siguio igual): ${backfillError.message}`,
+      });
+    }
 
     const { data: domesticLeagues } = await supabase
       .from('leagues')
@@ -94,26 +102,44 @@ serve(async (req) => {
         const teamIds = teams?.map(t => t.id) ?? [];
         if (teamIds.length === 0) continue;
 
-        // Get ALL match stats for players on these teams (any competition)
-        const allStats = await fetchAllRows<any>((from, to) =>
+        // Get ALL match stats for players on these teams (any competition).
+        // Sin filtrar por rating ni por puesto detectado: un partido sin puntaje de
+        // Sofascore (o sin puesto en la grilla) igual se jugó, y sus goles, minutos y
+        // partidos tienen que contar. Filtrarlos dejaba a Souto con 5 goles en vez de 7.
+        const rawStats = await fetchAllRows<any>((from, to) =>
           supabase
             .from('player_match_stats')
             .select('player_id, detected_position, team_id, rating, goals, assists, fixture_id, minutes, tackles, interceptions, blocks, duels_total, duels_won, passes_accuracy, passes_key, passes_total, dribbles_success, dribbles_attempted, shots_on, shots_total, fouls_drawn, saves, goals_conceded, penalty_saved, fixtures!inner(season)')
-            .not('rating', 'is', null)
-            .not('detected_position', 'is', null)
             .in('team_id', teamIds)
             .eq('fixtures.season', season)
             .order('id')
             .range(from, to)
         );
 
+        // Un partido cuenta si el jugador tuvo minutos o puntaje (antes solo el puntaje).
+        const allStats = rawStats.filter((s: any) => (s.minutes ?? 0) > 0 || s.rating !== null);
         if (allStats.length === 0) continue;
+
+        // Puesto más frecuente de cada jugador, para ubicar los partidos en los que
+        // la grilla no detectó puesto.
+        const posCounts = new Map<number, Map<string, number>>();
+        for (const s of allStats) {
+          if (!s.detected_position) continue;
+          const m = posCounts.get(s.player_id) ?? new Map<string, number>();
+          m.set(s.detected_position, (m.get(s.detected_position) ?? 0) + 1);
+          posCounts.set(s.player_id, m);
+        }
+        const usualPos = new Map<number, string>();
+        for (const [pid, m] of posCounts) {
+          usualPos.set(pid, [...m.entries()].sort((a, b) => b[1] - a[1])[0][0]);
+        }
 
         const groups = new Map<string, typeof allStats>();
         for (const s of allStats) {
           // Override de puesto: si el jugador tiene puesto real fijado, se lo
           // agrupa ahí (todos sus partidos), corrigiendo la detección de la grilla.
-          const pos = overrideById.get(s.player_id) ?? s.detected_position;
+          const pos = overrideById.get(s.player_id) ?? s.detected_position ?? usualPos.get(s.player_id);
+          if (!pos) continue;
           const key = `${s.player_id}|${pos}`;
           if (!groups.has(key)) groups.set(key, []);
           groups.get(key)!.push(s);
@@ -146,10 +172,9 @@ serve(async (req) => {
             season,
             position,
             league_id: league.id,
-            // Explícito en vez de asumir que rows ya viene sin ratings nulos
-            // (la query los filtra hoy, pero ratings.length es correcto sin
-            // depender de ese filtro implícito).
-            matches_played: ratings.length,
+            // Todos los partidos jugados; el promedio de rating usa solo los que
+            // tienen puntaje.
+            matches_played: rows.length,
             avg_rating: ratings.length > 0
               ? Math.round((ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length) * 10) / 10
               : null,
@@ -181,7 +206,7 @@ serve(async (req) => {
         for (const r of upsertRows) allSeasonRows.push(r);
 
         // Compute position metric averages for this league
-        const leagueStats = allStats.filter((s: any) => s.minutes >= 10);
+        const leagueStats = allStats.filter((s: any) => s.minutes >= 10 && s.detected_position);
         const posMetrics = new Map<string, any[]>();
         for (const s of leagueStats) {
           const pos = s.detected_position;
@@ -248,7 +273,11 @@ serve(async (req) => {
           bestPos.set(r.player_id, { position: r.position, mp: r.matches_played ?? 0 });
         }
       }
-      const primaryRows = mergedSeasonRows.filter((r: any) => bestPos.get(r.player_id)?.position === r.position);
+      // Los partidos en los otros puestos se SUMAN al puesto principal (antes se
+      // descartaban: Messi quedaba con 11 goles en 10 partidos en vez de 20 en 22).
+      const primaryRows = mergeSeasonScoreFragments(
+        mergedSeasonRows.map((r: any) => ({ ...r, position: bestPos.get(r.player_id)!.position })),
+      );
 
       // Reemplazar los datos de la temporada por las filas primarias frescas:
       // borra filas viejas/fragmentadas de posiciones que ya no corresponden.
