@@ -454,9 +454,12 @@ export async function buildTeamSummaryPdf(input: TeamSummaryPdfInput): Promise<J
   // Bloques en el orden de la pagina; los titulos de seccion van pegados al primer bloque.
   const groups: { title: string; blocks: (Block | null)[] }[] = [
     {
-      title: 'El equipo',
+      title: 'Datos del equipo',
+      blocks: [want.has('temporada') ? seasonBlock(d, input) : null],
+    },
+    {
+      title: 'Tabla y partidos',
       blocks: [
-        want.has('temporada') ? seasonBlock(d, input) : null,
         want.has('proximo') ? nextBlock(d, input) : null,
         want.has('tabla') ? standingsBlock(d, input) : null,
         want.has('ultimos') ? fixturesBlock(d, 'Últimos partidos', 'Los 5 más recientes, en todas las competencias.', input.last, true) : null,

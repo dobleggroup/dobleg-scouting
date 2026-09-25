@@ -27,14 +27,37 @@ export function WidgetMessage({ children }: { children: ReactNode }) {
   return <p className="text-sm text-apple-gray-400 dark:text-apple-gray-500 text-center py-6">{children}</p>
 }
 
-export function SectionHeading({ title, subtitle }: { title: string; subtitle?: string }) {
+export function SectionHeading({ step, title, subtitle, action }: {
+  step?: number
+  title: string
+  subtitle?: string
+  action?: { label: string; onClick: () => void; active?: boolean }
+}) {
   return (
-    <div className="flex items-end gap-3 pt-2">
-      <div>
-        <h2 className="text-lg sm:text-xl font-bold tracking-tight text-apple-gray-800 dark:text-white">{title}</h2>
-        {subtitle && <p className="text-xs sm:text-sm text-apple-gray-400 dark:text-apple-gray-500 mt-0.5">{subtitle}</p>}
+    <div className="flex flex-wrap items-end gap-x-3 gap-y-2 pt-3">
+      <div className="flex items-center gap-2.5 min-w-0">
+        {step !== undefined && (
+          <span className="w-7 h-7 rounded-full bg-brand-green/15 text-brand-green text-sm font-bold flex items-center justify-center flex-shrink-0">{step}</span>
+        )}
+        <div className="min-w-0">
+          <h2 className="text-lg sm:text-xl font-bold tracking-tight text-apple-gray-800 dark:text-white">{title}</h2>
+          {subtitle && <p className="text-xs sm:text-sm text-apple-gray-400 dark:text-apple-gray-500 mt-0.5">{subtitle}</p>}
+        </div>
       </div>
-      <div className="flex-1 h-px bg-apple-gray-200 dark:bg-apple-gray-700 mb-2" />
+      <div className="flex-1 h-px bg-apple-gray-200 dark:bg-apple-gray-700 mb-2 hidden sm:block" />
+      {action && (
+        <button
+          type="button"
+          onClick={action.onClick}
+          className={`min-h-[36px] px-3.5 rounded-full text-xs font-semibold transition-colors ${
+            action.active
+              ? 'bg-apple-gray-200 dark:bg-apple-gray-700 text-apple-gray-700 dark:text-apple-gray-200'
+              : 'border border-brand-green/50 text-brand-green hover:bg-brand-green/10'
+          }`}
+        >
+          {action.label}
+        </button>
+      )}
     </div>
   )
 }

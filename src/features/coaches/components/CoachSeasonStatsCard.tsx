@@ -34,11 +34,26 @@ function fmtDecimal(v: number | null): string {
   return v === null ? '–' : v.toFixed(2)
 }
 
-export default function CoachSeasonStatsCard({ coach }: { coach: AgencyCoach }) {
+/** `uploadOpen`/`onUploadOpenChange`: el Resumen abre el cargador del archivo del equipo
+ *  desde el titulo de su seccion; en ese caso la tarjeta no repite el boton. `onSaved`
+ *  avisa cuando se cargo un archivo nuevo (para refrescar el resto de la pagina). */
+export default function CoachSeasonStatsCard({ coach, uploadOpen, onUploadOpenChange, onSaved }: {
+  coach: AgencyCoach
+  uploadOpen?: boolean
+  onUploadOpenChange?: (open: boolean) => void
+  onSaved?: () => void
+}) {
   const { t } = useLanguage()
   const [statsRows, setStatsRows] = useState<CoachMatchTeamStats[] | null>(null)
   const [fixtures, setFixtures] = useState<AgencyFixture[] | null>(null)
-  const [showUpload, setShowUpload] = useState(false)
+  const [ownShowUpload, setOwnShowUpload] = useState(false)
+  const controlled = uploadOpen !== undefined
+  const showUpload = controlled ? uploadOpen : ownShowUpload
+  const setShowUpload = (v: boolean | ((prev: boolean) => boolean)) => {
+    const next = typeof v === 'function' ? v(showUpload) : v
+    if (controlled) onUploadOpenChange?.(next)
+    else setOwnShowUpload(next)
+  }
   const [wyscoutReport, setWyscoutReport] = useState<WyscoutReportData | null>(null)
   const [showReportUpload, setShowReportUpload] = useState(false)
 
@@ -86,13 +101,15 @@ export default function CoachSeasonStatsCard({ coach }: { coach: AgencyCoach }) 
         <p className="text-xs font-semibold text-apple-gray-400 uppercase tracking-wide">
           {t('coachDetail.temporadaCon').replace('{name}', coach.fullName.split(' ')[0])}
         </p>
-        <button
-          type="button"
-          onClick={() => setShowUpload(v => !v)}
-          className="text-2xs font-semibold text-brand-green hover:underline"
-        >
-          {showUpload ? t('coachDetail.cerrar') : t('coachDetail.cargarExcelWyscout')}
-        </button>
+        {!controlled && (
+          <button
+            type="button"
+            onClick={() => setShowUpload(v => !v)}
+            className="text-2xs font-semibold text-brand-green hover:underline"
+          >
+            {showUpload ? t('coachDetail.cerrar') : t('coachDetail.cargarExcelWyscout')}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setShowReportUpload(v => !v)}
@@ -111,7 +128,7 @@ export default function CoachSeasonStatsCard({ coach }: { coach: AgencyCoach }) 
 
       {showUpload && (
         <div className="mb-4">
-          <CoachWyscoutUploadPanel coach={coach} fixtures={fixtures} onSaved={() => { reload(); setShowUpload(false) }} />
+          <CoachWyscoutUploadPanel coach={coach} fixtures={fixtures} onSaved={() => { reload(); setShowUpload(false); onSaved?.() }} />
         </div>
       )}
 

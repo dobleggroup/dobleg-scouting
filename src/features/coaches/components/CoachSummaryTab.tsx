@@ -121,6 +121,7 @@ export default function CoachSummaryTab({ coach }: { coach: AgencyCoach }) {
   const [statsRows, setStatsRows] = useState<CoachMatchTeamStats[]>([])
   const [squadRecord, setSquadRecord] = useState<SquadStatsRecord | null | undefined>(undefined)
   const [showUpload, setShowUpload] = useState(false)
+  const [showTeamUpload, setShowTeamUpload] = useState(false)
   const [showPdf, setShowPdf] = useState(false)
   const [minMinutes, setMinMinutes] = useState(DEFAULT_MIN_MINUTES)
   const standings = useStandings(coach.leagueApiId, coach.leagueSeason)
@@ -208,11 +209,49 @@ export default function CoachSummaryTab({ coach }: { coach: AgencyCoach }) {
         title={`${club} ${season}`}
         subtitle={`Resumen del equipo · DT ${coach.fullName}`}
         dataLabel={dataLabel}
-        onUpload={() => { setShowUpload(v => !v); setShowPdf(false) }}
-        onExportPdf={() => { setShowPdf(v => !v); setShowUpload(false) }}
+        onExportPdf={() => setShowPdf(v => !v)}
+      />
+      {showPdf && <PdfExportPanel available={available} onGenerate={generatePdf} onClose={() => setShowPdf(false)} />}
+
+      {/* 1. Datos colectivos del equipo: archivo "Team Stats" de Wyscout (uno por partido). */}
+      <SectionHeading
+        step={1}
+        title="Datos del equipo"
+        subtitle="Estadísticas colectivas partido por partido, del archivo Team Stats de Wyscout"
+        action={{
+          label: showTeamUpload ? 'Cerrar' : 'Cargar o actualizar archivo del equipo',
+          onClick: () => setShowTeamUpload(v => !v),
+          active: showTeamUpload,
+        }}
+      />
+      <CoachSeasonStatsCard
+        coach={coach}
+        uploadOpen={showTeamUpload}
+        onUploadOpenChange={setShowTeamUpload}
+        onSaved={() => listCoachMatchTeamStats(coach.key).then(setStatsRows)}
       />
 
-      {showUpload && (
+      {/* 2. Tabla de posiciones y partidos. */}
+      <SectionHeading step={2} title="Tabla y partidos" subtitle={coach.leagueName ?? undefined} />
+      {next ? <NextMatchCard next={next} /> : <EmptyState message={t('coachDetail.resumenSinPartidos')} />}
+      <StandingsWidget groups={standings.groups} failed={standings.failed} teamId={coach.apiTeamId} />
+      <div className="grid gap-5 sm:gap-6 lg:grid-cols-2">
+        <LastMatchesWidget fixtures={last} />
+        <UpcomingWidget fixtures={upcoming} />
+      </div>
+
+      {/* 3. Jugadores: archivo "Search results" de Wyscout (uno por jugador). */}
+      <SectionHeading
+        step={3}
+        title="Los jugadores"
+        subtitle={squad ? `${dataLabel} · ${squad.players.length} jugadores` : 'Datos y rankings del archivo de jugadores de Wyscout'}
+        action={squad ? {
+          label: showUpload ? 'Cerrar' : 'Actualizar archivo de jugadores',
+          onClick: () => setShowUpload(v => !v),
+          active: showUpload,
+        } : undefined}
+      />
+      {showUpload && squad && (
         <WyscoutSquadDropzone
           coachKey={coach.key}
           expectedTeam={club}
@@ -221,17 +260,6 @@ export default function CoachSummaryTab({ coach }: { coach: AgencyCoach }) {
           onCancel={() => setShowUpload(false)}
         />
       )}
-      {showPdf && <PdfExportPanel available={available} onGenerate={generatePdf} onClose={() => setShowPdf(false)} />}
-
-      <SectionHeading title="El equipo" subtitle={coach.leagueName ?? undefined} />
-      {next ? <NextMatchCard next={next} /> : <EmptyState message={t('coachDetail.resumenSinPartidos')} />}
-      <StandingsWidget groups={standings.groups} failed={standings.failed} teamId={coach.apiTeamId} />
-      <div className="grid gap-5 sm:gap-6 lg:grid-cols-2">
-        <LastMatchesWidget fixtures={last} />
-        <UpcomingWidget fixtures={upcoming} />
-      </div>
-
-      <SectionHeading title="Los jugadores" subtitle={squad ? `${dataLabel} · ${squad.players.length} jugadores` : 'Datos del archivo de Wyscout'} />
       {!squad ? (
         <WyscoutSquadDropzone coachKey={coach.key} expectedTeam={club} firstTime onSaved={setSquadRecord} />
       ) : (
@@ -246,11 +274,6 @@ export default function CoachSummaryTab({ coach }: { coach: AgencyCoach }) {
           <SquadTableWidget players={squad.players} teamMatches={teamMatches} minMinutes={minMinutes} />
         </>
       )}
-
-      {/* La tarjeta trae su propio titulo ("Temporada con …"); no se repite acá. */}
-      <div className="pt-2">
-        <CoachSeasonStatsCard coach={coach} />
-      </div>
     </div>
   )
 }

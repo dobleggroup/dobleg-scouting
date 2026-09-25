@@ -23,7 +23,7 @@ export interface RankingWidgetDef {
   requires: SquadMetricKey[]
 }
 
-export type WidgetSection = 'equipo' | 'jugadores' | 'existentes'
+export type WidgetSection = 'equipo' | 'partidos' | 'jugadores'
 
 export interface WidgetInfo {
   id: string
@@ -127,19 +127,19 @@ export const RANKING_WIDGETS: RankingWidgetDef[] = [
 
 export const ALL_WIDGETS: WidgetInfo[] = [
   { id: 'temporada', section: 'equipo', title: 'Números de la temporada' },
-  { id: 'proximo', section: 'equipo', title: 'Próximo partido' },
-  { id: 'tabla', section: 'equipo', title: 'Tabla de posiciones' },
-  { id: 'ultimos', section: 'equipo', title: 'Últimos partidos' },
-  { id: 'proximos', section: 'equipo', title: 'Próximos partidos' },
+  { id: 'proximo', section: 'partidos', title: 'Próximo partido' },
+  { id: 'tabla', section: 'partidos', title: 'Tabla de posiciones' },
+  { id: 'ultimos', section: 'partidos', title: 'Últimos partidos' },
+  { id: 'proximos', section: 'partidos', title: 'Próximos partidos' },
   ...RANKING_WIDGETS.map(w => ({ id: w.id, section: 'jugadores' as const, title: w.title })),
   { id: 'perfil', section: 'jugadores', title: 'Perfil del plantel' },
   { id: 'tablaCompleta', section: 'jugadores', title: 'Todos los jugadores' },
 ]
 
 export const SECTION_TITLES: Record<WidgetSection, string> = {
-  equipo: 'El equipo',
+  equipo: 'Datos del equipo',
+  partidos: 'Tabla y partidos',
   jugadores: 'Los jugadores',
-  existentes: 'Temporada con el DT',
 }
 
 export function formatMetric(value: number | null, format: MetricFormat): string {

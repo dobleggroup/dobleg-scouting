@@ -1,9 +1,8 @@
 // src/features/coaches/components/summary/SummaryToolbar.tsx
-export default function SummaryToolbar({ title, subtitle, dataLabel, onUpload, onExportPdf }: {
+export default function SummaryToolbar({ title, subtitle, dataLabel, onExportPdf }: {
   title: string
   subtitle: string
   dataLabel: string
-  onUpload: () => void
   onExportPdf: () => void
 }) {
   return (
@@ -14,13 +13,6 @@ export default function SummaryToolbar({ title, subtitle, dataLabel, onUpload, o
         <p className="text-xs text-apple-gray-400 mt-1">{dataLabel}</p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={onUpload}
-          className="min-h-[40px] px-4 rounded-full border border-apple-gray-300 dark:border-apple-gray-600 text-sm font-medium text-apple-gray-700 dark:text-apple-gray-200 hover:border-brand-green/60 transition-colors"
-        >
-          Actualizar datos de Wyscout
-        </button>
         <button
           type="button"
           onClick={onExportPdf}
