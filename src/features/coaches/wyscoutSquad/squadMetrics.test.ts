@@ -47,6 +47,11 @@ describe('rankBy', () => {
     const r = rankBy(players, 'goals', { teamMatches: 31, minMinutes: 450, perMinuteMetric: false })
     expect(r.map(x => x.name)).toEqual(['Suplente', 'Titular', 'Pibe'])
   })
+  it('en totales no lista a quien tiene 0', () => {
+    const ps = [...players, player('Cero', { minutes: 900, goals: 0 })]
+    const r = rankBy(ps, 'goals', { teamMatches: 31, minMinutes: 0, perMinuteMetric: false })
+    expect(r.map(x => x.name)).not.toContain('Cero')
+  })
   it('limit', () => {
     expect(rankBy(players, 'goals', { teamMatches: 31, minMinutes: 0, perMinuteMetric: false, limit: 1 })).toHaveLength(1)
   })

@@ -67,6 +67,8 @@ export function rankBy(
   const rows = pool
     .map(p => ({ name: p.name, value: metricValue(p, key, opts.teamMatches), minutes: p.stats.minutes ?? 0 }))
     .filter((r): r is RankingRow => r.value !== null && Number.isFinite(r.value))
+    // En los totales (goles, asistencias, minutos) no se lista a quien tiene 0.
+    .filter(r => opts.perMinuteMetric || r.value !== 0)
     .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, 'es'))
   return opts.limit ? rows.slice(0, opts.limit) : rows
 }

@@ -62,6 +62,17 @@ describe('parseWyscoutSquadRows', () => {
     }
   })
 
+  it('altura/edad 0 y pie "unknown" de Wyscout son dato faltante', () => {
+    const head = [...HEAD, 'Pie', 'Altura']
+    const rows = [head, ['A. Uno', 'Temperley', 'CF', 0, 3, 200, 1, 0, 1, 50, 'unknown', 0]]
+    const r = parseWyscoutSquadRows(rows, 'f.xlsx', 'Temperley')
+    if (!r.ok) throw new Error(r.error)
+    const p = r.data.players[0]
+    expect(p.heightCm).toBeNull()
+    expect(p.age).toBeNull()
+    expect(p.foot).toBeNull()
+  })
+
   it('sin jugadores', () => {
     const r = parseWyscoutSquadRows([HEAD], 'f.xlsx', 'Temperley')
     expect(r.ok).toBe(false)

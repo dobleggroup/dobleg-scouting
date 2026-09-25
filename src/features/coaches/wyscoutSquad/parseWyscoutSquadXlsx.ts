@@ -97,6 +97,12 @@ function toText(v: unknown): string | null {
   return s === '' || s === '-' ? null : s
 }
 
+/** Wyscout pone 0 cuando no tiene la edad o la altura. */
+function positiveOrNull(v: unknown): number | null {
+  const n = toNumber(v)
+  return n !== null && n > 0 ? n : null
+}
+
 function splitList(v: unknown): string[] {
   const s = toText(v)
   return s ? s.split(',').map(x => x.trim()).filter(Boolean) : []
@@ -131,11 +137,11 @@ export function parseWyscoutSquadRows(rows: unknown[][], fileName: string, expec
       name: toText(cell(r, info.name))!,
       team: toText(cell(r, info.team)) ?? '',
       positions: splitList(cell(r, info.positions)),
-      age: toNumber(cell(r, info.age)),
+      age: positiveOrNull(cell(r, info.age)),
       birthCountry: toText(cell(r, info.birthCountry)),
       passports: splitList(cell(r, info.passports)),
-      foot: toText(cell(r, info.foot)),
-      heightCm: toNumber(cell(r, info.height)),
+      foot: (() => { const f = toText(cell(r, info.foot)); return f && f.toLowerCase() !== 'unknown' ? f : null })(),
+      heightCm: positiveOrNull(cell(r, info.height)),
       stats: Object.fromEntries(metricCols.map(m => [m.key, toNumber(r[m.idx])])),
     }))
 
