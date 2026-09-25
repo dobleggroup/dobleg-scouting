@@ -1,6 +1,6 @@
 // src/features/coaches/wyscoutSquad/exportTeamSummaryPdf.ts
 // PDF del Resumen del equipo dibujado con jsPDF (texto y graficos vectoriales, no una
-// captura): A4 vertical, un bloque por widget elegido, ningun bloque partido entre dos
+// captura): A4 apaisado (igual que las hojas de surgidos del club), un bloque por widget elegido, ningun bloque partido entre dos
 // hojas (planPages). La tabla completa de jugadores va al final en hojas apaisadas.
 import type { jsPDF as JsPdf } from 'jspdf'
 import type { StandingRow } from '@/services/footballApiService'
@@ -8,7 +8,7 @@ import type { AgencyFixture } from '@/types/footballApi'
 import type { SeasonStats } from '@/features/coaches/seasonStats'
 import { matchOutcome } from '@/features/coaches/matchResult'
 import { planPages } from './pdfLayout'
-import { C, M, HEADER_BOTTOM, FOOTER_TOP, GAP, LOCALE, Doc, TITLE_H, ROW_H, HEAD_H, blockTitle, descHeight, drawHead, drawCells, tiles, type Block, type Col } from './pdfDoc'
+import { C, M, HEADER_BOTTOM, FOOTER_TOP, GAP, LOCALE, Doc, TITLE_H, ROW_H, HEAD_H, blockTitle, descHeight, drawHead, drawCells, tiles, pairColumns, type Block, type Col, type ColumnBlock } from './pdfDoc'
 import { metricValue, rankBy, squadProfile } from './squadMetrics'
 import { FULL_TABLE_COLUMNS, RANKING_WIDGETS, formatMetric, type RankingWidgetDef } from './widgetDefs'
 import type { WyscoutSquadData } from './wyscoutSquadTypes'
@@ -16,7 +16,7 @@ import type { EnrichedMatchRow } from '@/features/coaches/components/CoachMatchM
 import type { WyscoutReportData } from '@/features/coaches/wyscoutReport/wyscoutReportTypes'
 import type { HomegrownReport } from '@/features/coaches/homegrown/homegrownReport'
 import { appendHomegrownPages } from '@/features/coaches/homegrown/exportHomegrownPdf'
-import { efficiencyBlock, evolutionBlock, formationsBlock, historyBlock, vsRivalBlock, zonesBlock } from './teamChartsPdf'
+import { efficiencyBlock, evolutionBlock, formationsBlock, historyBlocks, vsRivalBlock, zonesBlock } from './teamChartsPdf'
 
 const dmy = (iso: string) =>
   new Date(iso).toLocaleDateString(LOCALE, { day: '2-digit', month: '2-digit' })
@@ -50,35 +50,35 @@ export interface TeamSummaryPdfInput {
 
 /* ------------------------------------------------------------ bloques */
 
-function rankingBlock(d: Doc, def: RankingWidgetDef, input: TeamSummaryPdfInput): Block | null {
+function rankingBlock(def: RankingWidgetDef, input: TeamSummaryPdfInput, d: Doc, w: number): ColumnBlock | null {
   const squad = input.squad!
   if (!def.requires.every(k => squad.columnsFound.includes(k))) return null
   const [primary, ...rest] = def.columns
-  const rows = rankBy(squad.players, primary.key, { teamMatches: input.teamMatches, minMinutes: input.minMinutes, perMinuteMetric: primary.perMinute, limit: 10, minAttempts: def.minAttempts })
+  const rows = rankBy(squad.players, primary.key, { teamMatches: input.teamMatches, minMinutes: input.minMinutes, perMinuteMetric: primary.perMinute, limit: 8, minAttempts: def.minAttempts })
   const description = def.minAttempts
     ? `${def.description} Entra quien jugó al menos ${input.minMinutes} minutos y tuvo al menos ${def.minAttempts.min} ${def.minAttempts.label}.`
     : def.description
   const byName = new Map(squad.players.map(p => [p.name, p]))
-  const top = descHeight(d, description) + 4
-  const h = top + HEAD_H + Math.max(rows.length, 1) * ROW_H
+  const top = descHeight(d, description, w) + 4
   return {
-    h,
-    draw: (d, y) => {
-      blockTitle(d, y, def.title, description)
-      const barW = 110
-      const otherW = 74
+    h: top + HEAD_H + Math.max(rows.length, 1) * ROW_H,
+    top,
+    draw: (d, y, x, w, rowTop = top) => {
+      blockTitle(d, y, def.title, description, x, w)
+      const barW = 70
+      const otherW = 62
       const cols: Col[] = [
-        { title: '#', w: 22, align: 'center' },
-        { title: 'Jugador', w: d.CW - 22 - barW - 60 - otherW * rest.length },
+        { title: '#', w: 18, align: 'center' },
+        { title: 'Jugador', w: w - 18 - barW - 54 - otherW * rest.length },
         { title: '', w: barW },
-        { title: primary.label, w: 60, align: 'right' },
+        { title: primary.label, w: 54, align: 'right' },
         ...rest.map(c => ({ title: c.label, w: otherW, align: 'right' as const })),
       ]
-      let yy = y + top
-      drawHead(d, cols, yy)
+      let yy = y + rowTop
+      drawHead(d, cols, yy, x)
       yy += HEAD_H
       if (rows.length === 0) {
-        d.text('Ningún jugador llega al mínimo de minutos elegido.', M + 6, yy + 12, { size: 8.4, color: C.muted })
+        d.text('Ningún jugador llega a los mínimos elegidos.', x + 6, yy + 12, { size: 8.4, color: C.muted })
         return
       }
       const max = Math.max(...rows.map(r => Math.abs(r.value)), 0)
@@ -89,12 +89,12 @@ function rankingBlock(d: Doc, def: RankingWidgetDef, input: TeamSummaryPdfInput)
           String(i + 1), r.name, '',
           formatMetric(r.value, primary.format),
           ...rest.map(c => (c.perMinute && underMin ? '—' : formatMetric(metricValue(p, c.key, input.teamMatches), c.format))),
-        ], yy, { bold: [1, 3] })
-        const bx = M + cols[0].w + cols[1].w + 4
-        d.rect(bx, yy + 6, barW - 8, 6, C.tile, 3)
-        if (max > 0) d.rect(bx, yy + 6, Math.max(2, ((barW - 8) * Math.abs(r.value)) / max), 6, r.value < 0 ? C.red : C.greenBar, 3)
+        ], yy, { bold: [1, 3], x0: x, size: 8 })
+        const bx = x + cols[0].w + cols[1].w + 2
+        d.rect(bx, yy + 6, barW - 6, 6, C.tile, 3)
+        if (max > 0) d.rect(bx, yy + 6, Math.max(2, ((barW - 6) * Math.abs(r.value)) / max), 6, r.value < 0 ? C.red : C.greenBar, 3)
         yy += ROW_H
-        d.line(M, yy, M + d.CW, yy, C.line, 0.4)
+        d.line(x, yy, x + w, yy, C.line, 0.4)
       })
     },
   }
@@ -206,25 +206,32 @@ function nextBlock(d: Doc, input: TeamSummaryPdfInput): Block | null {
   }
 }
 
-function profileBlock(d: Doc, input: TeamSummaryPdfInput): Block | null {
+function profileBlock(input: TeamSummaryPdfInput, d: Doc, w: number): ColumnBlock | null {
   const players = input.squad!.players
   const prof = squadProfile(players)
   const fmt = (v: number | null, unit: string) => (v === null ? '—' : `${v.toLocaleString(LOCALE, { maximumFractionDigits: 1 })}${unit}`)
   const footLine = Object.entries(prof.foot).sort((a, b) => b[1] - a[1])
     .map(([f, n]) => `${n} ${({ derecho: 'derechos', izquierdo: 'zurdos', ambos: 'ambidiestros' } as Record<string, string>)[f] ?? f}`).join('  ·  ')
   const dual = prof.dualPassport.map(p => `${p.name} (${p.passports.join(', ')})`).join('  ·  ')
-  const dualLines = dual ? d.wrap(`Con doble pasaporte: ${dual}`, d.CW, 8.4) : []
+  const dualLines = dual ? d.wrap(`Con doble pasaporte: ${dual}`, w, 8.4) : []
   return {
-    h: TITLE_H + 6 + 48 + 20 + dualLines.length * 12,
-    draw: (d, y) => {
-      blockTitle(d, y, 'Perfil del plantel')
-      tiles(d, y + TITLE_H + 6, [
-        [String(players.length), 'Jugadores'], [fmt(prof.avgAge, ' años'), 'Edad promedio'],
-        [fmt(prof.avgHeight, ' cm'), 'Altura promedio'], [String(prof.dualPassport.length), 'Doble pasaporte'],
-      ])
-      let yy = y + TITLE_H + 6 + 48 + 16
-      if (footLine) { d.text(`Pie hábil: ${footLine}`, M, yy, { size: 8.4, color: C.text }); yy += 12 }
-      dualLines.forEach((l, i) => d.text(l, M, yy + i * 12, { size: 8.4, color: C.text }))
+    h: TITLE_H + 6 + 48 + 8 + 48 + 20 + dualLines.length * 12,
+    draw: (d, y, x, w) => {
+      blockTitle(d, y, 'Perfil del plantel', undefined, x, w)
+      const tile = (tx: number, ty: number, tw: number, value: string, label: string) => {
+        d.rect(tx, ty, tw, 48, C.tile, 6)
+        d.text(value, tx + tw / 2, ty + 23, { size: 15, bold: true, align: 'center' })
+        d.text(label.toUpperCase(), tx + tw / 2, ty + 38, { size: 6.4, bold: true, color: C.muted, align: 'center' })
+      }
+      const tw = (w - 8) / 2
+      const ty = y + TITLE_H + 6
+      tile(x, ty, tw, String(players.length), 'Jugadores')
+      tile(x + tw + 8, ty, tw, fmt(prof.avgAge, ' años'), 'Edad promedio')
+      tile(x, ty + 56, tw, fmt(prof.avgHeight, ' cm'), 'Altura promedio')
+      tile(x + tw + 8, ty + 56, tw, String(prof.dualPassport.length), 'Doble pasaporte')
+      let yy = ty + 56 + 48 + 16
+      if (footLine) { d.text(`Pie hábil: ${footLine}`, x, yy, { size: 8.4, color: C.text }); yy += 12 }
+      dualLines.forEach((l, i) => d.text(l, x, yy + i * 12, { size: 8.4, color: C.text }))
     },
   }
 }
@@ -301,7 +308,7 @@ function sectionBlock(title: string): Block {
 
 export async function buildTeamSummaryPdf(input: TeamSummaryPdfInput): Promise<JsPdf> {
   const { jsPDF } = await import('jspdf')
-  const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4', compress: true })
+  const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4', compress: true })
   pdf.setProperties({
     title: `${input.club} ${input.season} - ${input.coachName}`,
     author: 'Doble G Sports Group',
@@ -326,7 +333,7 @@ export async function buildTeamSummaryPdf(input: TeamSummaryPdfInput): Promise<J
         want.has('eficacia') ? efficiencyBlock(d, input.matchRows, input.seasonStats) : null,
         want.has('vsRival') ? vsRivalBlock(d, input.matchRows) : null,
         want.has('evolucion') ? evolutionBlock(d, input.matchRows) : null,
-        want.has('historial') ? historyBlock(d, input.matchRows) : null,
+        ...(want.has('historial') ? historyBlocks(d, input.matchRows) : []),
         want.has('formaciones') ? formationsBlock(d, input.wyscoutReport) : null,
         want.has('zonas') ? zonesBlock(d, input.wyscoutReport) : null,
       ],
@@ -342,10 +349,10 @@ export async function buildTeamSummaryPdf(input: TeamSummaryPdfInput): Promise<J
     },
     {
       title: 'Los jugadores (datos de Wyscout)',
-      blocks: input.squad ? [
-        ...RANKING_WIDGETS.filter(w => want.has(w.id)).map(w => rankingBlock(d, w, input)),
-        want.has('perfil') ? profileBlock(d, input) : null,
-      ] : [],
+      blocks: input.squad ? pairColumns(d, [
+        ...RANKING_WIDGETS.filter(w => want.has(w.id)).map(def => (w: number) => rankingBlock(def, input, d, w)),
+        ...(want.has('perfil') ? [(w: number) => profileBlock(input, d, w)] : []),
+      ]) : [],
     },
   ]
 

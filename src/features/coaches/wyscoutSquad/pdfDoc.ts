@@ -68,7 +68,7 @@ export class Doc {
     this.pdf.line(x1, y1, x2, y2)
   }
 
-  newPage(orientation: 'portrait' | 'landscape' = 'portrait') {
+  newPage(orientation: 'portrait' | 'landscape' = 'landscape') {
     this.pdf.addPage('a4', orientation)
     this.header()
   }
@@ -86,19 +86,48 @@ export interface Block { h: number; draw: (d: Doc, y: number) => void }
 
 export const TITLE_H = 22
 
-export function blockTitle(d: Doc, y: number, title: string, description?: string): number {
-  d.text(title, M, y + 13, { size: 12.5, bold: true })
+export function blockTitle(d: Doc, y: number, title: string, description?: string, x = M, w = d.CW): number {
+  d.text(title, x, y + 13, { size: 12.5, bold: true })
   let h = TITLE_H
   if (description) {
-    const lines = d.wrap(description, d.CW, 8.2)
-    lines.forEach((l, i) => d.text(l, M, y + h + 6 + i * 11, { size: 8.2, color: C.muted }))
+    const lines = d.wrap(description, w, 8.2)
+    lines.forEach((l, i) => d.text(l, x, y + h + 6 + i * 11, { size: 8.2, color: C.muted }))
     h += lines.length * 11 + 6
   }
   return h
 }
 
-export function descHeight(d: Doc, description?: string) {
-  return TITLE_H + (description ? d.wrap(description, d.CW, 8.2).length * 11 + 6 : 0)
+export function descHeight(d: Doc, description?: string, w = d.CW) {
+  return TITLE_H + (description ? d.wrap(description, w, 8.2).length * 11 + 6 : 0)
+}
+
+/** Bloque que se dibuja en una columna (x, ancho): dos de estos van lado a lado. */
+export interface ColumnBlock {
+  h: number
+  /** Alto del titulo + descripcion: en una fila, las tablas arrancan todas a la misma altura. */
+  top?: number
+  draw: (d: Doc, y: number, x: number, w: number, top?: number) => void
+}
+
+/** Pone los bloques de a dos por fila (el ultimo solo, a media hoja si es impar). */
+export function pairColumns(d: Doc, items: ((w: number) => ColumnBlock | null)[], gap = 18): Block[] {
+  const w = (d.CW - gap) / 2
+  const built = items.map(f => f(w)).filter((b): b is ColumnBlock => b !== null)
+  const out: Block[] = []
+  for (let i = 0; i < built.length; i += 2) {
+    const a = built[i]
+    const b = built[i + 1]
+    const top = Math.max(a.top ?? 0, b?.top ?? 0)
+    const hOf = (c: ColumnBlock) => c.h - (c.top ?? top) + top
+    out.push({
+      h: Math.max(hOf(a), b ? hOf(b) : 0),
+      draw: (d, y) => {
+        a.draw(d, y, M, w, top)
+        b?.draw(d, y, M + w + gap, w, top)
+      },
+    })
+  }
+  return out
 }
 
 export interface Col { title: string; w: number; align?: 'left' | 'right' | 'center' }

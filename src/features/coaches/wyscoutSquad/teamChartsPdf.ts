@@ -125,7 +125,7 @@ export function efficiencyBlock(d: Doc, rows: EnrichedMatchRow[], stats: SeasonS
   const ppg = stats.played > 0 ? stats.points / stats.played : null
   const { home, away } = computeHomeAwaySplit(rows)
   const cum = buildCumulativePoints(rows)
-  const chartH = 150
+  const chartH = 122
   return {
     h: TITLE_H + 6 + 48 + 12 + chartH,
     draw: (d, y) => {
@@ -139,8 +139,8 @@ export function efficiencyBlock(d: Doc, rows: EnrichedMatchRow[], stats: SeasonS
       const half = (d.CW - 10) / 2
       d.rect(M, cy, half, chartH, C.tile, 6)
       d.text('Local vs. visitante', M + 10, cy + 15, { size: 8.6, bold: true })
-      splitBars(d, M + 10, cy + 34, half - 20, 'Puntos por partido', home.ppg, away.ppg, false)
-      splitBars(d, M + 10, cy + 90, half - 20, '% de victorias', home.winPct, away.winPct, true)
+      splitBars(d, M + 10, cy + 30, half - 20, 'Puntos por partido', home.ppg, away.ppg, false)
+      splitBars(d, M + 10, cy + 76, half - 20, '% de victorias', home.winPct, away.winPct, true)
       lineChart(d, M + half + 10, cy, half, chartH, {
         title: 'Puntos acumulados',
         series: [{ values: cum.map(c => c.points), color: OWN }],
@@ -166,14 +166,15 @@ export function vsRivalBlock(d: Doc, rows: EnrichedMatchRow[]): Block | null {
   if (rows.length < 2) return null
   const chartH = 140
   const top = descHeight(d, DESC_VS) + 4
-  const nRows = Math.ceil(VS_RIVAL.length / 2)
+  const perRow = 3
+  const nRows = Math.ceil(VS_RIVAL.length / perRow)
   return {
     h: top + nRows * (chartH + 10),
     draw: (d, y) => {
       blockTitle(d, y, 'Nosotros vs. rival', DESC_VS)
-      const w = (d.CW - 10) / 2
+      const w = (d.CW - 10 * (perRow - 1)) / perRow
       VS_RIVAL.forEach((c, i) => {
-        lineChart(d, M + (i % 2) * (w + 10), y + top + Math.floor(i / 2) * (chartH + 10), w, chartH, {
+        lineChart(d, M + (i % perRow) * (w + 10), y + top + Math.floor(i / perRow) * (chartH + 10), w, chartH, {
           title: c.title,
           series: [
             { values: rows.map(c.own), color: OWN, label: 'Nosotros' },
@@ -228,26 +229,33 @@ export function evolutionBlock(d: Doc, rows: EnrichedMatchRow[], metrics: string
 
 /* ------------------------------------------------------------ partido por partido */
 
-export function historyBlock(d: Doc, rows: EnrichedMatchRow[]): Block | null {
-  if (!rows.length) return null
+/** La tabla de partidos se parte en tramos que entran en una hoja (del mas reciente al
+ *  mas viejo); cada tramo repite el encabezado. */
+export function historyBlocks(d: Doc, rows: EnrichedMatchRow[]): Block[] {
+  if (!rows.length) return []
   const list = [...rows].reverse()
-  const top = descHeight(d, 'Del más reciente al más viejo.') + 4
   const rowH = 15
-  return {
-    h: top + HEAD_H + list.length * rowH,
-    draw: (d, y) => {
-      blockTitle(d, y, 'Partido por partido', 'Del más reciente al más viejo.')
-      const n = 58
+  const desc = 'Del más reciente al más viejo.'
+  const top = descHeight(d, desc) + 4
+  // Lugar para el titulo de seccion (26) que puede ir pegado al primer tramo.
+  const perChunk = Math.max(5, Math.floor((d.contentH - 26 - top - HEAD_H) / rowH))
+  const chunks: EnrichedMatchRow[][] = []
+  for (let i = 0; i < list.length; i += perChunk) chunks.push(list.slice(i, i + perChunk))
+  const num = (v: number | null, dig = 0, suf = '') => (v === null ? '—' : `${v.toLocaleString(LOCALE, { minimumFractionDigits: dig, maximumFractionDigits: dig })}${suf}`)
+  return chunks.map((chunk, ci) => ({
+    h: top + HEAD_H + chunk.length * rowH,
+    draw: (d: Doc, y: number) => {
+      blockTitle(d, y, ci === 0 ? 'Partido por partido' : 'Partido por partido (continuación)', desc)
+      const n = 70
       const cols: Col[] = [
-        { title: 'Fecha', w: 44 }, { title: 'Rival', w: d.CW - 44 - 52 - n * 5 }, { title: 'Res.', w: 52, align: 'center' },
+        { title: 'Fecha', w: 50 }, { title: 'Rival', w: d.CW - 50 - 60 - n * 5 }, { title: 'Res.', w: 60, align: 'center' },
         { title: 'Posesión', w: n, align: 'right' }, { title: 'xG', w: n, align: 'right' }, { title: 'xG rival', w: n, align: 'right' },
         { title: 'Tiros a puerta', w: n, align: 'right' }, { title: 'Duelos %', w: n, align: 'right' },
       ]
       let yy = y + top
       drawHead(d, cols, yy)
       yy += HEAD_H
-      const num = (v: number | null, dig = 0, suf = '') => (v === null ? '—' : `${v.toLocaleString(LOCALE, { minimumFractionDigits: dig, maximumFractionDigits: dig })}${suf}`)
-      for (const r of list) {
+      for (const r of chunk) {
         drawCells(d, cols, [
           dm(r.date), `${r.isHome ? 'vs' : 'en'} ${r.opponent}`, r.scoreLabel ?? '—',
           num(rowMetric(r, 'possession_pct'), 0, '%'), num(rowMetric(r, 'xg_for'), 2), num(rowMetric(r, 'xg_against'), 2),
@@ -260,16 +268,11 @@ export function historyBlock(d: Doc, rows: EnrichedMatchRow[]): Block | null {
         d.line(M, yy, M + d.CW, yy, C.line, 0.4)
       }
     },
-  }
+  }))
 }
 
 /* ------------------------------------------------------------ canchas (informe de Wyscout) */
 
-function mix(a: string, b: string, t: number): string {
-  const pa = [1, 3, 5].map(i => parseInt(a.slice(i, i + 2), 16))
-  const pb = [1, 3, 5].map(i => parseInt(b.slice(i, i + 2), 16))
-  return '#' + pa.map((v, i) => Math.round(v + (pb[i] - v) * t).toString(16).padStart(2, '0')).join('')
-}
 
 function surname(name?: string): string {
   if (!name) return ''
@@ -335,30 +338,68 @@ export function formationsBlock(d: Doc, report: WyscoutReportData | null): Block
 
 const ZONE_LABEL: Record<string, string> = { recuperaciones: 'Recuperaciones', perdidas: 'Pérdidas de balón', faltas: 'Faltas cometidas' }
 
-/** Cancha horizontal (ataque a la derecha) dividida en 3 x 3 con el % de cada zona. */
+/** Lineas de una cancha horizontal (105 x 68, ataque a la derecha) escaladas a (x, y, k). */
+function horizontalMarkings(d: Doc, x: number, y: number, k: number) {
+  const X = (v: number) => x + v * k
+  const Y = (v: number) => y + v * k
+  d.pdf.setDrawColor(PITCH_LINE)
+  d.pdf.setLineWidth(0.7)
+  d.pdf.rect(X(1.5), Y(1.5), 102 * k, 65 * k, 'S')
+  d.pdf.line(X(52.5), Y(1.5), X(52.5), Y(66.5))
+  d.pdf.circle(X(52.5), Y(34), 9.15 * k, 'S')
+  d.pdf.rect(X(1.5), Y(13.84), 16.5 * k, 40.32 * k, 'S')
+  d.pdf.rect(X(1.5), Y(24.84), 5.5 * k, 18.32 * k, 'S')
+  d.pdf.rect(X(87), Y(13.84), 16.5 * k, 40.32 * k, 'S')
+  d.pdf.rect(X(98), Y(24.84), 5.5 * k, 18.32 * k, 'S')
+  // arcos
+  d.pdf.setLineWidth(1.2)
+  d.pdf.line(X(0.6), Y(30.34), X(0.6), Y(37.66))
+  d.pdf.line(X(104.4), Y(30.34), X(104.4), Y(37.66))
+  d.pdf.setFillColor(PITCH_LINE)
+  d.pdf.circle(X(52.5), Y(34), 0.6 * k, 'F')
+  d.pdf.circle(X(12.5), Y(34), 0.5 * k, 'F')
+  d.pdf.circle(X(92.5), Y(34), 0.5 * k, 'F')
+}
+
+/** Cancha horizontal (ataque a la derecha) partida en 3 x 3: el blanco de cada zona es mas
+ *  fuerte cuantas mas acciones hubo ahi; las lineas de la cancha quedan encima para que se
+ *  vea en que parte del campo pasa cada cosa. */
 function zonePitch(d: Doc, x: number, y: number, w: number, grid: WyscoutZoneGrid) {
   const k = w / 105
   const h = 68 * k
   for (let i = 0; i < 7; i++) d.rect(x + i * 15 * k, y, 15 * k, h, i % 2 ? GRASS_B : GRASS_A)
   const inner = { x: x + 1.5 * k, y: y + 1.5 * k, w: 102 * k, h: 65 * k }
-  // Lineas primero: las zonas van encima y la mitad de cancha no tapa los numeros.
-  d.pdf.setDrawColor(PITCH_LINE)
-  d.pdf.setLineWidth(0.5)
-  d.pdf.rect(inner.x, inner.y, inner.w, inner.h, 'S')
   const max = Math.max(...grid.cells.map(c => c.pct), 1)
   const cw = inner.w / 3
   const rh = inner.h / 3
+  const cellAt = (row: number, col: number) => grid.cells.find(c => c.row === row && c.col === col)
   for (let i = 0; i < 9; i++) {
     const row = Math.floor(i / 3)
     const col = i % 3
-    const cell = grid.cells.find(c => c.row === row && c.col === col)
-    const cx = inner.x + col * cw
-    const cy = inner.y + row * rh
-    // Blanco sobre el pasto con la intensidad de la zona (mezcla de colores: sin transparencias).
-    if (cell) d.rect(cx + 1, cy + 1, cw - 2, rh - 2, mix(GRASS_A, '#FFFFFF', 0.06 + 0.74 * (cell.pct / max)), 2)
-    d.text(cell ? `${Math.round(cell.pct)}%` : '–', cx + cw / 2, cy + rh / 2 + 3, {
-      size: 8.5, bold: true, color: cell && cell.pct / max > 0.55 ? '#0B3D20' : '#FFFFFF', align: 'center',
-    })
+    const cell = cellAt(row, col)
+    if (!cell) continue
+    d.pdf.setGState(d.pdf.GState({ opacity: 0.05 + 0.5 * (cell.pct / max) }))
+    d.rect(inner.x + col * cw + 1.5, inner.y + row * rh + 1.5, cw - 3, rh - 3, '#FFFFFF', 3)
+    d.pdf.setGState(d.pdf.GState({ opacity: 1 }))
+  }
+  horizontalMarkings(d, x, y, k)
+  // Division de las 9 zonas (punteada, para no confundirla con las lineas de cancha).
+  d.pdf.setLineDashPattern([2, 2], 0)
+  d.pdf.setDrawColor('#D8F0DF')
+  d.pdf.setLineWidth(0.4)
+  for (let c = 1; c < 3; c++) d.pdf.line(inner.x + c * cw, inner.y, inner.x + c * cw, inner.y + inner.h)
+  for (let r = 1; r < 3; r++) d.pdf.line(inner.x, inner.y + r * rh, inner.x + inner.w, inner.y + r * rh)
+  d.pdf.setLineDashPattern([], 0)
+  for (let i = 0; i < 9; i++) {
+    const row = Math.floor(i / 3)
+    const col = i % 3
+    const cell = cellAt(row, col)
+    const label = cell ? `${Math.round(cell.pct)}%` : '–'
+    const cx = inner.x + col * cw + cw / 2
+    const cy = inner.y + row * rh + rh / 2
+    const pw = d.width(label, 8.6, true) + 10
+    d.rect(cx - pw / 2, cy - 7, pw, 13, '#0B3D20', 6.5)
+    d.text(label, cx, cy + 2.6, { size: 8.6, bold: true, color: '#FFFFFF', align: 'center' })
   }
   return h
 }
@@ -370,7 +411,7 @@ export function zonesBlock(d: Doc, report: WyscoutReportData | null): Block | nu
   const top = descHeight(d, desc) + 4
   const w = (d.CW - (grids.length - 1) * 10) / grids.length
   const pitchH = (68 * (w - 16)) / 105
-  const cardH = 26 + pitchH + 22
+  const cardH = 26 + pitchH + 24
   return {
     h: top + cardH,
     draw: (d, y) => {
@@ -381,8 +422,8 @@ export function zonesBlock(d: Doc, report: WyscoutReportData | null): Block | nu
         d.rect(cx, cy, w, cardH, C.tile, 6)
         d.text(ZONE_LABEL[g.category] ?? g.category, cx + 8, cy + 16, { size: 8.6, bold: true })
         zonePitch(d, cx + 8, cy + 24, w - 16, g)
-        d.text('Arco propio', cx + 8, cy + cardH - 8, { size: 6.4, color: C.muted })
-        d.text('Ataque  >', cx + w - 8, cy + cardH - 8, { size: 6.4, color: C.muted, align: 'right' })
+        d.text('< Arco propio', cx + 8, cy + cardH - 9, { size: 7, bold: true, color: C.muted })
+        d.text('Ataque >', cx + w - 8, cy + cardH - 9, { size: 7, bold: true, color: C.muted, align: 'right' })
       })
     },
   }
