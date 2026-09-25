@@ -247,8 +247,10 @@ export default function CoachSummaryTab({ coach }: { coach: AgencyCoach }) {
         </>
       )}
 
-      <SectionHeading title={`Temporada con ${coach.fullName.split(' ')[0]}`} />
-      <CoachSeasonStatsCard coach={coach} />
+      {/* La tarjeta trae su propio titulo ("Temporada con …"); no se repite acá. */}
+      <div className="pt-2">
+        <CoachSeasonStatsCard coach={coach} />
+      </div>
     </div>
   )
 }

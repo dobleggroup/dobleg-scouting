@@ -105,7 +105,7 @@ function SingleMetricChart({
         <select
           value={metricKey}
           onChange={e => onMetricChange(e.target.value)}
-          className="min-h-[32px] rounded-lg border border-apple-gray-200 dark:border-apple-gray-700 bg-white dark:bg-apple-gray-800 px-2 text-xs font-medium text-apple-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-green/40"
+          className="min-h-[32px] max-w-full min-w-0 rounded-lg border border-apple-gray-200 dark:border-apple-gray-700 bg-white dark:bg-apple-gray-800 px-2 text-xs font-medium text-apple-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-green/40"
         >
           {metricGroups.map(group => (
             <optgroup key={group.category} label={group.category}>

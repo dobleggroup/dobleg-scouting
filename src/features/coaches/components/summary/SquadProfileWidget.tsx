@@ -16,6 +16,7 @@ const FOOT_LABEL: Record<string, string> = { derecho: 'Derechos', izquierdo: 'Zu
 
 export default function SquadProfileWidget({ players }: { players: SquadPlayer[] }) {
   const prof = squadProfile(players)
+  const footTotal = Object.values(prof.foot).reduce((a, b) => a + b, 0)
   const fmt = (v: number | null, unit: string) =>
     v === null ? '—' : `${v.toLocaleString('es-AR', { maximumFractionDigits: 1 })}${unit}`
 
@@ -35,7 +36,7 @@ export default function SquadProfileWidget({ players }: { players: SquadPlayer[]
               <div
                 key={foot}
                 className={i === 0 ? 'bg-brand-green' : i === 1 ? 'bg-apple-gray-400 dark:bg-apple-gray-500' : 'bg-apple-gray-300 dark:bg-apple-gray-600'}
-                style={{ width: `${(n / players.length) * 100}%` }}
+                style={{ width: `${(n / footTotal) * 100}%` }}
               />
             ))}
           </div>
