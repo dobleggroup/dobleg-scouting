@@ -34,8 +34,6 @@ export interface ScatterDef {
   question: string
   x: ScatterAxis
   y: ScatterAxis
-  /** Como se lee el cuadrante de arriba a la derecha. */
-  bestLabel: string
 }
 
 const pct = (key: AnyMetric, label: string, per90: AnyMetric, min: number): ScatterAxis => ({ key, label, format: 'pct', minAttempts: { per90, min } })
@@ -47,63 +45,54 @@ export const SCATTER_DEFS: ScatterDef[] = [
     question: 'Qué porcentaje de duelos defensivos y de duelos aéreos gana cada central.',
     x: pct('def_duels_won_pct', 'Duelos defensivos ganados %', 'def_duels_p90', 15),
     y: pct('aerial_won_pct', 'Duelos aéreos ganados %', 'aerial_p90', 10),
-    bestLabel: 'Gana en el piso y en el aire',
   },
   {
     id: 'centrales-salida', group: 'centrales', title: 'Centrales: defender y salir jugando',
     question: 'Duelos ganados en general contra pases progresivos acertados cada 90 minutos.',
     x: pct('duels_won_pct', 'Duelos ganados %', 'duels_p90', 20),
     y: p90('prog_passes_acc_p90', 'Pases progresivos acertados/90'),
-    bestLabel: 'Defiende y hace avanzar al equipo',
   },
   {
     id: 'laterales', group: 'laterales', title: 'Laterales: ida y vuelta',
     question: 'Centros precisos cada 90 minutos contra porcentaje de duelos defensivos ganados.',
     x: p90('crosses_acc_p90', 'Centros precisos/90'),
     y: pct('def_duels_won_pct', 'Duelos defensivos ganados %', 'def_duels_p90', 15),
-    bestLabel: 'Aporta arriba y cumple atrás',
   },
   {
     id: 'volantes-recupera', group: 'volantes', title: 'Volantes: recuperar y hacer avanzar',
     question: 'Intercepciones contra pases progresivos acertados, cada 90 minutos.',
     x: p90('interceptions_p90', 'Intercepciones/90'),
     y: p90('prog_passes_acc_p90', 'Pases progresivos acertados/90'),
-    bestLabel: 'Recupera y hace jugar',
   },
   {
     id: 'volantes-crea', group: 'volantes', title: 'Volantes: crear y conducir',
     question: 'Jugadas clave contra carreras en progresión, cada 90 minutos.',
     x: p90('key_passes_p90', 'Jugadas clave/90'),
     y: p90('prog_runs_p90', 'Carreras en progresión/90'),
-    bestLabel: 'Crea y lleva la pelota',
   },
   {
     id: 'extremos-desequilibrio', group: 'extremos', title: 'Extremos: desequilibrio y último pase',
     question: 'Gambetas completadas contra jugadas clave, cada 90 minutos.',
     x: p90('dribbles_won_p90', 'Gambetas completadas/90'),
     y: p90('key_passes_p90', 'Jugadas clave/90'),
-    bestLabel: 'Desborda y asiste',
   },
   {
     id: 'extremos-uno-contra-uno', group: 'extremos', title: 'Extremos: uno contra uno y conducción',
     question: 'Duelos en ataque ganados contra carreras en progresión, cada 90 minutos.',
     x: p90('off_duels_won_p90', 'Duelos en ataque ganados/90'),
     y: p90('prog_runs_p90', 'Carreras en progresión/90'),
-    bestLabel: 'Gana el mano a mano y avanza',
   },
   {
     id: 'delanteros-gol', group: 'delanteros', title: 'Delanteros: llegar y convertir',
     question: 'Goles esperados (xG) contra goles hechos, cada 90 minutos.',
     x: p90('xg_p90', 'xG/90'),
     y: p90('goals_p90', 'Goles/90'),
-    bestLabel: 'Llega mucho y la mete',
   },
   {
     id: 'delanteros-area', group: 'delanteros', title: 'Delanteros: pelea y área',
     question: 'Duelos en ataque ganados contra toques en el área rival, cada 90 minutos.',
     x: p90('off_duels_won_p90', 'Duelos en ataque ganados/90'),
     y: p90('box_touches_p90', 'Toques en el área/90'),
-    bestLabel: 'Pelea y vive en el área',
   },
 ]
 

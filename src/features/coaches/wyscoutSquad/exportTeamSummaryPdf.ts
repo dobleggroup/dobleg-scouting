@@ -9,7 +9,7 @@ import type { SeasonStats } from '@/features/coaches/seasonStats'
 import { matchOutcome } from '@/features/coaches/matchResult'
 import { planPages } from './pdfLayout'
 import { C, M, HEADER_BOTTOM, FOOTER_TOP, GAP, LOCALE, Doc, TITLE_H, ROW_H, HEAD_H, blockTitle, descHeight, drawHead, drawCells, tiles, pairColumns, type Block, type Col, type ColumnBlock } from './pdfDoc'
-import { metricValue, rankBy, squadProfile } from './squadMetrics'
+import { metricValue, rankBy } from './squadMetrics'
 import { FULL_TABLE_COLUMNS, RANKING_WIDGETS, formatMetric, type RankingWidgetDef } from './widgetDefs'
 import type { WyscoutSquadData } from './wyscoutSquadTypes'
 import type { EnrichedMatchRow } from '@/features/coaches/components/CoachMatchMetricsEvolution'
@@ -208,36 +208,6 @@ function nextBlock(d: Doc, input: TeamSummaryPdfInput): Block | null {
   }
 }
 
-function profileBlock(input: TeamSummaryPdfInput, d: Doc, w: number): ColumnBlock | null {
-  const players = input.squad!.players
-  const prof = squadProfile(players)
-  const fmt = (v: number | null, unit: string) => (v === null ? '—' : `${v.toLocaleString(LOCALE, { maximumFractionDigits: 1 })}${unit}`)
-  const footLine = Object.entries(prof.foot).sort((a, b) => b[1] - a[1])
-    .map(([f, n]) => `${n} ${({ derecho: 'derechos', izquierdo: 'zurdos', ambos: 'ambidiestros' } as Record<string, string>)[f] ?? f}`).join('  ·  ')
-  const dual = prof.dualPassport.map(p => `${p.name} (${p.passports.join(', ')})`).join('  ·  ')
-  const dualLines = dual ? d.wrap(`Con doble pasaporte: ${dual}`, w, 8.4) : []
-  return {
-    h: TITLE_H + 6 + 48 + 8 + 48 + 20 + dualLines.length * 12,
-    draw: (d, y, x, w) => {
-      blockTitle(d, y, 'Perfil del plantel', undefined, x, w)
-      const tile = (tx: number, ty: number, tw: number, value: string, label: string) => {
-        d.rect(tx, ty, tw, 48, C.tile, 6)
-        d.text(value, tx + tw / 2, ty + 23, { size: 15, bold: true, align: 'center' })
-        d.text(label.toUpperCase(), tx + tw / 2, ty + 38, { size: 6.4, bold: true, color: C.muted, align: 'center' })
-      }
-      const tw = (w - 8) / 2
-      const ty = y + TITLE_H + 6
-      tile(x, ty, tw, String(players.length), 'Jugadores')
-      tile(x + tw + 8, ty, tw, fmt(prof.avgAge, ' años'), 'Edad promedio')
-      tile(x, ty + 56, tw, fmt(prof.avgHeight, ' cm'), 'Altura promedio')
-      tile(x + tw + 8, ty + 56, tw, String(prof.dualPassport.length), 'Doble pasaporte')
-      let yy = ty + 56 + 48 + 16
-      if (footLine) { d.text(`Pie hábil: ${footLine}`, x, yy, { size: 8.4, color: C.text }); yy += 12 }
-      dualLines.forEach((l, i) => d.text(l, x, yy + i * 12, { size: 8.4, color: C.text }))
-    },
-  }
-}
-
 /* ------------------------------------------------------------ tabla completa (apaisada) */
 
 const ROW_FULL = 13
@@ -369,7 +339,6 @@ export async function buildTeamSummaryPdf(input: TeamSummaryPdfInput): Promise<J
       blocks: input.squad ? [
         ...pairColumns(d, [
           ...RANKING_WIDGETS.filter(w => want.has(w.id)).map(def => (w: number) => rankingBlock(def, input, d, w)),
-          ...(want.has('perfil') ? [(w: number) => profileBlock(input, d, w)] : []),
         ]),
         ...withHeading('Comparaciones por puesto', 'Cada punto es un jugador. En el recuadro verde, arriba a la derecha, quedan los que están por encima del resto de su puesto en las dos cosas.',
           pairColumns(d, SCATTER_DEFS.filter(s => want.has(s.id)).map(def => (w: number) =>

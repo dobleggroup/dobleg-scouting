@@ -10,7 +10,7 @@ import type { SquadPlayer } from '@/features/coaches/wyscoutSquad/wyscoutSquadTy
 
 const W = 440
 const H = 300
-const PAD = { left: 46, right: 14, top: 26, bottom: 42 }
+const PAD = { left: 46, right: 14, top: 14, bottom: 42 }
 
 function ticks(lo: number, hi: number): number[] {
   return Array.from({ length: 5 }, (_, i) => lo + ((hi - lo) * i) / 4)
@@ -57,9 +57,6 @@ export default function ScatterWidget({ def, players, teamMatches, minMinutes }:
               <g>
                 <rect x={sx(data.xMid)} y={PAD.top} width={W - PAD.right - sx(data.xMid)} height={sy(data.yMid) - PAD.top}
                   className="fill-brand-green/10" rx={4} />
-                <text x={W - PAD.right} y={PAD.top - 9} textAnchor="end" fontSize={9.5} fontWeight={700} className="fill-brand-green">
-                  ★ {def.bestLabel}
-                </text>
               </g>
             )}
             {/* grilla y ejes */}

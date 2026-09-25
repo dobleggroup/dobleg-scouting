@@ -89,24 +89,3 @@ export function rankBy(
     .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, 'es'))
   return opts.limit ? rows.slice(0, opts.limit) : rows
 }
-
-function avg(values: (number | null)[]): number | null {
-  const v = values.filter((x): x is number => x !== null)
-  return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null
-}
-
-export function squadProfile(players: SquadPlayer[]): {
-  avgAge: number | null
-  avgHeight: number | null
-  foot: Record<string, number>
-  dualPassport: { name: string; passports: string[] }[]
-} {
-  const foot: Record<string, number> = {}
-  for (const p of players) if (p.foot) foot[p.foot] = (foot[p.foot] ?? 0) + 1
-  return {
-    avgAge: avg(players.map(p => p.age)),
-    avgHeight: avg(players.map(p => p.heightCm)),
-    foot,
-    dualPassport: players.filter(p => p.passports.length > 1).map(p => ({ name: p.name, passports: p.passports })),
-  }
-}

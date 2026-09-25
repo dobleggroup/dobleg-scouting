@@ -179,7 +179,6 @@ export const ALL_WIDGETS: WidgetInfo[] = [
   { id: 'proximos', section: 'partidos', title: 'Próximos partidos' },
   ...RANKING_WIDGETS.map(w => ({ id: w.id, section: 'jugadores' as const, title: w.title })),
   ...SCATTER_DEFS.map(d => ({ id: d.id, section: 'jugadores' as const, title: `Dispersión · ${d.title}` })),
-  { id: 'perfil', section: 'jugadores', title: 'Perfil del plantel' },
   { id: 'tablaCompleta', section: 'jugadores', title: 'Todos los jugadores' },
 ]
 

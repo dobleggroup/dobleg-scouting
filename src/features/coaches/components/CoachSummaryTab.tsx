@@ -20,7 +20,6 @@ import SummaryToolbar from './summary/SummaryToolbar'
 import WyscoutSquadDropzone from './summary/WyscoutSquadDropzone'
 import MinutesFilter from './summary/MinutesFilter'
 import RankingWidget from './summary/RankingWidget'
-import SquadProfileWidget from './summary/SquadProfileWidget'
 import SquadTableWidget from './summary/SquadTableWidget'
 import ScatterWidget from './summary/ScatterWidget'
 import { SCATTER_DEFS } from '@/features/coaches/wyscoutSquad/scatterPlots'
@@ -184,7 +183,7 @@ export default function CoachSummaryTab({ coach }: { coach: AgencyCoach }) {
     ...(next ? ['proximo'] : []),
     ...(myGroup ? ['tabla'] : []),
     'ultimos', 'proximos',
-    ...(squad ? [...rankingWidgets.map(w => w.id), ...SCATTER_DEFS.map(d => d.id), 'perfil', 'tablaCompleta'] : []),
+    ...(squad ? [...rankingWidgets.map(w => w.id), ...SCATTER_DEFS.map(d => d.id), 'tablaCompleta'] : []),
   ])
 
   async function generatePdf(widgetIds: string[]) {
@@ -294,7 +293,6 @@ export default function CoachSummaryTab({ coach }: { coach: AgencyCoach }) {
             {rankingWidgets.map(def => (
               <RankingWidget key={def.id} def={def} players={squad.players} teamMatches={teamMatches} minMinutes={minMinutes} />
             ))}
-            <SquadProfileWidget players={squad.players} />
           </div>
           <div className="pt-2">
             <h3 className="text-base font-semibold text-apple-gray-800 dark:text-white">Comparaciones por puesto</h3>

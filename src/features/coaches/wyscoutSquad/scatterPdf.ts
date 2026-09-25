@@ -11,18 +11,6 @@ const GREEN_DOT = '#22C55E'
 const GREEN_TINT = '#EAF6EE'
 const GRAY_DOT = '#A1A1A6'
 
-function star(d: Doc, cx: number, cy: number, r: number, color: string) {
-  const pts: [number, number][] = []
-  for (let i = 0; i < 10; i++) {
-    const a = -Math.PI / 2 + (i * Math.PI) / 5
-    const rr = i % 2 === 0 ? r : r * 0.45
-    pts.push([cx + rr * Math.cos(a), cy + rr * Math.sin(a)])
-  }
-  const deltas = pts.slice(1).map((p, i) => [p[0] - pts[i][0], p[1] - pts[i][1]])
-  d.pdf.setFillColor(color)
-  d.pdf.lines(deltas, pts[0][0], pts[0][1], [1, 1], 'F', true)
-}
-
 export function scatterBlock(def: ScatterDef, players: SquadPlayer[], opts: { minMinutes: number; teamMatches: number }, d: Doc, w: number): ColumnBlock | null {
   const data = buildScatter(players, def, opts)
   if (data.points.length < 2) return null
@@ -36,7 +24,7 @@ export function scatterBlock(def: ScatterDef, players: SquadPlayer[], opts: { mi
       blockTitle(d, y, def.title, desc, x, w)
       const cy = y + rowTop
       d.rect(x, cy, w, chartH, C.tile, 6)
-      const pad = { left: 40, right: 10, top: 20, bottom: 30 }
+      const pad = { left: 40, right: 10, top: 10, bottom: 30 }
       const px0 = x + pad.left
       const py0 = cy + pad.top
       const pw = w - pad.left - pad.right
@@ -51,9 +39,6 @@ export function scatterBlock(def: ScatterDef, players: SquadPlayer[], opts: { mi
       d.rect(px0, py0, pw, ph, '#FFFFFF')
       if (data.xMid !== null && data.yMid !== null) {
         d.rect(sx(data.xMid), py0, px0 + pw - sx(data.xMid), sy(data.yMid) - py0, GREEN_TINT)
-        // El texto del recuadro va en la franja de arriba, fuera de la zona de los puntos.
-        d.text(def.bestLabel, px0 + pw, py0 - 6, { size: 6.8, bold: true, color: GREEN, align: 'right' })
-        star(d, px0 + pw - 5 - d.width(def.bestLabel, 6.8, true), py0 - 8.2, 3.2, GREEN)
       }
       for (let i = 0; i <= 4; i++) {
         const tx = xr.lo + ((xr.hi - xr.lo) * i) / 4

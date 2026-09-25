@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { wonPer90, metricValue, rankBy, filterByMinutes, squadProfile } from './squadMetrics'
+import { wonPer90, metricValue, rankBy, filterByMinutes } from './squadMetrics'
 import type { SquadPlayer } from './wyscoutSquadTypes'
 
 function player(name: string, stats: SquadPlayer['stats'], extra: Partial<SquadPlayer> = {}): SquadPlayer {
@@ -73,20 +73,5 @@ describe('filterByMinutes', () => {
   it('filtra', () => {
     const ps = [player('A', { minutes: 100 }), player('B', { minutes: 450 }), player('C', { minutes: null })]
     expect(filterByMinutes(ps, 450).map(p => p.name)).toEqual(['B'])
-  })
-})
-
-describe('squadProfile', () => {
-  it('promedios, pie y doble pasaporte', () => {
-    const ps = [
-      player('F. Brandán', {}, { age: 36, heightCm: 165, foot: 'derecho', passports: ['Argentina', 'Romania'] }),
-      player('P. Souto', {}, { age: 26, heightCm: 178, foot: 'izquierdo', passports: ['Argentina'] }),
-      player('X', {}, { age: null, heightCm: null, foot: null }),
-    ]
-    const prof = squadProfile(ps)
-    expect(prof.avgAge).toBe(31)
-    expect(prof.avgHeight).toBe(171.5)
-    expect(prof.foot).toEqual({ derecho: 1, izquierdo: 1 })
-    expect(prof.dualPassport).toEqual([{ name: 'F. Brandán', passports: ['Argentina', 'Romania'] }])
   })
 })
