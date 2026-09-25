@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '../_shared/supabase-client.ts';
 import { fetchLineups, fetchFixturePlayers } from '../_shared/api-football.ts';
 import { mapGridToPosition, fallbackPosition } from '../_shared/position-mapper.ts';
 import { pctPasses } from '../_shared/stats-normalize.ts';
+import { canCloseWithoutPlayers } from '../_shared/api-response.ts';
 import type { PlayerMatchRow } from '../_shared/types.ts';
 
 const BATCH_SIZE = 15;
@@ -10,12 +11,12 @@ const BATCH_SIZE = 15;
 
 serve(async () => {
   const supabase = getSupabaseAdmin();
-  const results = { fixtures_processed: 0, players_inserted: 0, errors: [] as string[] };
+  const results = { fixtures_processed: 0, players_inserted: 0, pending: 0, errors: [] as string[] };
 
   try {
     const { data: fixtures } = await supabase
       .from('fixtures')
-      .select('id, league_id, season')
+      .select('id, league_id, season, date')
       .eq('stats_synced', false)
       .order('date', { ascending: false })
       .limit(BATCH_SIZE);
@@ -30,6 +31,13 @@ serve(async () => {
           fetchLineups(fixture.id),
           fetchFixturePlayers(fixture.id),
         ]);
+
+        // Sin datos de jugadores todavía: se reintenta en las próximas pasadas y solo se
+        // cierra pasados unos días (antes quedaba marcado como sincronizado y vacío).
+        if (playerStats.length === 0 && !canCloseWithoutPlayers(fixture.date)) {
+          results.pending++;
+          continue;
+        }
 
         const gridMap = new Map<number, { grid: string | null; formation: string | null; teamId: number; isSub: boolean }>();
 

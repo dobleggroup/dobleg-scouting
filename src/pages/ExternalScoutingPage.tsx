@@ -18,6 +18,7 @@ import Slider from 'rc-slider'
 import 'rc-slider/assets/index.css'
 import { useLanguage } from '@/context/LanguageContext'
 import { LANGUAGE_LOCALES } from '@/constants/translations'
+import { leagueLabel } from '@/utils/leagueLabels'
 
 const POSITIONS: { key: Position; label: string }[] = (
   Object.entries(POSITION_DISPLAY) as [Position, string][]
@@ -365,7 +366,7 @@ function ScoutingFilters({
         >
           <option value="">{t('externo.todasLasLigas')}</option>
           {leagues.map(l => (
-            <option key={l.id} value={l.id}>{l.name} ({l.country})</option>
+            <option key={l.id} value={l.id}>{leagueLabel(l)}</option>
           ))}
         </select>
 
@@ -646,7 +647,7 @@ export default function ExternalScoutingPage() {
         >
           <option value="">{t('externo.todasLasLigas')}</option>
           {leagues.map(l => (
-            <option key={l.id} value={l.id}>{l.name} ({l.country})</option>
+            <option key={l.id} value={l.id}>{leagueLabel(l)}</option>
           ))}
         </select>
 

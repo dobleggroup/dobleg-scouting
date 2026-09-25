@@ -186,11 +186,7 @@ function drawSummary(d: Doc, r: HomegrownReport, clubName: string) {
   const sub = [r.coachName, clubName].filter(Boolean).join('  ·  ')
   d.text(sub, M, d.y, { size: 12, color: C.muted })
   d.y += 16
-  d.y += d.paragraph(
-    `Se considera surgido del club al jugador que debutó como profesional en ${clubName || 'el club'}, aunque haya hecho inferiores en otro lado o se haya ido y vuelto.`,
-    M, d.y + 4, CONTENT_W, { size: 8.5, color: C.faint },
-  )
-  d.y += 14
+  d.y += 10
 
   let summary = `En ${r.matchesWithData} partidos, ${r.coachName} usó ${r.players.length} jugadores surgidos del club.`
   if (r.debutants.length) summary += ` ${r.debutants.length} de ellos debutaron en Primera con él.`
@@ -560,6 +556,35 @@ function drawPlayersTable(d: Doc, r: HomegrownReport, today: string) {
 
 /* ------------------------------------------------------------------ Entrada */
 
+function logoFor(pdf: JsPdf, logoDataUrl?: string): { url: string; w: number; h: number } | undefined {
+  if (!logoDataUrl) return undefined
+  try {
+    const props = pdf.getImageProperties(logoDataUrl)
+    if (props.width > 0 && props.height > 0) return { url: logoDataUrl, h: 26, w: 26 * (props.width / props.height) }
+  } catch { /* sin logo */ }
+  return undefined
+}
+
+/** Dibuja todas las hojas del informe a partir de la hoja actual (que ya tiene que ser
+ *  apaisada). Lo usan este PDF y el Resumen del equipo, que suma estas hojas al suyo. */
+function drawHomegrownBody(pdf: JsPdf, r: HomegrownReport, today: string, clubName: string, logo?: { url: string; w: number; h: number }) {
+  const d = new Doc(pdf, { title: `Jugadores surgidos del club · ${r.coachName}${clubName ? ` · ${clubName}` : ''}`, logo })
+  d.drawHeader()
+  drawSummary(d, r, clubName)
+  d.newPage()
+  drawCountChart(d, r)
+  d.newPage()
+  drawMinutesAndAge(d, r)
+  drawParticipation(d, r)
+  drawPlayersTable(d, r, today)
+}
+
+/** Agrega las hojas de "surgidos del club" al final de otro PDF (sin pie: lo pone el otro). */
+export function appendHomegrownPages(pdf: JsPdf, r: HomegrownReport, opts: { today: string; logoDataUrl?: string }) {
+  pdf.addPage('a4', 'landscape')
+  drawHomegrownBody(pdf, r, opts.today, r.club ? cleanClub(r.club) : '', logoFor(pdf, opts.logoDataUrl))
+}
+
 /** Arma el documento (separado de la descarga para poder probarlo). */
 export async function buildHomegrownPdf(r: HomegrownReport, opts: { today: string; logoDataUrl?: string }): Promise<JsPdf> {
   const { jsPDF } = await import('jspdf')
@@ -572,25 +597,11 @@ export async function buildHomegrownPdf(r: HomegrownReport, opts: { today: strin
     creator: 'Doble G Sports Group',
   })
 
-  let logo: { url: string; w: number; h: number } | undefined
-  if (opts.logoDataUrl) {
-    try {
-      const props = pdf.getImageProperties(opts.logoDataUrl)
-      if (props.width > 0 && props.height > 0) logo = { url: opts.logoDataUrl, h: 26, w: 26 * (props.width / props.height) }
-    } catch { logo = undefined }
-  }
-
-  const d = new Doc(pdf, { title: `Jugadores surgidos del club · ${r.coachName}${clubName ? ` · ${clubName}` : ''}`, logo })
-  d.drawHeader()
-  drawSummary(d, r, clubName)
-  d.newPage()
-  drawCountChart(d, r)
-  d.newPage()
-  drawMinutesAndAge(d, r)
-  drawParticipation(d, r)
-  drawPlayersTable(d, r, opts.today)
+  const logo = logoFor(pdf, opts.logoDataUrl)
+  drawHomegrownBody(pdf, r, opts.today, clubName, logo)
 
   // Pie en todas las hojas
+  const d = new Doc(pdf, { title: '' })
   const total = pdf.getNumberOfPages()
   for (let i = 1; i <= total; i++) {
     pdf.setPage(i)

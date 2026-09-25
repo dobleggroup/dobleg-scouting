@@ -131,6 +131,50 @@ def save_position_cache(cache):
         json.dump({str(k): v for k, v in cache.items()}, f)
 
 
+# Partidos que Sofascore todavia no tenia completos (faltan jugadores o puntajes).
+# No se marcan como sincronizados: se vuelven a pedir cada RETRY_HOURS horas hasta
+# que esten completos o pasen COMPLETE_GRACE_DAYS dias. Antes se cerraban con lo
+# que hubiera y quedaban incompletos para siempre (Mitre-Acassuso 03/05 con 7 y 2
+# jugadores, Mitre-Central Norte 30/08 con 0: goles de Machado que no existian).
+RETRY_FILE = os.path.join(os.path.dirname(__file__), "retry_state.json")
+RETRY_HOURS = 6
+COMPLETE_GRACE_DAYS = 4
+MIN_PLAYERS_PER_SIDE = 11
+
+
+def load_retry_state():
+    try:
+        with open(RETRY_FILE, "r") as f:
+            return {int(k): float(v) for k, v in json.load(f).items()}
+    except (FileNotFoundError, json.JSONDecodeError, ValueError):
+        return {}
+
+
+def save_retry_state(state):
+    with open(RETRY_FILE, "w") as f:
+        json.dump({str(k): v for k, v in state.items()}, f)
+
+
+def incomplete_reason(rows, home_team_id, away_team_id):
+    """None si el partido esta completo; si no, el motivo."""
+    for tid, side in ((home_team_id, "local"), (away_team_id, "visitante")):
+        n = sum(1 for r in rows if r["team_id"] == tid)
+        if n < MIN_PLAYERS_PER_SIDE:
+            return f"{side} con {n} jugadores"
+    unrated = [r for r in rows if (r.get("minutes") or 0) >= 15 and r.get("rating") is None]
+    if unrated:
+        return f"{len(unrated)} jugadores sin puntaje"
+    return None
+
+
+def fixture_age_days(date_str):
+    try:
+        d = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        return (datetime.now(timezone.utc) - d).total_seconds() / 86400
+    except Exception:
+        return 0.0
+
+
 def map_raw_positions(raw_positions):
     """Map raw Sofascore positions array to our position code."""
     if not raw_positions:
@@ -584,10 +628,15 @@ def main():
     # ── Phase 2: sync stats for unsynced fixtures ──
     league_ids = [str(lid) for lid in TOURNAMENTS]
     lid_filter = urllib.parse.quote(f"({','.join(league_ids)})")
-    unsynced = sb_select("fixtures",
-        f"select=id,league_id,season,home_team_id,away_team_id,score_home,score_away"
+    retry_state = load_retry_state()
+    now_ts = time.time()
+    candidates = sb_select("fixtures",
+        f"select=id,date,league_id,season,home_team_id,away_team_id,score_home,score_away"
         f"&stats_synced=eq.false&league_id=in.{lid_filter}"
-        f"&order=date.desc&limit={STATS_BATCH}")
+        f"&order=date.desc&limit={STATS_BATCH * 20}") or []
+    # Los que se reintentaron hace poco esperan su turno, asi no tapan la cola.
+    unsynced = [f for f in candidates
+                if now_ts - retry_state.get(f["id"], 0) >= RETRY_HOURS * 3600][:STATS_BATCH]
 
     if not unsynced:
         print("No unsynced fixtures")
@@ -695,6 +744,16 @@ def main():
                         continue
                     results["players_inserted"] += len(deduped)
 
+                reason = incomplete_reason(all_rows, fixture["home_team_id"], fixture["away_team_id"])
+                if reason and fixture_age_days(fixture.get("date") or "") < COMPLETE_GRACE_DAYS:
+                    retry_state[fixture["id"]] = now_ts
+                    results.setdefault("incomplete", []).append(f"{fixture['id']}: {reason}")
+                    print(f"  Fixture {fixture['id']}: incompleto ({reason}), se reintenta en {RETRY_HOURS}h")
+                    continue
+                if reason:
+                    results.setdefault("incomplete", []).append(f"{fixture['id']}: cerrado igual tras {COMPLETE_GRACE_DAYS} dias ({reason})")
+                retry_state.pop(fixture["id"], None)
+
                 sb_update("fixtures", {"stats_synced": True}, f"id=eq.{fixture['id']}")
                 results["fixtures_synced"] += 1
                 print(f"  Fixture {fixture['id']}: {len(all_rows)} players")
@@ -705,6 +764,8 @@ def main():
                     break
 
     save_position_cache(position_cache)
+    if unsynced:
+        save_retry_state(retry_state)
 
     # ── Phase 3: fix current_team_id from most recent match ──
     if results["fixtures_synced"] > 0:

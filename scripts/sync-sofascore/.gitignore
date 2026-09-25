@@ -4,3 +4,4 @@ sync.log
 resync.log
 position_cache.json
 node_modules/
+retry_state.json

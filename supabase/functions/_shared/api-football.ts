@@ -1,5 +1,7 @@
 // supabase/functions/_shared/api-football.ts
 
+import { apiResponseError } from './api-response.ts';
+
 const API_KEY = Deno.env.get('API_FOOTBALL_KEY')!;
 const BASE_URL = Deno.env.get('API_FOOTBALL_BASE_URL') || 'https://v3.football.api-sports.io';
 
@@ -22,6 +24,8 @@ async function apiFetch<T>(endpoint: string, params: Record<string, string>): Pr
   }
 
   const json = await res.json();
+  const apiError = apiResponseError(json);
+  if (apiError) throw new Error(apiError);
   return json.response as T;
 }
 
@@ -51,6 +55,12 @@ export async function fetchCurrentSeason(leagueId: number): Promise<{ year: numb
   });
   const season = res[0]?.seasons?.find(s => s.current);
   return season ? { year: season.year, start: season.start } : null;
+}
+
+/** País de un equipo según API-Football (ej. "Uruguay"). null si no lo encuentra. */
+export async function fetchTeamCountry(teamId: number): Promise<string | null> {
+  const res = await apiFetch<Array<{ team: { country: string | null } }>>('/teams', { id: String(teamId) });
+  return res[0]?.team?.country ?? null;
 }
 
 export async function fetchLineups(fixtureId: number) {

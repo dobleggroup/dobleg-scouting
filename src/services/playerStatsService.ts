@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { sortLeaguesForPicker } from '@/utils/leagueLabels';
 import type {
   PlayerWithScore,
   PlayerMatchStat,
@@ -234,10 +235,14 @@ export async function fetchLeagues(): Promise<LeagueInfo[]> {
     .from('leagues')
     .select('*')
     .eq('has_player_stats', true)
+    // Libertadores, Sudamericana, etc. no son ligas: sus partidos cuentan dentro de la liga
+    // de cada equipo.
+    .eq('is_cup', false)
+    .is('parent_league_id', null) // Apertura de Paraguay: misma liga que el Clausura
     .order('tier', { ascending: true });
 
   if (error) throw error;
-  return data ?? [];
+  return sortLeaguesForPicker(data ?? []);
 }
 
 export interface TeamInfo {
