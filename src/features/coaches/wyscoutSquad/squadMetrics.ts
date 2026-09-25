@@ -52,6 +52,13 @@ export function filterByMinutes(players: SquadPlayer[], minMinutes: number): Squ
   return players.filter(p => (p.stats.minutes ?? 0) >= minMinutes && p.stats.minutes != null)
 }
 
+/** Cantidad de acciones en la temporada a partir de su valor cada 90 minutos. */
+export function attempts(p: SquadPlayer, per90: AnyMetric, teamMatches: number): number | null {
+  const v = metricValue(p, per90, teamMatches)
+  const min = p.stats.minutes
+  return v == null || min == null ? null : (v * min) / 90
+}
+
 export interface RankingRow {
   name: string
   value: number
@@ -61,9 +68,19 @@ export interface RankingRow {
 export function rankBy(
   players: SquadPlayer[],
   key: AnyMetric,
-  opts: { teamMatches: number; minMinutes: number; perMinuteMetric: boolean; limit?: number },
+  opts: {
+    teamMatches: number
+    minMinutes: number
+    perMinuteMetric: boolean
+    limit?: number
+    /** Para porcentajes: minimo de intentos en la temporada (acciones/90 × minutos/90). */
+    minAttempts?: { per90: AnyMetric; min: number }
+  },
 ): RankingRow[] {
-  const pool = opts.perMinuteMetric ? filterByMinutes(players, opts.minMinutes) : players
+  const byMinutes = opts.perMinuteMetric ? filterByMinutes(players, opts.minMinutes) : players
+  const pool = opts.minAttempts
+    ? byMinutes.filter(p => (attempts(p, opts.minAttempts!.per90, opts.teamMatches) ?? 0) >= opts.minAttempts!.min)
+    : byMinutes
   const rows = pool
     .map(p => ({ name: p.name, value: metricValue(p, key, opts.teamMatches), minutes: p.stats.minutes ?? 0 }))
     .filter((r): r is RankingRow => r.value !== null && Number.isFinite(r.value))

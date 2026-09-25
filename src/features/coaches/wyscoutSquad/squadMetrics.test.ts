@@ -52,6 +52,14 @@ describe('rankBy', () => {
     const r = rankBy(ps, 'goals', { teamMatches: 31, minMinutes: 0, perMinuteMetric: false })
     expect(r.map(x => x.name)).not.toContain('Cero')
   })
+  it('en porcentajes exige un minimo de intentos en la temporada', () => {
+    const ps = [
+      player('Poquitos', { minutes: 900, aerial_p90: 0.2, aerial_won_pct: 100 }), // 2 aereos en la temporada
+      player('Muchos', { minutes: 1800, aerial_p90: 4, aerial_won_pct: 60 }), // 80 aereos
+    ]
+    const r = rankBy(ps, 'aerial_won_pct', { teamMatches: 31, minMinutes: 450, perMinuteMetric: true, minAttempts: { per90: 'aerial_p90', min: 10 } })
+    expect(r.map(x => x.name)).toEqual(['Muchos'])
+  })
   it('limit', () => {
     expect(rankBy(players, 'goals', { teamMatches: 31, minMinutes: 0, perMinuteMetric: false, limit: 1 })).toHaveLength(1)
   })

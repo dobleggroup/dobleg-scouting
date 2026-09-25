@@ -28,8 +28,6 @@ function clean(s: string): string {
   return s.replace(/[−–—]/g, '-').replace(/…/g, '...').replace(/[“”]/g, '"').replace(/[‘’]/g, "'")
 }
 
-const longDate = (iso: string) =>
-  new Date(iso.slice(0, 10) + 'T12:00:00').toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' })
 const dmy = (iso: string) =>
   new Date(iso).toLocaleDateString(LOCALE, { day: '2-digit', month: '2-digit' })
 
@@ -168,14 +166,17 @@ function rankingBlock(d: Doc, def: RankingWidgetDef, input: TeamSummaryPdfInput)
   const squad = input.squad!
   if (!def.requires.every(k => squad.columnsFound.includes(k))) return null
   const [primary, ...rest] = def.columns
-  const rows = rankBy(squad.players, primary.key, { teamMatches: input.teamMatches, minMinutes: input.minMinutes, perMinuteMetric: primary.perMinute, limit: 10 })
+  const rows = rankBy(squad.players, primary.key, { teamMatches: input.teamMatches, minMinutes: input.minMinutes, perMinuteMetric: primary.perMinute, limit: 10, minAttempts: def.minAttempts })
+  const description = def.minAttempts
+    ? `${def.description} Entra quien jugó al menos ${input.minMinutes} minutos y tuvo al menos ${def.minAttempts.min} ${def.minAttempts.label}.`
+    : def.description
   const byName = new Map(squad.players.map(p => [p.name, p]))
-  const top = descHeight(d, def.description) + 4
+  const top = descHeight(d, description) + 4
   const h = top + HEAD_H + Math.max(rows.length, 1) * ROW_H
   return {
     h,
     draw: (d, y) => {
-      blockTitle(d, y, def.title, def.description)
+      blockTitle(d, y, def.title, description)
       const barW = 110
       const otherW = 74
       const cols: Col[] = [
@@ -393,7 +394,7 @@ function drawFullTable(d: Doc, input: TeamSummaryPdfInput) {
 
 /* ------------------------------------------------------------ portada */
 
-function coverHeight() { return 118 }
+function coverHeight() { return 86 }
 
 function drawCover(d: Doc, input: TeamSummaryPdfInput, y: number) {
   const crest = input.crestDataUrl
@@ -406,18 +407,6 @@ function drawCover(d: Doc, input: TeamSummaryPdfInput, y: number) {
   }
   d.text(`${input.club} ${input.season}`, x, y + 30, { size: 26, bold: true })
   d.text([`DT ${input.coachName}`, input.leagueName].filter(Boolean).join('  ·  '), x, y + 50, { size: 11, color: C.muted })
-  const chips = [
-    `Informe del ${longDate(input.today)}`,
-    input.dataDate ? `Datos de Wyscout del ${longDate(input.dataDate)}` : 'Sin datos de Wyscout cargados',
-    `Mínimo de minutos para rankings: ${input.minMinutes}`,
-  ]
-  let cx = M
-  for (const c of chips) {
-    const w = d.width(c, 7.8, true) + 16
-    d.rect(cx, y + 76, w, 18, C.tile, 9)
-    d.text(c, cx + 8, y + 88, { size: 7.8, bold: true, color: C.text })
-    cx += w + 6
-  }
   d.line(M, y + coverHeight() - 8, M + d.CW, y + coverHeight() - 8)
 }
 

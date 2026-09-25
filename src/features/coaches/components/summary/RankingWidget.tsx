@@ -18,8 +18,8 @@ export default function RankingWidget({ def, players, teamMatches, minMinutes }:
   const [showAll, setShowAll] = useState(false)
   const [primary, ...rest] = def.columns
   const rows = useMemo(
-    () => rankBy(players, primary.key, { teamMatches, minMinutes, perMinuteMetric: primary.perMinute }),
-    [players, primary, teamMatches, minMinutes],
+    () => rankBy(players, primary.key, { teamMatches, minMinutes, perMinuteMetric: primary.perMinute, minAttempts: def.minAttempts }),
+    [players, primary, teamMatches, minMinutes, def.minAttempts],
   )
   const byName = useMemo(() => new Map(players.map(p => [p.name, p])), [players])
   const max = Math.max(...rows.map(r => Math.abs(r.value)), 0)
@@ -28,7 +28,7 @@ export default function RankingWidget({ def, players, teamMatches, minMinutes }:
   return (
     <WidgetCard
       title={def.title}
-      description={def.description}
+      description={def.minAttempts ? `${def.description} Entra quien tuvo al menos ${def.minAttempts.min} ${def.minAttempts.label} en la temporada.` : def.description}
       action={rows.length > TOP ? (
         <button
           type="button"
@@ -40,7 +40,7 @@ export default function RankingWidget({ def, players, teamMatches, minMinutes }:
       ) : undefined}
     >
       {rows.length === 0 ? (
-        <WidgetMessage>Ningún jugador llega al mínimo de minutos elegido.</WidgetMessage>
+        <WidgetMessage>Ningún jugador llega al mínimo de minutos{def.minAttempts ? ' o de intentos' : ''} elegido.</WidgetMessage>
       ) : (
         <div className="overflow-x-auto -mx-1 px-1">
           <table className="w-full text-sm">
