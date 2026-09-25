@@ -13,7 +13,7 @@ import { computeSeasonStats } from '@/features/coaches/seasonStats'
 import { getLatestSquadStats, type SquadStatsRecord } from '@/services/wyscoutSquadService'
 import { getLatestWyscoutReport } from '@/services/coachWyscoutReportService'
 import type { WyscoutReportData } from '@/features/coaches/wyscoutReport/wyscoutReportTypes'
-import { buildEnrichedMatchRows } from './CoachMatchMetricsEvolution'
+import { buildEnrichedMatchRows, loadEvolutionMetrics } from './CoachMatchMetricsEvolution'
 import { filterByMinutes } from '@/features/coaches/wyscoutSquad/squadMetrics'
 import { RANKING_WIDGETS } from '@/features/coaches/wyscoutSquad/widgetDefs'
 import SummaryToolbar from './summary/SummaryToolbar'
@@ -220,6 +220,7 @@ export default function CoachSummaryTab({ coach }: { coach: AgencyCoach }) {
       teamMatches,
       widgetIds,
       matchRows,
+      evolutionMetrics: loadEvolutionMetrics(coach.key),
       wyscoutReport,
       homegrown,
       logoDataUrl,
