@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
@@ -71,7 +71,24 @@ function ResultDot(props: any) {
   return <circle cx={cx} cy={cy} r={3} fill={color} stroke="none" />
 }
 
-const DEFAULT_METRICS = ['possession_pct', 'xg_for', 'xg_against', 'tiros_/_a_la_porteria_2']
+export const DEFAULT_METRICS = ['possession_pct', 'xg_for', 'xg_against', 'tiros_/_a_la_porteria_2']
+
+const storageKey = (coachKey: string) => `dg-evolucion-metricas:${coachKey}`
+
+/** Metricas elegidas en "Evolucion de metricas" (se recuerdan en este navegador, por DT):
+ *  el PDF del Resumen dibuja las mismas. */
+export function loadEvolutionMetrics(coachKey: string): string[] {
+  try {
+    const raw = localStorage.getItem(storageKey(coachKey))
+    const parsed = raw ? JSON.parse(raw) : null
+    if (Array.isArray(parsed) && parsed.length > 0 && parsed.every(k => typeof k === 'string')) return parsed.slice(0, 8)
+  } catch { /* sin acceso al almacenamiento: se usan las de siempre */ }
+  return DEFAULT_METRICS
+}
+
+function saveEvolutionMetrics(coachKey: string, metrics: string[]) {
+  try { localStorage.setItem(storageKey(coachKey), JSON.stringify(metrics)) } catch { /* no se pudo guardar */ }
+}
 
 function SingleMetricChart({
   rows,
@@ -173,9 +190,13 @@ function SingleMetricChart({
   )
 }
 
-export default function CoachMatchMetricsEvolution({ rows }: { rows: EnrichedMatchRow[] }) {
+export default function CoachMatchMetricsEvolution({ rows, coachKey }: { rows: EnrichedMatchRow[]; coachKey?: string }) {
   const { t } = useLanguage()
-  const [metrics, setMetrics] = useState<string[]>(DEFAULT_METRICS)
+  const [metrics, setMetrics] = useState<string[]>(() => (coachKey ? loadEvolutionMetrics(coachKey) : DEFAULT_METRICS))
+
+  useEffect(() => {
+    if (coachKey) saveEvolutionMetrics(coachKey, metrics)
+  }, [coachKey, metrics])
 
   const metricGroups = useMemo(() => {
     if (rows.length === 0) return []

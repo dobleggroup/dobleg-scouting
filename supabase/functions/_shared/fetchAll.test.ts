@@ -41,4 +41,27 @@ describe('fetchAllRows', () => {
     const source = vi.fn(async () => ({ data: null, error: { message: 'boom' } }))
     await expect(fetchAllRows(source)).rejects.toThrow('boom')
   })
+
+  it('reintenta una página que corta por tiempo (base cargada)', async () => {
+    let calls = 0
+    const source = vi.fn(async (from: number) => {
+      calls++
+      if (calls === 1) return { data: null, error: { message: 'canceling statement due to statement timeout' } }
+      return { data: from === 0 ? [{ id: 1 }, { id: 2 }] : [], error: null }
+    })
+    expect(await fetchAllRows(source, 1000, 0)).toEqual([{ id: 1 }, { id: 2 }])
+    expect(source).toHaveBeenCalledTimes(2)
+  })
+
+  it('después de 3 intentos por tiempo, tira el error', async () => {
+    const source = vi.fn(async () => ({ data: null, error: { message: 'canceling statement due to statement timeout' } }))
+    await expect(fetchAllRows(source, 1000, 0)).rejects.toThrow('statement timeout')
+    expect(source).toHaveBeenCalledTimes(3)
+  })
+
+  it('los otros errores no se reintentan', async () => {
+    const source = vi.fn(async () => ({ data: null, error: { message: 'permission denied' } }))
+    await expect(fetchAllRows(source, 1000, 0)).rejects.toThrow('permission denied')
+    expect(source).toHaveBeenCalledTimes(1)
+  })
 })

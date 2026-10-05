@@ -3,6 +3,63 @@ import { getSupabaseAdmin } from '../_shared/supabase-client.ts';
 import { fetchAllRows } from '../_shared/fetchAll.ts';
 import { mergeSeasonScoreFragments } from '../_shared/mergeSeasonFragments.ts';
 
+/** Fila de temporada de un jugador en un puesto y una liga, a partir de sus partidos. */
+// deno-lint-ignore no-explicit-any
+function buildScoreRow(playerId: number, position: string, leagueId: number, season: number, rows: any[]) {
+  const ratings = rows.map(r => r.rating).filter((r: any) => r !== null);
+
+  // Métricas /90 y porcentajes del jugador en esta posición (mismas que el radar)
+  const mins = rows.filter((r: any) => r.minutes > 0);
+  const p90 = (field: string) => {
+    const vals = mins.map((r: any) => ((r[field] ?? 0) / r.minutes) * 90);
+    return vals.length > 0 ? vals.reduce((a: number, b: number) => a + b, 0) / vals.length : null;
+  };
+  const avg = (field: string) => {
+    const vals = rows.map((r: any) => r[field] ?? 0).filter((v: number) => v > 0);
+    return vals.length > 0 ? vals.reduce((a: number, b: number) => a + b, 0) / vals.length : null;
+  };
+  const pct = (num: string, den: string) => {
+    const totN = rows.reduce((acc: number, r: any) => acc + (r[num] ?? 0), 0);
+    const totD = rows.reduce((acc: number, r: any) => acc + (r[den] ?? 0), 0);
+    return totD > 0 ? (totN / totD) * 100 : null;
+  };
+  const rd = (v: number | null) => (v === null ? null : Math.round(v * 100) / 100);
+
+  return {
+    player_id: playerId,
+    season,
+    position,
+    league_id: leagueId,
+    // Todos los partidos jugados; el promedio de rating usa solo los que
+    // tienen puntaje.
+    matches_played: rows.length,
+    avg_rating: ratings.length > 0
+      ? Math.round((ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length) * 10) / 10
+      : null,
+    total_goals: rows.reduce((s: number, r: any) => s + (r.goals ?? 0), 0),
+    total_assists: rows.reduce((s: number, r: any) => s + (r.assists ?? 0), 0),
+    tackles_p90: rd(p90('tackles')),
+    interceptions_p90: rd(p90('interceptions')),
+    blocks_p90: rd(p90('blocks')),
+    duels_won_pct: rd(pct('duels_won', 'duels_total')),
+    passes_accuracy: rd(avg('passes_accuracy')),
+    passes_key_p90: rd(p90('passes_key')),
+    passes_total_p90: rd(p90('passes_total')),
+    dribbles_success_p90: rd(p90('dribbles_success')),
+    dribbles_pct: rd(pct('dribbles_success', 'dribbles_attempted')),
+    shots_on_p90: rd(p90('shots_on')),
+    shots_pct: rd(pct('shots_on', 'shots_total')),
+    goals_p90: rd(p90('goals')),
+    assists_p90: rd(p90('assists')),
+    fouls_drawn_p90: rd(p90('fouls_drawn')),
+    saves_p90: rd(p90('saves')),
+    goals_conceded_p90: rd(p90('goals_conceded')),
+    penalty_saved_avg: rd(avg('penalty_saved')),
+    clean_sheet_pct: rd((rows.filter((r: any) => r.goals_conceded === 0).length / rows.length) * 100),
+    updated_at: new Date().toISOString(),
+  }
+}
+
 serve(async (req) => {
   const supabase = getSupabaseAdmin();
   const now = new Date();
@@ -92,6 +149,13 @@ serve(async (req) => {
       // nivel GLOBAL (contra todos los de su puesto en la plataforma, sin importar
       // la liga), no liga por liga.
       const allSeasonRows: any[] = [];
+      // Ultimo equipo de cada jugador en la temporada, armado con las filas que ya se
+      // leyeron para el calculo (antes se volvia a leer toda la temporada y esa consulta
+      // se pasaba de tiempo: cortaba el recalculo antes de los percentiles).
+      const latestTeam = new Map<number, { team_id: number; date: string }>();
+      const seasonPosCounts = new Map<number, Map<string, number>>();
+      // deno-lint-ignore no-explicit-any
+      const unplaced: { row: any; leagueId: number }[] = [];
 
       for (const league of leaguesForSeason) {
         // Get teams that belong to this domestic league
@@ -109,12 +173,18 @@ serve(async (req) => {
         const rawStats = await fetchAllRows<any>((from, to) =>
           supabase
             .from('player_match_stats')
-            .select('player_id, detected_position, team_id, rating, goals, assists, fixture_id, minutes, tackles, interceptions, blocks, duels_total, duels_won, passes_accuracy, passes_key, passes_total, dribbles_success, dribbles_attempted, shots_on, shots_total, fouls_drawn, saves, goals_conceded, penalty_saved, fixtures!inner(season)')
+            .select('player_id, detected_position, team_id, rating, goals, assists, fixture_id, minutes, tackles, interceptions, blocks, duels_total, duels_won, passes_accuracy, passes_key, passes_total, dribbles_success, dribbles_attempted, shots_on, shots_total, fouls_drawn, saves, goals_conceded, penalty_saved, fixtures!inner(season, date)')
             .in('team_id', teamIds)
             .eq('fixtures.season', season)
             .order('id')
             .range(from, to)
         );
+
+        for (const r of rawStats) {
+          const fdate = r.fixtures?.date ?? '';
+          const cur = latestTeam.get(r.player_id);
+          if (!cur || fdate > cur.date) latestTeam.set(r.player_id, { team_id: r.team_id, date: fdate });
+        }
 
         // Un partido cuenta si el jugador tuvo minutos o puntaje (antes solo el puntaje).
         const allStats = rawStats.filter((s: any) => (s.minutes ?? 0) > 0 || s.rating !== null);
@@ -129,17 +199,24 @@ serve(async (req) => {
           m.set(s.detected_position, (m.get(s.detected_position) ?? 0) + 1);
           posCounts.set(s.player_id, m);
         }
-        const usualPos = new Map<number, string>();
         for (const [pid, m] of posCounts) {
-          usualPos.set(pid, [...m.entries()].sort((a, b) => b[1] - a[1])[0][0]);
+          const all = seasonPosCounts.get(pid) ?? new Map<string, number>();
+          for (const [pos, n] of m) all.set(pos, (all.get(pos) ?? 0) + n);
+          seasonPosCounts.set(pid, all);
         }
 
         const groups = new Map<string, typeof allStats>();
         for (const s of allStats) {
           // Override de puesto: si el jugador tiene puesto real fijado, se lo
           // agrupa ahí (todos sus partidos), corrigiendo la detección de la grilla.
-          const pos = overrideById.get(s.player_id) ?? s.detected_position ?? usualPos.get(s.player_id);
-          if (!pos) continue;
+          const pos = overrideById.get(s.player_id) ?? s.detected_position;
+          if (!pos) {
+            // Sin puesto en este partido: se ubica al final con el puesto habitual del
+            // jugador en TODA la temporada (Julimar: sus partidos en Emiratos no tenian puesto
+            // y en esa liga no habia ninguno con puesto, asi que se perdian sus goles).
+            unplaced.push({ row: s, leagueId: league.id });
+            continue;
+          }
           const key = `${s.player_id}|${pos}`;
           if (!groups.has(key)) groups.set(key, []);
           groups.get(key)!.push(s);
@@ -148,58 +225,7 @@ serve(async (req) => {
         const upsertRows = [];
         for (const [key, rows] of groups) {
           const [playerId, position] = key.split('|');
-          const ratings = rows.map(r => r.rating).filter((r: any) => r !== null);
-
-          // Métricas /90 y porcentajes del jugador en esta posición (mismas que el radar)
-          const mins = rows.filter((r: any) => r.minutes > 0);
-          const p90 = (field: string) => {
-            const vals = mins.map((r: any) => ((r[field] ?? 0) / r.minutes) * 90);
-            return vals.length > 0 ? vals.reduce((a: number, b: number) => a + b, 0) / vals.length : null;
-          };
-          const avg = (field: string) => {
-            const vals = rows.map((r: any) => r[field] ?? 0).filter((v: number) => v > 0);
-            return vals.length > 0 ? vals.reduce((a: number, b: number) => a + b, 0) / vals.length : null;
-          };
-          const pct = (num: string, den: string) => {
-            const totN = rows.reduce((acc: number, r: any) => acc + (r[num] ?? 0), 0);
-            const totD = rows.reduce((acc: number, r: any) => acc + (r[den] ?? 0), 0);
-            return totD > 0 ? (totN / totD) * 100 : null;
-          };
-          const rd = (v: number | null) => (v === null ? null : Math.round(v * 100) / 100);
-
-          upsertRows.push({
-            player_id: parseInt(playerId),
-            season,
-            position,
-            league_id: league.id,
-            // Todos los partidos jugados; el promedio de rating usa solo los que
-            // tienen puntaje.
-            matches_played: rows.length,
-            avg_rating: ratings.length > 0
-              ? Math.round((ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length) * 10) / 10
-              : null,
-            total_goals: rows.reduce((s: number, r: any) => s + (r.goals ?? 0), 0),
-            total_assists: rows.reduce((s: number, r: any) => s + (r.assists ?? 0), 0),
-            tackles_p90: rd(p90('tackles')),
-            interceptions_p90: rd(p90('interceptions')),
-            blocks_p90: rd(p90('blocks')),
-            duels_won_pct: rd(pct('duels_won', 'duels_total')),
-            passes_accuracy: rd(avg('passes_accuracy')),
-            passes_key_p90: rd(p90('passes_key')),
-            passes_total_p90: rd(p90('passes_total')),
-            dribbles_success_p90: rd(p90('dribbles_success')),
-            dribbles_pct: rd(pct('dribbles_success', 'dribbles_attempted')),
-            shots_on_p90: rd(p90('shots_on')),
-            shots_pct: rd(pct('shots_on', 'shots_total')),
-            goals_p90: rd(p90('goals')),
-            assists_p90: rd(p90('assists')),
-            fouls_drawn_p90: rd(p90('fouls_drawn')),
-            saves_p90: rd(p90('saves')),
-            goals_conceded_p90: rd(p90('goals_conceded')),
-            penalty_saved_avg: rd(avg('penalty_saved')),
-            clean_sheet_pct: rd((rows.filter((r: any) => r.goals_conceded === 0).length / rows.length) * 100),
-            updated_at: new Date().toISOString(),
-          });
+          upsertRows.push(buildScoreRow(parseInt(playerId), position, league.id, season, rows));
         }
 
         // Se acumulan; los fragmentos por liga se fusionan al cerrar la temporada.
@@ -261,6 +287,21 @@ serve(async (req) => {
       // puede perder su posicion primaria real frente a una posicion distinta con un
       // solo fragmento mas grande (bestPos comparaba fragmentos individuales, no el
       // total sumado por posicion).
+      {
+        // deno-lint-ignore no-explicit-any
+        const byKey = new Map<string, { playerId: number; pos: string; leagueId: number; rows: any[] }>();
+        for (const { row, leagueId } of unplaced) {
+          const counts = seasonPosCounts.get(row.player_id);
+          if (!counts) continue; // nunca tuvo puesto detectado: no hay donde ubicarlo
+          const pos = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+          const key = `${row.player_id}|${pos}|${leagueId}`;
+          const g = byKey.get(key) ?? { playerId: row.player_id as number, pos, leagueId, rows: [] as any[] };
+          g.rows.push(row);
+          byKey.set(key, g);
+        }
+        for (const g of byKey.values()) allSeasonRows.push(buildScoreRow(g.playerId, g.pos, g.leagueId, season, g.rows));
+      }
+
       const mergedSeasonRows = mergeSeasonScoreFragments(allSeasonRows);
 
       // ── Consolidar a cada jugador en su posición PRIMARIA (la de más partidos) ──
@@ -298,33 +339,23 @@ serve(async (req) => {
         totalUpserted += primaryRows.length;
       }
 
-      // Fix current_team_id: set to team from most recent fixture. La fecha viene
-      // del join, así no hace falta traer los miles de fixtures aparte.
+      // Club actual = el del partido mas reciente. Si falla, se avisa y se sigue: no puede
+      // dejar la temporada sin percentiles.
       {
-        const allTeamStats = await fetchAllRows<{ player_id: number; team_id: number; fixtures: { date: string } }>(
-          (from, to) => supabase
-            .from('player_match_stats')
-            .select('player_id, team_id, fixtures!inner(date, season)')
-            .eq('fixtures.season', season)
-            .order('id')
-            .range(from, to)
-        );
-
-        const latestTeam = new Map<number, { team_id: number; date: string }>();
-        for (const row of allTeamStats) {
-          const fdate = row.fixtures?.date ?? '';
-          const existing = latestTeam.get(row.player_id);
-          if (!existing || fdate > existing.date) {
-            latestTeam.set(row.player_id, { team_id: row.team_id, date: fdate });
-          }
-        }
-
         const teamUpdates = Array.from(latestTeam.entries()).map(([pid, v]) => ({
           id: pid,
           current_team_id: v.team_id,
         }));
         for (let i = 0; i < teamUpdates.length; i += 500) {
-          await supabase.from('players').upsert(teamUpdates.slice(i, i + 500), { onConflict: 'id' });
+          const { error: teamError } = await supabase.from('players').upsert(teamUpdates.slice(i, i + 500), { onConflict: 'id' });
+          if (teamError) {
+            await supabase.from('sync_log').insert({
+              function_name: 'recalc-scores',
+              status: 'warning',
+              error_message: `current_team_id (se siguio igual): ${teamError.message}`,
+            });
+            break;
+          }
         }
       }
 

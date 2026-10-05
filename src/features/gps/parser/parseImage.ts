@@ -1,4 +1,4 @@
-import { createWorker } from 'tesseract.js'
+import { createWorker, PSM } from 'tesseract.js'
 import { buildTable } from './buildTable'
 import { buildCardTable } from './parseCardReport'
 import { buildParseResult, type BuildParseResultOptions } from './buildParseResult'
@@ -17,13 +17,31 @@ export interface ImageParseOptions extends BuildParseResultOptions {
   langs?: string[]
 }
 
-async function recognizeWords(file: Blob, langs: string[]): Promise<OcrWord[]> {
+export interface OcrReader {
+  read: (image: Blob | HTMLCanvasElement) => Promise<OcrWord[]>
+  close: () => Promise<void>
+}
+
+/**
+ * Un worker de OCR reutilizable para varias imágenes (ej. todas las páginas de un
+ * PDF escaneado): crearlo es lo caro. `sparse` busca texto suelto por toda la
+ * imagen en vez de párrafos, que es lo que mejor lee los números de un gráfico.
+ */
+export async function createOcrReader(langs: string[] = ['eng', 'spa'], opts: { sparse?: boolean } = {}): Promise<OcrReader> {
   const worker = await createWorker(langs)
+  if (opts.sparse) await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT })
+  return {
+    read: async image => ((await worker.recognize(image)).data.words ?? []) as OcrWord[],
+    close: async () => { await worker.terminate() },
+  }
+}
+
+async function recognizeWords(file: Blob, langs: string[]): Promise<OcrWord[]> {
+  const reader = await createOcrReader(langs)
   try {
-    const { data } = await worker.recognize(file)
-    return (data.words ?? []) as OcrWord[]
+    return await reader.read(file)
   } finally {
-    await worker.terminate()
+    await reader.close()
   }
 }
 

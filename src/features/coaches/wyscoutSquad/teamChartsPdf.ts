@@ -201,17 +201,19 @@ function evolutionTitle(key: string): string {
 
 const DESC_EVO = 'Cada punto es un partido: verde si se ganó, gris si se empató, rojo si se perdió. La línea punteada es el promedio.'
 
-export function evolutionBlock(d: Doc, rows: EnrichedMatchRow[], metrics: string[] = EVOLUTION_METRICS): Block | null {
-  if (rows.length < 2) return null
+/** Graficos de evolucion con las metricas elegidas en la pagina, de a 4 por hoja. */
+export function evolutionBlocks(d: Doc, rows: EnrichedMatchRow[], metrics: string[] = EVOLUTION_METRICS): Block[] {
+  if (rows.length < 2 || !metrics.length) return []
   const chartH = 140
   const top = descHeight(d, DESC_EVO) + 4
-  const nRows = Math.ceil(metrics.length / 2)
-  return {
-    h: top + nRows * (chartH + 10),
-    draw: (d, y) => {
-      blockTitle(d, y, 'Evolución de métricas', DESC_EVO)
+  const chunks: string[][] = []
+  for (let i = 0; i < metrics.length; i += 4) chunks.push(metrics.slice(i, i + 4))
+  return chunks.map((chunk, ci) => ({
+    h: top + Math.ceil(chunk.length / 2) * (chartH + 10),
+    draw: (d: Doc, y: number) => {
+      blockTitle(d, y, ci === 0 ? 'Evolución de métricas' : 'Evolución de métricas (continuación)', DESC_EVO)
       const w = (d.CW - 10) / 2
-      metrics.forEach((key, i) => {
+      chunk.forEach((key, i) => {
         const values = rows.map(r => rowMetric(r, key))
         const nums = values.filter((v): v is number => v !== null)
         lineChart(d, M + (i % 2) * (w + 10), y + top + Math.floor(i / 2) * (chartH + 10), w, chartH, {
@@ -224,7 +226,7 @@ export function evolutionBlock(d: Doc, rows: EnrichedMatchRow[], metrics: string
         })
       })
     },
-  }
+  }))
 }
 
 /* ------------------------------------------------------------ partido por partido */

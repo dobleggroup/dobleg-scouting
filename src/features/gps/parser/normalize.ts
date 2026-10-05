@@ -38,6 +38,10 @@ export function parseNumber(raw: string | number | null | undefined): number | n
     // "30,8" es decimal; "1,234" (3 dígitos después) es separador de miles.
     const decimals = t.length - lastComma - 1
     t = decimals === 3 ? t.replace(/,/g, '') : t.replace(',', '.')
+  } else if (/^-?[1-9]\d{0,2}(\.\d{3})+$/.test(t)) {
+    // "12.314" / "1.234.567": punto de miles (reportes en castellano). Ninguna
+    // métrica de GPS trae tres decimales; "0.512" sigue siendo decimal.
+    t = t.replace(/\./g, '')
   }
 
   const n = Number(t)

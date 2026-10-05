@@ -157,7 +157,7 @@ export default function CoachSeasonStatsCard({ coach, uploadOpen, onUploadOpenCh
           <CoachDtEfficiencyPanel rows={enrichedRows} stats={stats} />
           <CoachHomegrownUsageCard coach={coach} />
           <CoachTeamVsRivalCharts rows={enrichedRows} />
-          <CoachMatchMetricsEvolution rows={enrichedRows} />
+          <CoachMatchMetricsEvolution rows={enrichedRows} coachKey={coach.key} />
           <CoachMatchHistoryTable rows={enrichedRows} fixtures={fixtures} coachKey={coach.key} />
         </div>
       )}

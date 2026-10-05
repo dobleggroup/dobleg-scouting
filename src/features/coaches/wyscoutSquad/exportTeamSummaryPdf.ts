@@ -18,7 +18,7 @@ import type { HomegrownReport } from '@/features/coaches/homegrown/homegrownRepo
 import { appendHomegrownPages } from '@/features/coaches/homegrown/exportHomegrownPdf'
 import { scatterBlock } from './scatterPdf'
 import { SCATTER_DEFS } from './scatterPlots'
-import { efficiencyBlock, evolutionBlock, formationsBlock, historyBlocks, vsRivalBlock, zonesBlock } from './teamChartsPdf'
+import { efficiencyBlock, evolutionBlocks, formationsBlock, historyBlocks, vsRivalBlock, zonesBlock } from './teamChartsPdf'
 
 const dmy = (iso: string) =>
   new Date(iso).toLocaleDateString(LOCALE, { day: '2-digit', month: '2-digit' })
@@ -42,6 +42,8 @@ export interface TeamSummaryPdfInput {
   widgetIds: string[]
   /** Partidos con estadisticas del equipo (archivo Team Stats), en orden cronologico. */
   matchRows: EnrichedMatchRow[]
+  /** Metricas elegidas en "Evolucion de metricas" (si no, las 4 de siempre). */
+  evolutionMetrics?: string[]
   /** Ultimo informe PDF de Wyscout cargado (formaciones y zonas). */
   wyscoutReport: WyscoutReportData | null
   /** Informe de "surgidos del club" (solo si se eligio). */
@@ -319,7 +321,7 @@ export async function buildTeamSummaryPdf(input: TeamSummaryPdfInput): Promise<J
         want.has('temporada') ? seasonBlock(d, input) : null,
         want.has('eficacia') ? efficiencyBlock(d, input.matchRows, input.seasonStats) : null,
         want.has('vsRival') ? vsRivalBlock(d, input.matchRows) : null,
-        want.has('evolucion') ? evolutionBlock(d, input.matchRows) : null,
+        ...(want.has('evolucion') ? evolutionBlocks(d, input.matchRows, input.evolutionMetrics) : []),
         ...(want.has('historial') ? historyBlocks(d, input.matchRows) : []),
         want.has('formaciones') ? formationsBlock(d, input.wyscoutReport) : null,
         want.has('zonas') ? zonesBlock(d, input.wyscoutReport) : null,

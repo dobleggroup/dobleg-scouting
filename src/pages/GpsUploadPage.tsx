@@ -216,6 +216,7 @@ function AutoTab({ metrics, lookup, roster, rivals, competitions, teams, addMetr
 }) {
   const { t } = useLanguage()
   const [parsing, setParsing] = useState(false)
+  const [progress, setProgress] = useState<{ page: number; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<GpsParseResult | null>(null)
   const [fileName, setFileName] = useState('')
@@ -240,6 +241,7 @@ function AutoTab({ metrics, lookup, roster, rivals, competitions, teams, addMetr
         : await parseGpsPdf(await file.arrayBuffer(), {
             roster, lookup, workerSrc: pdfWorkerSrc,
             presetPlayerName: presetPlayer || undefined,
+            onProgress: (page, total) => setProgress({ page, total }),
           })
       setResult(parsed)
       setFileName(file.name)
@@ -249,6 +251,7 @@ function AutoTab({ metrics, lookup, roster, rivals, competitions, teams, addMetr
         : t('gps.noPudeLeerArchivo').replace('{error}', (err as Error).message))
     } finally {
       setParsing(false)
+      setProgress(null)
     }
   }
 
@@ -291,6 +294,9 @@ function AutoTab({ metrics, lookup, roster, rivals, competitions, teams, addMetr
         accept="application/pdf,.pdf,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
         label={t('gps.dropzoneAutoLabel')}
         hint={t('gps.dropzoneAutoHint')}
+        busyLabel={progress
+          ? t('gps.leyendoPagina').replace('{page}', String(progress.page)).replace('{total}', String(progress.total))
+          : undefined}
       />
       {error && (
         <div className="rounded-apple bg-red-500/10 text-red-500 px-4 py-3 text-sm">{error}</div>

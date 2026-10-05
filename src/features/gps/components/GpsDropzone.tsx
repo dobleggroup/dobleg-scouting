@@ -6,6 +6,8 @@ interface Props {
   accept?: string
   label?: string
   hint?: string
+  /** Texto mientras se procesa (ej. avance del OCR página por página). */
+  busyLabel?: string
 }
 
 /**
@@ -16,6 +18,7 @@ export default function GpsDropzone({
   onFile, disabled, accept = 'application/pdf,.pdf',
   label = 'Arrastrá el PDF o tocá para elegirlo',
   hint = 'PDFs de GPS con texto. Las fotos y capturas hay que cargarlas a mano.',
+  busyLabel = 'Leyendo el archivo…',
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [over, setOver] = useState(false)
@@ -47,7 +50,7 @@ export default function GpsDropzone({
           </svg>
         </div>
         <div className="text-sm font-medium text-apple-gray-800 dark:text-white">
-          {disabled ? 'Leyendo el archivo…' : label}
+          {disabled ? busyLabel : label}
         </div>
         <div className="text-xs text-apple-gray-400 mt-1">{hint}</div>
       </button>
