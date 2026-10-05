@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { readPersistentCache, writePersistentCache } from '@/utils/persistentCache';
 import { sortLeaguesForPicker } from '@/utils/leagueLabels';
 import type {
   PlayerWithScore,
@@ -593,18 +594,37 @@ export async function fetchConfirmedTransfermarktIds(): Promise<Set<number>> {
   return new Set((data ?? []).map((r: any) => r.external_id as number));
 }
 
+// Los ratings de temporada se recalculan cada 6 h (pg_cron recalc-scores-*), así que
+// una copia de 1 h en el navegador alcanza. Sin esto, cada visita bajaba las ~15.000
+// filas de nuevo (15 pedidos en paralelo, la consulta que más carga la base) y el
+// Inicio esperaba eso antes de mostrar Ofensivas, Duelos, Pases, etc.
+const SCORE_LOOKUP_CACHE_MS = 60 * 60 * 1000;
+
 export async function fetchScoreLookup(
   season?: number
 ): Promise<Map<string, ScoreLookupEntry>> {
   const seasons = season ? [season] : currentSeasons();
+  // Los links de agencia se piden siempre (son pocos y cambian con cada alta).
+  const agencyLinksPromise = fetchAgencyPlayerLinks();
 
+  const cacheKey = `scoreLookupRows:v1:${seasons.join(',')}`;
+  let rows = await readPersistentCache<ScoreLookupRow[]>(cacheKey, SCORE_LOOKUP_CACHE_MS);
+  if (!rows) {
+    rows = await fetchScoreLookupRows(seasons);
+    void writePersistentCache(cacheKey, rows);
+  }
+
+  const { AGENCY_PLAYERS } = await import('@/constants/agencyPlayers');
+  return buildScoreLookup(rows, AGENCY_PLAYERS, await agencyLinksPromise);
+}
+
+async function fetchScoreLookupRows(seasons: number[]): Promise<ScoreLookupRow[]> {
   // Se pedían ~16 páginas de 1000 una atrás de la otra (≈13 s en el Inicio) y SIN orden:
   // con OFFSET sin ORDER BY Postgres no garantiza el orden entre páginas, así que podían
   // repetirse o saltearse filas. Ahora: orden fijo por la clave primaria, la primera página
   // trae el total y el resto se pide en paralelo.
   const PAGE_SIZE = 1000;
   const confirmedTmIdsPromise = fetchConfirmedTransfermarktIds(); // no depende de los ratings
-  const agencyLinksPromise = fetchAgencyPlayerLinks();
   const page = (n: number, withCount: boolean) =>
     supabase
       .from('player_season_scores')
@@ -636,7 +656,7 @@ export async function fetchScoreLookup(
     return canonical == null || canonical === row.player_id;
   });
 
-  const rows: ScoreLookupRow[] = allRows.map(row => {
+  return allRows.map(row => {
     const tmId = ((row as any).player?.transfermarkt_id as number | null) ?? null;
     return {
       player_id: row.player_id,
@@ -655,9 +675,6 @@ export async function fetchScoreLookup(
       season: row.season,
     };
   });
-
-  const { AGENCY_PLAYERS } = await import('@/constants/agencyPlayers');
-  return buildScoreLookup(rows, AGENCY_PLAYERS, await agencyLinksPromise);
 }
 
 /**
