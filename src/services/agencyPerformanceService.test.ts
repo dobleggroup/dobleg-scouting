@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { aggregatePerformance } from './agencyPerformanceService'
+import { aggregatePerformance, agencyNameVariants } from './agencyPerformanceService'
 import type { SquadStatRow } from './playerStatsService'
 
 const roster = [
@@ -99,5 +99,21 @@ describe('aggregatePerformance', () => {
     expect(p.ratingSum / p.matchesWithRating).toBeCloseTo(7.0)
     expect(p.passesCompletedSum).toBeCloseTo(40 * 0.8 + 30 * 0.7)
     expect(p.matchesWithPassesCompleted).toBe(2)
+  })
+})
+
+describe('agencyNameVariants', () => {
+  it('incluye la forma "Inicial. Apellido" con acentos aunque el shortName venga sin (caso "M. Espíndola")', () => {
+    const v = agencyNameVariants([{ fullName: 'Matías Espíndola', shortName: 'M. Espindola' }])
+    expect(v).toContain('M. Espíndola')
+    expect(v).toContain('M. Espindola')
+    expect(v).toContain('Matías Espíndola')
+    expect(v).toContain('Matias Espindola')
+  })
+
+  it('arma inicial + todos los apellidos y también inicial + último apellido', () => {
+    const v = agencyNameVariants([{ fullName: 'Juan Martín Ginzo', shortName: 'J. Ginzo' }])
+    expect(v).toContain('J. Martín Ginzo')
+    expect(v).toContain('J. Ginzo')
   })
 })

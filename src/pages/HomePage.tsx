@@ -4,7 +4,7 @@ import { AGENCY_PLAYERS } from '@/constants/agencyPlayers'
 import { fetchAllAgencyFixtures, getFixturesForDate, groupFixturesByDate } from '@/services/footballApiService'
 import { fetchManualFixtures, manualToAgencyFixtures } from '@/services/agencyManualFixturesService'
 import CoachesHomeWidget from '@/components/dashboard/CoachesHomeWidget'
-import { fetchAgencyPerformanceRows, aggregatePerformance, type PerformancePeriod, type AgencyPlayerPerformance } from '@/services/agencyPerformanceService'
+import { fetchAgencyPerformanceRows, aggregatePerformance, type PerformancePeriod, type AgencyPlayerPerformance, type AgencyPerformanceRows } from '@/services/agencyPerformanceService'
 import type { SquadStatRow } from '@/services/playerStatsService'
 import { fetchDebutAlerts, type DebutAlert } from '@/services/debutAlertsService'
 import { useAuth } from '@/context/AuthContext'
@@ -233,7 +233,7 @@ function SummaryCards({ internal }: { internal: EnrichedPlayer[] }) {
 
 // ─── Rendimiento de la agencia (minutos reales, por período) ──────────────────
 
-function PerformanceWidget({ rows }: { rows: SquadStatRow[] | null }) {
+function PerformanceWidget({ rows, activeTeams }: { rows: SquadStatRow[] | null; activeTeams: Set<number> | null }) {
   const { t } = useLanguage()
   const navigate = useNavigate()
   const [period, setPeriod] = useState<PerformancePeriod>('month')
@@ -241,16 +241,15 @@ function PerformanceWidget({ rows }: { rows: SquadStatRow[] | null }) {
   const loading = rows === null
   const data = useMemo(() => rows ? aggregatePerformance(period, rows, AGENCY_PLAYERS) : null, [rows, period])
   // Filtra el pie de "sin rodaje" a equipos con evidencia de partidos
-  // recientes cargados — ver nota en `teamsWithRecentActivity`.
+  // recientes cargados — ver nota en `fetchTeamsWithStatsSince`.
   const reliableNoMinutes = useMemo(() => {
-    if (!rows || !data) return []
-    const activeTeams = teamsWithRecentActivity(rows, 30)
+    if (!activeTeams || !data) return []
     const apiTeamIdByName = new Map(AGENCY_PLAYERS.map(p => [p.fullName, p.apiTeamId]))
     return data.noMinutes.filter(name => {
       const teamId = apiTeamIdByName.get(name)
       return teamId != null && activeTeams.has(teamId)
     })
-  }, [rows, data])
+  }, [activeTeams, data])
 
   const periods: { id: PerformancePeriod; label: string }[] = [
     { id: 'month', label: t('home.perfUltimoMes') },
@@ -580,23 +579,11 @@ interface AtRiskPlayer {
 // realidad viene jugando normal — el problema es que la base no tiene sus
 // partidos, no que no los tenga. Se exige evidencia de que el EQUIPO (no
 // necesariamente el jugador puntual) tuvo algún partido cargado en la
-// ventana reciente antes de confiar en cualquier "0 minutos" de ese equipo.
-function teamsWithRecentActivity(rows: SquadStatRow[], withinDays: number): Set<number> {
-  const now = Date.now()
-  const cutoff = now - withinDays * 24 * 60 * 60 * 1000
-  const active = new Set<number>()
-  for (const row of rows) {
-    const date = row.fixture?.date
-    if (!date) continue
-    if (new Date(date).getTime() >= cutoff) active.add(row.team_id)
-  }
-  return active
-}
-
-function computeAtRiskPlayers(rows: SquadStatRow[], roster: { fullName: string; apiTeamId: number | null }[]): AtRiskPlayer[] {
+// ventana reciente antes de confiar en cualquier "0 minutos" de ese equipo
+// (`activeTeams`, ver `fetchTeamsWithStatsSince`).
+function computeAtRiskPlayers(rows: SquadStatRow[], activeTeams: Set<number>, roster: { fullName: string; apiTeamId: number | null }[]): AtRiskPlayer[] {
   const now = Date.now()
   const DAY = 24 * 60 * 60 * 1000
-  const activeTeams = teamsWithRecentActivity(rows, 30)
   const rosterByNormalized = new Map(roster.map(p => [normalizeNameLocal(p.fullName), p.fullName]))
   const current = new Map<string, number>()
   const previous = new Map<string, number>()
@@ -637,9 +624,9 @@ function normalizeNameLocal(s: string): string {
   return s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 }
 
-function AtRiskWidget({ rows }: { rows: SquadStatRow[] | null }) {
+function AtRiskWidget({ rows, activeTeams }: { rows: SquadStatRow[] | null; activeTeams: Set<number> | null }) {
   const navigate = useNavigate()
-  const players = useMemo(() => rows ? computeAtRiskPlayers(rows, AGENCY_PLAYERS) : [], [rows])
+  const players = useMemo(() => rows && activeTeams ? computeAtRiskPlayers(rows, activeTeams, AGENCY_PLAYERS) : [], [rows, activeTeams])
 
   if (rows === null) {
     return (
@@ -688,10 +675,10 @@ function AtRiskWidget({ rows }: { rows: SquadStatRow[] | null }) {
 // "Rodaje de la agencia" (`data.noMinutes`) — jugadores de la agencia con
 // equipo conocido que no sumaron un solo minuto en los últimos 30 días.
 // Sólo cuenta si el EQUIPO tiene evidencia de partidos recientes cargados —
-// ver `teamsWithRecentActivity` (caso real: Steimbach y varios más salían acá
+// ver `fetchTeamsWithStatsSince` (caso real: Steimbach y varios más salían acá
 // por equipos con el sync de fixtures roto, no por estar realmente sin jugar).
 
-function SinRodajeWidget({ rows }: { rows: SquadStatRow[] | null }) {
+function SinRodajeWidget({ rows, activeTeams }: { rows: SquadStatRow[] | null; activeTeams: Set<number> | null }) {
   const navigate = useNavigate()
   // Filtro de período propio (30 días sigue siendo la lectura por default,
   // ver [[project-sin-rodaje-false-negatives]]) -- antes esto sólo miraba 30
@@ -701,14 +688,13 @@ function SinRodajeWidget({ rows }: { rows: SquadStatRow[] | null }) {
   // o el año y verlo igual (caso real pedido: Iván Erquiaga).
   const [period, setPeriod] = useState<PerformancePeriod>('month')
   const noMinutes = useMemo(() => {
-    if (!rows) return null
+    if (!rows || !activeTeams) return null
     // El chequeo de "equipo con sync sano" se mantiene siempre en 30 días --
     // responde otra pregunta (¿está viva la carga de este equipo?), no la del
     // período elegido para medir al jugador.
-    const activeTeams = teamsWithRecentActivity(rows, 30)
     const reliableRoster = AGENCY_PLAYERS.filter(p => p.apiTeamId != null && activeTeams.has(p.apiTeamId))
     return aggregatePerformance(period, rows, reliableRoster).noMinutes
-  }, [rows, period])
+  }, [rows, activeTeams, period])
 
   if (noMinutes === null) {
     return (
@@ -1931,7 +1917,9 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [refreshing, setRefreshing] = useState(false)
-  const [perfRows, setPerfRows] = useState<SquadStatRow[] | null>(null)
+  const [perf, setPerf] = useState<AgencyPerformanceRows | null>(null)
+  const perfRows = perf?.rows ?? null
+  const activeTeams = perf?.activeTeamIds ?? null
 
   // Se pide una sola vez el rango más amplio (año) y varios widgets (Rendimiento,
   // Jugadores en riesgo, Minutos por posición) recalculan en el cliente sobre las
@@ -1939,8 +1927,8 @@ export default function HomePage() {
   useEffect(() => {
     let alive = true
     fetchAgencyPerformanceRows()
-      .then(r => { if (alive) setPerfRows(r) })
-      .catch(() => { if (alive) setPerfRows([]) })
+      .then(r => { if (alive) setPerf(r) })
+      .catch(() => { if (alive) setPerf({ rows: [], activeTeamIds: new Set() }) })
     return () => { alive = false }
   }, [])
 
@@ -2205,7 +2193,7 @@ export default function HomePage() {
       {!dataLoading && <SummaryCards internal={internal} />}
 
       {/* ── Rendimiento de la agencia ────────────────────────── */}
-      <PerformanceWidget rows={perfRows} />
+      <PerformanceWidget rows={perfRows} activeTeams={activeTeams} />
 
       {/* ── Ofensivas ─────────────────────────────────────────── */}
       {!dataLoading && <OfensivasWidget rows={perfRows} internal={internal} />}
@@ -2217,8 +2205,8 @@ export default function HomePage() {
       {!dataLoading && <PasesWidget rows={perfRows} internal={internal} />}
 
       {/* ── Señales negativas ─────────────────────────────────── */}
-      <AtRiskWidget rows={perfRows} />
-      <SinRodajeWidget rows={perfRows} />
+      <AtRiskWidget rows={perfRows} activeTeams={activeTeams} />
+      <SinRodajeWidget rows={perfRows} activeTeams={activeTeams} />
       <DelanterosSinGolWidget rows={perfRows} internal={internal} />
 
       {/* ── Rating por posición ──────────────────────────────── */}
