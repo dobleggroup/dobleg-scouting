@@ -1,6 +1,7 @@
 import { AGENCY_PLAYERS } from '@/constants/agencyPlayers'
 import { normalizeName } from '@/utils/scoring'
-import { fetchMultiTeamMatchStats, type SquadStatRow } from './playerStatsService'
+import { supabase } from '@/lib/supabase'
+import { fetchPlayersMatchStats, fetchTeamsWithStatsSince, type SquadStatRow } from './playerStatsService'
 
 export type PerformancePeriod = 'month' | '6months' | 'year'
 
@@ -151,18 +152,73 @@ export function aggregatePerformance(
 }
 
 /**
- * Filas crudas de `player_match_stats` para toda la agencia, en el rango más
- * amplio soportado (año). Pensada para pedirse una sola vez y reutilizarse
- * para cualquier período vía `aggregatePerformance` (filtra por fecha en el
- * cliente), en vez de volver a pegarle a Supabase por cada pestaña.
+ * Cómo puede venir escrito el nombre de un jugador de la agencia en `players`:
+ * completo, abreviado ("A. Steimbach"), inicial + apellidos, y cada uno con y
+ * sin acentos (caso real: la base tiene "M. Espíndola" y el roster
+ * "M. Espindola"). La búsqueda en la base es exacta, así que se le pasan
+ * todas las formas; el filtro fino (sin acentos/mayúsculas) lo hace después
+ * `aggregatePerformance` igual que siempre.
  */
-export async function fetchAgencyPerformanceRows(): Promise<SquadStatRow[]> {
-  const from = isoDaysAgo(PERIOD_DAYS.year)
+export function agencyNameVariants(roster: { fullName: string; shortName?: string }[]): string[] {
+  const stripAccents = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+  const out = new Set<string>()
+  for (const p of roster) {
+    const parts = p.fullName.trim().split(/\s+/)
+    const forms = [p.fullName.trim(), p.shortName?.trim()]
+    if (parts.length > 1) {
+      forms.push(`${parts[0][0]}. ${parts.slice(1).join(' ')}`)
+      forms.push(`${parts[0][0]}. ${parts[parts.length - 1]}`)
+    }
+    for (const f of forms) {
+      if (!f) continue
+      out.add(f)
+      out.add(stripAccents(f))
+    }
+  }
+  return [...out]
+}
+
+export interface AgencyPerformanceRows {
+  /** Filas de `player_match_stats` de los jugadores de la agencia, último año. */
+  rows: SquadStatRow[]
+  /** Equipos de la agencia con partidos cargados en los últimos 30 días. */
+  activeTeamIds: Set<number>
+}
+
+/**
+ * Filas crudas de `player_match_stats` de los jugadores de la agencia, en el
+ * rango más amplio soportado (año). Pensada para pedirse una sola vez y
+ * reutilizarse para cualquier período vía `aggregatePerformance` (filtra por
+ * fecha en el cliente), en vez de volver a pegarle a Supabase por cada pestaña.
+ *
+ * Primero busca los ids de los jugadores por nombre y después pide sólo sus
+ * filas (ver `fetchPlayersMatchStats`: pedir los planteles completos se
+ * cortaba por timeout y el Inicio quedaba vacío).
+ */
+export async function fetchAgencyPerformanceRows(): Promise<AgencyPerformanceRows> {
+  const roster = AGENCY_PLAYERS
   const teamIds = [...new Set(
-    AGENCY_PLAYERS.map(p => p.apiTeamId).filter((id): id is number => id != null),
+    roster.map(p => p.apiTeamId).filter((id): id is number => id != null),
   )]
 
-  return fetchMultiTeamMatchStats(teamIds, from).catch(() => [] as SquadStatRow[])
+  const rowsPromise = (async () => {
+    const { data, error } = await supabase
+      .from('players')
+      .select('id, name')
+      .in('name', agencyNameVariants(roster))
+    if (error) throw error
+    const rosterKeys = new Set(roster.flatMap(p => [p.fullName, p.shortName].filter(Boolean).map(n => normalizeName(n!))))
+    const playerIds = (data ?? [])
+      .filter(p => rosterKeys.has(normalizeName(p.name as string)))
+      .map(p => p.id as number)
+    return fetchPlayersMatchStats(playerIds, teamIds, isoDaysAgo(PERIOD_DAYS.year))
+  })()
+
+  const [rows, activeTeamIds] = await Promise.all([
+    rowsPromise,
+    fetchTeamsWithStatsSince(teamIds, new Date(Date.now() - PERIOD_DAYS.month * 24 * 60 * 60 * 1000).toISOString()),
+  ])
+  return { rows, activeTeamIds }
 }
 
 /**
@@ -173,6 +229,6 @@ export async function fetchAgencyPerformanceRows(): Promise<SquadStatRow[]> {
  * partido (ver nota en HomePage).
  */
 export async function fetchAgencyPerformance(period: PerformancePeriod): Promise<AgencyPerformance> {
-  const rows = await fetchAgencyPerformanceRows()
+  const { rows } = await fetchAgencyPerformanceRows()
   return aggregatePerformance(period, rows, AGENCY_PLAYERS)
 }

@@ -968,30 +968,74 @@ export async function fetchSquadMatchStats(
 }
 
 /**
- * Igual que `fetchSquadMatchStats` pero para varios equipos en una sola tanda
- * de queries (`.in('team_id', ...)`) en vez de una por equipo. La agencia
- * tiene jugadores en ~30 equipos distintos — pedirle a Supabase 30 queries en
- * paralelo (`Promise.all` de `fetchSquadMatchStats`) satura el pool de
- * conexiones y cada una termina esperando su turno; una sola query con `in`
- * evita esa cola. Usado por `fetchAgencyPerformanceRows` (Home).
+ * Filas de `player_match_stats` de jugadores puntuales (por id) dentro de
+ * ciertos equipos. Usado por `fetchAgencyPerformanceRows` (Home).
+ *
+ * Antes el Home pedía TODAS las filas de los ~30 equipos de la agencia
+ * (`.in('team_id', ...)` a un año: ~16.000 filas, ~6 MB) para después quedarse
+ * con las de los jugadores Doble G (~570, el 3,5%). Esa consulta pasaba el
+ * límite de tiempo de Supabase (`57014 statement timeout`) y el Inicio quedaba
+ * con los recuadros vacíos. Filtrando por jugador en la base son unos cientos
+ * de filas y responde en menos de un segundo.
  */
-export async function fetchMultiTeamMatchStats(
+export async function fetchPlayersMatchStats(
+  playerIds: number[],
   teamIds: number[],
   fromISO: string,
-  toISO?: string,
 ): Promise<SquadStatRow[]> {
-  if (teamIds.length === 0) return [];
+  if (playerIds.length === 0 || teamIds.length === 0) return [];
 
-  return fetchAllSquadStatPages((page, withCount) => {
-    let query = supabase
+  return fetchAllSquadStatPages((page, withCount) =>
+    supabase
       .from('player_match_stats')
       .select(SQUAD_STAT_COLUMNS, withCount ? { count: 'exact' } : undefined)
+      .in('player_id', playerIds)
       .in('team_id', teamIds)
       .gte('fixture.date', fromISO)
       .order('fixture_id', { ascending: true })
-      .range(page * SQUAD_PAGE, (page + 1) * SQUAD_PAGE - 1);
+      .order('player_id', { ascending: true })
+      .range(page * SQUAD_PAGE, (page + 1) * SQUAD_PAGE - 1),
+  );
+}
 
-    if (toISO) query = query.lte('fixture.date', `${toISO}T23:59:59`);
-    return query;
-  });
+/**
+ * Equipos (de `teamIds`) que tienen al menos una fila en `player_match_stats`
+ * en un partido desde `fromISO`. Sirve para saber si la carga de un equipo
+ * está viva antes de creerle un "0 minutos" a sus jugadores.
+ *
+ * No alcanza con mirar `fixtures` (algunos partidos figuran `stats_synced`
+ * sin una sola fila de jugadores — caso real: equipo 1051), por eso se
+ * buscan los partidos recientes y después qué equipos tienen filas en ellos.
+ */
+export async function fetchTeamsWithStatsSince(
+  teamIds: number[],
+  fromISO: string,
+): Promise<Set<number>> {
+  if (teamIds.length === 0) return new Set();
+  const list = teamIds.join(',');
+
+  const { data: fixtures, error } = await supabase
+    .from('fixtures')
+    .select('id')
+    .gte('date', fromISO)
+    .lte('date', new Date().toISOString())
+    .or(`home_team_id.in.(${list}),away_team_id.in.(${list})`);
+  if (error) throw error;
+  const fixtureIds = (fixtures ?? []).map(f => f.id as number);
+  if (fixtureIds.length === 0) return new Set();
+
+  const active = new Set<number>();
+  for (let page = 0; ; page++) {
+    const { data, error: statsError } = await supabase
+      .from('player_match_stats')
+      .select('team_id')
+      .in('fixture_id', fixtureIds)
+      .in('team_id', teamIds)
+      .order('fixture_id', { ascending: true })
+      .order('player_id', { ascending: true })
+      .range(page * SQUAD_PAGE, (page + 1) * SQUAD_PAGE - 1);
+    if (statsError) throw statsError;
+    for (const row of data ?? []) active.add(row.team_id as number);
+    if ((data ?? []).length < SQUAD_PAGE) return active;
+  }
 }
