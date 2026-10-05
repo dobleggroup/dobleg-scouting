@@ -27,6 +27,14 @@ describe('parseNumber', () => {
   it('resuelve separadores de miles', () => {
     expect(parseNumber('1.234,5')).toBe(1234.5)
     expect(parseNumber('1,234')).toBe(1234)
+    expect(parseNumber('12.314')).toBe(12314)
+    expect(parseNumber('1.234.567')).toBe(1234567)
+  })
+
+  it('un punto con otra cantidad de decimales sigue siendo decimal', () => {
+    expect(parseNumber('0.512')).toBe(0.512)
+    expect(parseNumber('32.1')).toBe(32.1)
+    expect(parseNumber('10.25')).toBe(10.25)
   })
 
   it('devuelve null para lo que no es un número', () => {
