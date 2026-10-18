@@ -74,13 +74,22 @@ while remaining > 0:
         "FETCH_DELAY": "3.0",
         "PYTHONUNBUFFERED": "1",
     }
-    result = subprocess.run(
-        [sys.executable, "sync.py"],
-        capture_output=True, text=True, env=env, timeout=1800,
-    )
+    try:
+        result = subprocess.run(
+            [sys.executable, "sync.py"],
+            capture_output=True, text=True, env=env, timeout=1800,
+        )
+    except subprocess.TimeoutExpired as e:
+        print("sync.py timed out after 1800s, retrying")
+        result = subprocess.CompletedProcess(e.cmd, 1, e.stdout or "", e.stderr or "")
+        if isinstance(result.stdout, bytes):
+            result.stdout = result.stdout.decode(errors="replace")
+            result.stderr = (result.stderr or b"").decode(errors="replace")
 
     output = result.stdout
     print(output, end="")
+    if result.returncode != 0 and result.stderr:
+        print("stderr:", result.stderr[-1500:])
 
     blocked = "BLOCKED" in output or "BLOCKED" in result.stderr
     try:
@@ -91,8 +100,12 @@ while remaining > 0:
     except (json.JSONDecodeError, IndexError, ValueError):
         synced = 0
 
-    total_synced += synced
+    prev_remaining = remaining
     remaining = count_unsynced()
+    # Si sync.py se corta despues de cerrar partidos no imprime el resumen: el avance real
+    # es lo que bajaron los pendientes.
+    synced = max(synced, prev_remaining - remaining)
+    total_synced += synced
     print(f"--- Progress: {total_synced} synced, {remaining} remaining ---")
 
     if synced > 0:

@@ -12,12 +12,18 @@ const SECTION_STOP = ['cargas locomotivas', 'cargas mecánicas', 'cargas mecanic
 const CONTEXT_LABELS = ['instancia', 'rival', 'torneo', 'estadio']
 const MAX_LABEL_VALUE_DIST = 150
 
+/** Power BI escribe "(En blanco)" en el tiempo que el jugador no jugó (entró en el
+ * segundo tiempo o salió en el entretiempo): es un valor vacío, no una etiqueta. */
+const BLANK_VALUES = new Set(['(en blanco)', '(blank)', 'en blanco', '-', '—', '–'])
+const isBlank = (text: string) => BLANK_VALUES.has(text.trim().toLowerCase())
+const isNumberOrBlank = (text: string) => parseNumber(text) !== null || isBlank(text)
+
 function isLabelRow(row: PdfRow): boolean {
-  return row.cells.length >= 2 && row.cells.every(c => parseNumber(c.text) === null)
+  return row.cells.length >= 2 && row.cells.every(c => parseNumber(c.text) === null && !isBlank(c.text))
 }
 
 function isValueRow(row: PdfRow, width: number): boolean {
-  return row.cells.length === width && row.cells.every(c => parseNumber(c.text) !== null)
+  return row.cells.length === width && row.cells.every(c => isNumberOrBlank(c.text))
 }
 
 function side(x: number): 'PT' | 'ST' {
@@ -115,14 +121,15 @@ export function parsePowerBiReport(rows: PdfRow[], playerName: string): PdfTable
   if (tiemposRow) {
     const idx = pageRows.indexOf(tiemposRow)
     const valueRow = pageRows[idx + 1]
-    if (valueRow && valueRow.cells.length === 3 && valueRow.cells.every(c => parseNumber(c.text) !== null)) {
+    if (valueRow && valueRow.cells.length === 3 && valueRow.cells.every(c => isNumberOrBlank(c.text))) {
       const sorted = [...valueRow.cells].sort((a, b) => a.x - b.x)
       headers.push('Minutos jugados (PT)', 'Minutos jugados', 'Minutos jugados (ST)')
       values.push(parseNumber(sorted[0].text), parseNumber(sorted[1].text), parseNumber(sorted[2].text))
     }
   }
 
-  if (headers.length === 1) return null
+  // Sin ningún número leído no hay nada que cargar (mejor que una fila vacía).
+  if (values.every(v => v === null)) return null
 
   const row: PdfTableRow = { name: playerName, values }
   return { headers, rows: [row], preambleLines: extractContext(pageRows) }

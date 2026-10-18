@@ -1,7 +1,8 @@
 import { AGENCY_PLAYERS } from '@/constants/agencyPlayers'
 import { normalizeName } from '@/utils/scoring'
-import { supabase } from '@/lib/supabase'
-import { fetchPlayersMatchStats, fetchTeamsWithStatsSince, type SquadStatRow } from './playerStatsService'
+import { fetchTeamsWithStatsSince, type SquadStatRow } from './playerStatsService'
+import { fetchAgencyMatchRows, agencyRowsFromISO } from './agencyMatchRowsService'
+import { ownedRows } from '@/features/tablero/tableroData'
 
 export type PerformancePeriod = 'month' | '6months' | 'year'
 
@@ -45,10 +46,6 @@ export interface AgencyPerformance {
   byPlayer: AgencyPlayerPerformance[]
   /** Jugadores de la agencia sin un solo minuto en el período (0 filas encontradas). */
   noMinutes: string[]
-}
-
-function isoDaysAgo(days: number): string {
-  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 }
 
 /**
@@ -191,33 +188,37 @@ export interface AgencyPerformanceRows {
  * reutilizarse para cualquier período vía `aggregatePerformance` (filtra por
  * fecha en el cliente), en vez de volver a pegarle a Supabase por cada pestaña.
  *
- * Primero busca los ids de los jugadores por nombre y después pide sólo sus
- * filas (ver `fetchPlayersMatchStats`: pedir los planteles completos se
- * cortaba por timeout y el Inicio quedaba vacío).
+ * Pide sólo las filas de los jugadores (por id), nunca planteles completos:
+ * eso se cortaba por timeout y el Inicio quedaba vacío.
  */
 export async function fetchAgencyPerformanceRows(): Promise<AgencyPerformanceRows> {
   const roster = AGENCY_PLAYERS
   const teamIds = [...new Set(
     roster.map(p => p.apiTeamId).filter((id): id is number => id != null),
   )]
+  const monthAgo = Date.now() - PERIOD_DAYS.month * 24 * 60 * 60 * 1000
 
-  const rowsPromise = (async () => {
-    const { data, error } = await supabase
-      .from('players')
-      .select('id, name')
-      .in('name', agencyNameVariants(roster))
-    if (error) throw error
-    const rosterKeys = new Set(roster.flatMap(p => [p.fullName, p.shortName].filter(Boolean).map(n => normalizeName(n!))))
-    const playerIds = (data ?? [])
-      .filter(p => rosterKeys.has(normalizeName(p.name as string)))
-      .map(p => p.id as number)
-    return fetchPlayersMatchStats(playerIds, teamIds, isoDaysAgo(PERIOD_DAYS.year))
-  })()
+  // Misma búsqueda que el Tablero: por identidad oficial + por nombre en su club
+  // (o el gemelo de Sofascore). Antes sólo se buscaba por nombre dentro del
+  // club del roster y los jugadores de ligas que carga Sofascore (otros ids de
+  // club) no aparecían nunca en el Inicio. Cada fila queda con el nombre del
+  // roster, y el mismo partido contado por dos proveedores, una sola vez.
+  const matches = await fetchAgencyMatchRows(roster, agencyRowsFromISO())
+  const owned = ownedRows(matches.rows, roster, { owners: matches.owners, teamTwins: matches.teamTwins })
+  const rows: SquadStatRow[] = owned.map(({ row, app }) => ({ ...row, player: { name: app.fullName } }))
 
-  const [rows, activeTeamIds] = await Promise.all([
-    rowsPromise,
-    fetchTeamsWithStatsSince(teamIds, new Date(Date.now() - PERIOD_DAYS.month * 24 * 60 * 60 * 1000).toISOString()),
-  ])
+  // "Equipo con carga viva" (ver `fetchTeamsWithStatsSince`): su club o su
+  // gemelo de Sofascore tuvo partidos cargados este mes, o el propio jugador
+  // figura en algún partido (aunque sea en el banco) en el mes, con el club que sea.
+  const twinIds = [...matches.teamTwins.keys()]
+  const withStats = await fetchTeamsWithStatsSince([...teamIds, ...twinIds], new Date(monthAgo).toISOString())
+  const activeTeamIds = new Set<number>()
+  for (const id of withStats) activeTeamIds.add(matches.teamTwins.get(id) ?? id)
+  for (const { app } of owned) {
+    if (new Date(app.date).getTime() < monthAgo) continue
+    const apiTeamId = roster.find(p => p.fullName === app.fullName)?.apiTeamId
+    if (apiTeamId != null) activeTeamIds.add(apiTeamId)
+  }
   return { rows, activeTeamIds }
 }
 

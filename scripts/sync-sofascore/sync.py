@@ -9,6 +9,7 @@ Optional: DISCOVER_PAGES (default 3), STATS_BATCH (default 5)
 
 import os
 import sys
+import atexit
 import json
 import time
 import bisect
@@ -138,7 +139,9 @@ def save_position_cache(cache):
 # jugadores, Mitre-Central Norte 30/08 con 0: goles de Machado que no existian).
 RETRY_FILE = os.path.join(os.path.dirname(__file__), "retry_state.json")
 RETRY_HOURS = 6
-COMPLETE_GRACE_DAYS = 4
+# 14 dias: en Primera Nacional y Uruguay Sofascore a veces carga las formaciones
+# varios dias despues (con 4 se cerraban vacios Penarol-Nacional 30/08 y otros).
+COMPLETE_GRACE_DAYS = 14
 MIN_PLAYERS_PER_SIDE = 11
 
 
@@ -204,18 +207,130 @@ def sofa_fetch(path):
     if elapsed < FETCH_DELAY:
         time.sleep(FETCH_DELAY - elapsed)
 
-    url = f"https://api.sofascore.com/api/v1{path}"
-    r = cffi_requests.get(url, impersonate="chrome")
-    last_fetch = time.time()
+    if browser_page is None:
+        url = f"https://api.sofascore.com/api/v1{path}"
+        r = cffi_requests.get(url, impersonate="chrome")
+        last_fetch = time.time()
+        status = r.status_code
+        # Desde 2026-09-24 Sofascore responde 403 "challenge" a pedidos sin navegador:
+        # pasamos a pedir desde un Chrome real (sin ventana) el resto de la corrida.
+        if status == 403 and open_browser():
+            return sofa_fetch(path)
+    else:
+        status, body = browser_page.evaluate(
+            "async u => { const r = await fetch(u, { signal: AbortSignal.timeout(30000) }); return [r.status, await r.text()] }",
+            f"/api/v1{path}",
+        )
+        last_fetch = time.time()
 
-    if r.status_code == 403:
+    if status == 403:
         raise Exception("SOFASCORE_BLOCKED")
-    if r.status_code == 404:
+    if status == 404:
         raise Exception("SOFASCORE_NOT_FOUND")
-    if r.status_code != 200:
-        raise Exception(f"Sofascore HTTP {r.status_code}")
+    if status != 200:
+        raise Exception(f"Sofascore HTTP {status}")
 
-    return r.json()
+    return r.json() if browser_page is None else json.loads(body)
+
+
+browser_page = None
+
+
+# Chrome comun (no lanzado por Playwright, que Sofascore detecta: "Access denied.
+# Verification failed") con un perfil propio y fijo: guarda la cookie que deja
+# Sofascore cuando se resuelve su captcha (desbloquear-sofascore.bat), asi las
+# corridas siguientes pasan sin ventana. Playwright solo se conecta por CDP.
+PROFILE_DIR = os.path.join(os.path.dirname(__file__), "chrome-profile")
+CHROME_EXE = os.environ.get("CHROME_EXE", r"C:\Program Files\Google\Chrome\Application\chrome.exe")
+CDP_PORT = 9333
+TEST_PATH = "/api/v1/unique-tournament/703/seasons"
+HOME_URL = "https://www.sofascore.com/es-la/"
+
+
+def kill_profile_chrome():
+    """Cierra cualquier Chrome que haya quedado abierto con el perfil del sync
+    (una corrida cortada a la mitad lo dejaba colgado, 2026-10-15)."""
+    import subprocess
+    ps = ("Get-CimInstance Win32_Process -Filter \"name='chrome.exe'\" | "
+          "Where-Object { $_.CommandLine -like '*sync-sofascore*chrome-profile*' } | "
+          "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }")
+    subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, timeout=60)
+
+
+def start_chrome(headless, tries=2):
+    import subprocess
+    args = [CHROME_EXE, f"--user-data-dir={PROFILE_DIR}", f"--remote-debugging-port={CDP_PORT}",
+            "--no-first-run", "--no-default-browser-check"]
+    if headless:
+        # Sin ventana real: con --headless Sofascore manda todo al captcha
+        # (2026-10-15). Chrome normal, pero fuera de la pantalla y minimizado.
+        args += ["--window-position=-32000,-32000", "--start-minimized"]
+    for _ in range(tries):
+        # Si queda un Chrome viejo cerrandose, el nuevo se le "entrega" y no abre el puerto.
+        kill_profile_chrome()
+        time.sleep(3)
+        proc = subprocess.Popen(args + [HOME_URL])
+        for _ in range(20):
+            time.sleep(1)
+            try:
+                urllib.request.urlopen(f"http://127.0.0.1:{CDP_PORT}/json/version", timeout=2)
+                return proc
+            except Exception:
+                pass
+    kill_profile_chrome()
+    raise Exception("Chrome no abrio el puerto de depuracion")
+
+
+def tab_urls():
+    tabs = json.load(urllib.request.urlopen(f"http://127.0.0.1:{CDP_PORT}/json", timeout=5))
+    return [t["url"] for t in tabs if t.get("type") == "page"]
+
+
+def api_status(page):
+    return page.evaluate("async u => (await fetch(u)).status", TEST_PATH)
+
+
+def open_browser():
+    """Abre Chrome sin ventana en sofascore.com para que los pedidos pasen el control anti-bots."""
+    global browser_page
+    try:
+        from playwright.sync_api import sync_playwright
+        proc = start_chrome(headless=True)
+        time.sleep(8)
+        pw = sync_playwright().start()
+        browser = pw.chromium.connect_over_cdp(f"http://127.0.0.1:{CDP_PORT}")
+        atexit.register(lambda: (pw.stop(), kill_profile_chrome()))
+        page = browser.contexts[0].pages[0]
+        if "captcha" in page.url or api_status(page) != 200:
+            print("Sofascore pide captcha: correr desbloquear-sofascore.bat y resolverlo una vez")
+            return False
+        browser_page = page
+        print("Sofascore bloquea pedidos directos: usando Chrome fuera de pantalla")
+        return True
+    except Exception as e:
+        print(f"No se pudo abrir Chrome: {e}")
+        return False
+
+
+def unlock():
+    """Abre Chrome (perfil del sync) en Sofascore para resolver el captcha a mano."""
+    proc = start_chrome(headless=False)
+    print("Si aparece el captcha de Sofascore, resolvelo en la ventana de Chrome...")
+    try:
+        for i in range(100):
+            time.sleep(3)
+            try:
+                urls = tab_urls()
+            except Exception:
+                continue
+            if i > 2 and urls and all("captcha" not in u for u in urls):
+                time.sleep(3)
+                print("Listo: Sofascore ya no pide captcha.")
+                return True
+        print("No se destrabo en 5 minutos.")
+        return False
+    finally:
+        kill_profile_chrome()
 
 
 def fetch_player_position(raw_player_id):
@@ -655,14 +770,20 @@ def main():
                         break
                     continue
 
-                if not lineups.get("confirmed"):
-                    continue
-
                 def has_stats(players):
                     starter = next((p for p in players if not p.get("substitute") and p.get("statistics")), None)
                     return (starter or {}).get("statistics", {}).get("minutesPlayed", 0) > 0
 
-                if not has_stats(lineups["home"]["players"]) and not has_stats(lineups["away"]["players"]):
+                if not lineups.get("confirmed") or (
+                        not has_stats(lineups["home"]["players"]) and not has_stats(lineups["away"]["players"])):
+                    # Sofascore todavia no publico las stats: se vuelve a pedir cada
+                    # RETRY_HOURS hasta que aparezcan; recien pasados COMPLETE_GRACE_DAYS
+                    # se cierra para que no ocupe para siempre el lugar de los pendientes.
+                    if fixture_age_days(fixture.get("date") or "") >= COMPLETE_GRACE_DAYS:
+                        sb_update("fixtures", {"stats_synced": True}, f"id=eq.{fixture['id']}")
+                        results.setdefault("incomplete", []).append(f"{fixture['id']}: cerrado sin stats en Sofascore")
+                    else:
+                        retry_state[fixture["id"]] = now_ts
                     continue
 
                 card_map = {}
@@ -832,4 +953,6 @@ def main():
 
 
 if __name__ == "__main__":
+    if "--desbloquear" in sys.argv:
+        sys.exit(0 if unlock() else 1)
     main()

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AGENCY_PLAYERS } from '@/constants/agencyPlayers'
 import { fetchAllAgencyFixtures, getFixturesForDate, groupFixturesByDate } from '@/services/footballApiService'
@@ -26,6 +26,8 @@ import { useRecentForm, useLeagues } from '@/hooks/usePlayerStats'
 import { isApiFootballPlayer } from '@/services/playerStatsService'
 import { excludeAgencyPlayers } from '@/utils/agencyFilter'
 import type { RecentFormPlayer, LeagueInfo } from '@/types/scoring'
+
+const HomeRendimientoSection = lazy(() => import('@/features/wyscoutPerf/components/HomeRendimientoSection'))
 
 const AR_TZ = 'America/Argentina/Buenos_Aires'
 
@@ -1909,7 +1911,7 @@ function MatchSkeleton() {
 export default function HomePage() {
   const { userDisplayName } = useAuth()
   const { t, language } = useLanguage()
-  const { internal, monitoring, marketValueHistory, loading: dataLoading } = useData()
+  const { internal, monitoring, marketValueHistory, agencyPlayers, loading: dataLoading } = useData()
   const { currency, rate } = useCurrency()
   const latamScouting = useLatamScouting()
   const [fixtures, setFixtures] = useState<AgencyFixture[]>([])
@@ -1924,13 +1926,15 @@ export default function HomePage() {
   // Se pide una sola vez el rango más amplio (año) y varios widgets (Rendimiento,
   // Jugadores en riesgo, Minutos por posición) recalculan en el cliente sobre las
   // mismas filas — antes cada uno pegaba su propio fetch a Supabase.
+  // Se vuelve a pedir cuando llegan las altas de la plataforma (`agencyPlayers`):
+  // la primera carga puede salir con la lista base, sin ellas.
   useEffect(() => {
     let alive = true
     fetchAgencyPerformanceRows()
       .then(r => { if (alive) setPerf(r) })
-      .catch(() => { if (alive) setPerf({ rows: [], activeTeamIds: new Set() }) })
+      .catch(() => { if (alive) setPerf(prev => prev ?? { rows: [], activeTeamIds: new Set() }) })
     return () => { alive = false }
-  }, [])
+  }, [agencyPlayers])
 
   useEffect(() => {
     Promise.all([
@@ -2277,6 +2281,16 @@ export default function HomePage() {
 
       {/* ── Nuestros entrenadores (DT de la agencia con club) ── */}
       <CoachesHomeWidget />
+
+      {/* ═══════════════ RENDIMIENTO INDIVIDUAL (Wyscout) ═══════════════ */}
+      <SectionDivider
+        title="Rendimiento individual"
+        subtitle="Cómo rinde cada jugador temporada a temporada, con datos de Wyscout"
+        icon={<svg className="w-5 h-5 text-brand-green" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 3v18h18M7 15l3-3 3 3 5-6" /></svg>}
+      />
+      <Suspense fallback={<div className="h-40 rounded-apple-lg bg-apple-gray-100 dark:bg-apple-gray-800 animate-pulse" />}>
+        <HomeRendimientoSection />
+      </Suspense>
 
       {/* ═══════════════════ SCOUT EXTERNO ═══════════════════ */}
       <SectionDivider

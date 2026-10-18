@@ -24,3 +24,9 @@ scripts/secrets.bat
 
 # Salida del enriquecimiento de carreras (CSV de revisión)
 scripts/enrich-transfermarkt/output/
+
+# Perfil de Chrome del sync de Sofascore (cookies del captcha)
+scripts/sync-sofascore/chrome-profile/
+
+# Test Opta: caché local del script de descarga (datos confidenciales de Opta)
+scripts/opta/.cache/

@@ -173,6 +173,16 @@
   input[type="range"]::-webkit-slider-thumb:active {
     @apply transform scale-95;
   }
+  /* Dos manijas sobre la misma barra (rango desde–hasta): solo las manijas toman el mouse. */
+  .dual-range input[type="range"] {
+    @apply absolute inset-x-0 top-1/2 -translate-y-1/2 bg-transparent pointer-events-none;
+  }
+  .dual-range input[type="range"]::-webkit-slider-thumb {
+    @apply pointer-events-auto;
+  }
+  .dual-range input[type="range"]::-moz-range-thumb {
+    @apply pointer-events-auto w-4 h-4 rounded-full bg-white border-2 border-brand-green cursor-pointer;
+  }
 }
 
 @layer utilities {

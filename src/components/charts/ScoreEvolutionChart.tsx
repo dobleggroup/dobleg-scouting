@@ -7,6 +7,8 @@ import type { PlayerMatchStat } from '@/types/scoring';
 interface ScoreEvolutionChartProps {
   matches: PlayerMatchStat[];
   avgScore: number | null;
+  /** Título propio del gráfico; `null` lo oculta (cuando la sección ya tiene título). */
+  title?: string | null;
 }
 
 type ViewMode = 'weekly' | 'monthly';
@@ -47,7 +49,7 @@ interface ChartPoint {
   };
 }
 
-export default function ScoreEvolutionChart({ matches, avgScore }: ScoreEvolutionChartProps) {
+export default function ScoreEvolutionChart({ matches, avgScore, title = 'Evolucion de Rendimiento' }: ScoreEvolutionChartProps) {
   // Arranca en mensual: la vista partido a partido es demasiado ruidosa de entrada.
   const [mode, setMode] = useState<ViewMode>('monthly');
 
@@ -111,8 +113,8 @@ export default function ScoreEvolutionChart({ matches, avgScore }: ScoreEvolutio
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-300">Evolucion de Rendimiento</h3>
+      <div className={`flex items-center ${title ? 'justify-between' : 'justify-end'} mb-3`}>
+        {title && <h3 className="text-sm font-semibold text-gray-300">{title}</h3>}
         <div className="flex bg-white/5 rounded-lg p-0.5">
           {(['weekly', 'monthly'] as const).map(m => (
             <button

@@ -33,6 +33,8 @@ export function PlayerPhoto({ src, name, size = 'md', className = '', rounded = 
         alt={name ?? ''}
         className={`${s} ${r} object-cover bg-apple-gray-100 dark:bg-apple-gray-800 flex-shrink-0 ${className}`}
         onError={() => setFailed(true)}
+        // Sofascore a veces devuelve una imagen vacía de 1×1 en vez de error.
+        onLoad={e => { if (e.currentTarget.naturalWidth <= 1) setFailed(true) }}
       />
     )
   }

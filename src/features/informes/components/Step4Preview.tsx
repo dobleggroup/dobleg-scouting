@@ -326,7 +326,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
     ? { result: insightsResult, config: insightsConfig }
     : undefined
 
-  // ── Métricas evolutivas (Wyscout) — solo internos con jugador en la planilla ──
+  // ── Métricas evolutivas (Wyscout) — solo internos con datos de Wyscout cargados ──
   const [evoCharts, setEvoCharts] = useState<EvoChart[]>([])
   const showEvolutivas = evoCharts.length > 0
   const evoKeysSig = JSON.stringify(informe.evolutionCharts ?? [])
@@ -336,7 +336,7 @@ export default function Step4Preview({ informe, stats, matrix, defs, onBack, onS
     if (!keys?.length || !name) { setEvoCharts([]); return }
     let alive = true
     import('@/services/wyscoutEvolutionService')
-      .then(m => m.loadWyscoutEvolution())
+      .then(m => m.loadWyscoutEvolution(name))
       .then(w => {
         if (!alive) return
         if (!w.hasPlayer(name)) { setEvoCharts([]); return }
