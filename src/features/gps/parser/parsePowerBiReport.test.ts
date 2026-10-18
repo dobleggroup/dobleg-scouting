@@ -41,6 +41,27 @@ describe('parsePowerBiReport', () => {
     expect(table!.preambleLines.join(' | ')).toContain('Rival: River Plate')
   })
 
+  it('lee el reporte cuando el jugador solo jugó el segundo tiempo ("(En blanco)" en el PT)', async () => {
+    const items = await extractPdfItems(fixture('powerbi-steimbach-solo-st.pdf'))
+    const rows = groupRows(items)
+    const table = parsePowerBiReport(rows, 'Alexis Steimbach')
+
+    expect(table).not.toBeNull()
+    const byHeader = Object.fromEntries(table!.headers.map((h, i) => [h, table!.rows[0].values[i]]))
+    expect(byHeader['Distancia total (m) (PT)']).toBeNull()
+    expect(byHeader['Mts/min (PT)']).toBeNull()
+    expect(byHeader['Velocidad Max. (km/h) (PT)']).toBeNull()
+    expect(byHeader['Dist > 21 Km/h (PT)']).toBeNull()
+    expect(byHeader['Distancia total (m) (ST)']).toBe(2285)
+    expect(byHeader['Mts/min (ST)']).toBe(118.8)
+    expect(byHeader['Velocidad Max. (km/h) (ST)']).toBe(30.1)
+    expect(byHeader['Dist > 21 Km/h (ST)']).toBe(210)
+    expect(byHeader['Minutos jugados (PT)']).toBeNull()
+    expect(byHeader['Minutos jugados']).toBe(19)
+    expect(byHeader['Minutos jugados (ST)']).toBe(19)
+    expect(table!.preambleLines.join(' | ')).toContain('Rival: Tigre')
+  })
+
   it('devuelve null si el PDF no tiene la página de Primer/Segundo Tiempo', async () => {
     const items = await extractPdfItems(fixture('estudiantes-tigre.pdf'))
     const rows = groupRows(items)

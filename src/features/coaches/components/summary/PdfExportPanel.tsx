@@ -1,19 +1,26 @@
 // src/features/coaches/components/summary/PdfExportPanel.tsx
 // Lista de widgets con casillas (todos marcados) para elegir que entra en el PDF.
-import { useState } from 'react'
-import { ALL_WIDGETS, SECTION_TITLES, type WidgetInfo, type WidgetSection } from '@/features/coaches/wyscoutSquad/widgetDefs'
+import { useState, type ReactNode } from 'react'
+import { ALL_WIDGETS, SECTION_TITLES } from '@/features/coaches/wyscoutSquad/widgetDefs'
 
-export default function PdfExportPanel({ available, onGenerate, onClose }: {
+interface PanelOption { id: string; section: string; title: string }
+
+export default function PdfExportPanel({ available, onGenerate, onClose, options = ALL_WIDGETS, sectionTitles = SECTION_TITLES, extra }: {
   /** Widgets que hoy tienen datos (los demas no se ofrecen). */
   available: Set<string>
   onGenerate: (widgetIds: string[]) => Promise<void>
   onClose: () => void
+  /** Lo que se puede elegir (por defecto, los widgets del Resumen). */
+  options?: PanelOption[]
+  sectionTitles?: Record<string, string>
+  /** Opciones propias de cada PDF (ej. qué rival), arriba de las casillas. */
+  extra?: ReactNode
 }) {
-  const widgets = ALL_WIDGETS.filter(w => available.has(w.id))
+  const widgets = options.filter(w => available.has(w.id))
   const [checked, setChecked] = useState<Set<string>>(() => new Set(widgets.map(w => w.id)))
   const [status, setStatus] = useState<'idle' | 'working' | 'error'>('idle')
 
-  const bySection = new Map<WidgetSection, WidgetInfo[]>()
+  const bySection = new Map<string, PanelOption[]>()
   for (const w of widgets) bySection.set(w.section, [...(bySection.get(w.section) ?? []), w])
 
   const toggle = (id: string) => setChecked(prev => {
@@ -47,10 +54,11 @@ export default function PdfExportPanel({ available, onGenerate, onClose }: {
           <button type="button" onClick={() => setChecked(new Set())} className="text-apple-gray-500 hover:text-apple-gray-800 dark:hover:text-white min-h-[32px]">Ninguno</button>
         </div>
       </div>
+      {extra && <div className="mb-4">{extra}</div>}
       <div className="grid gap-4 sm:grid-cols-2">
         {[...bySection.entries()].map(([section, list]) => (
           <fieldset key={section}>
-            <legend className="text-[10px] font-semibold uppercase tracking-wide text-apple-gray-400 mb-2">{SECTION_TITLES[section]}</legend>
+            <legend className="text-[10px] font-semibold uppercase tracking-wide text-apple-gray-400 mb-2">{sectionTitles[section] ?? section}</legend>
             <div className="space-y-1">
               {list.map(w => (
                 <label key={w.id} className="flex items-center gap-2.5 min-h-[32px] cursor-pointer text-sm text-apple-gray-700 dark:text-apple-gray-200">

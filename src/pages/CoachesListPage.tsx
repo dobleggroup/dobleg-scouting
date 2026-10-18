@@ -15,6 +15,28 @@ function initialsOf(fullName: string): string {
     .toUpperCase()
 }
 
+/** Prueba de la API de Opta con River: no es un entrenador de la base, es una vista aparte. */
+function OptaTestCard() {
+  return (
+    <Link
+      to="/entrenadores/ponzio-opta"
+      className="group relative overflow-hidden flex items-center gap-4 min-h-[96px] bg-white dark:bg-apple-gray-800 rounded-apple-lg border border-dashed border-brand-green/50 shadow-apple dark:shadow-apple-dark p-5 transition-all duration-200 ease-apple hover:shadow-apple-md dark:hover:shadow-apple-dark-md hover:border-brand-green hover:-translate-y-0.5"
+    >
+      <img src="/coaches/ponzio.png" alt="" className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover flex-shrink-0 ring-2 ring-offset-2 dark:ring-offset-apple-gray-800 ring-brand-green/40" />
+      <div className="flex-1 min-w-0">
+        <h2 className="text-base sm:text-lg font-bold text-apple-gray-800 dark:text-white truncate">Leonardo Ponzio</h2>
+        <div className="flex flex-wrap items-center gap-2 mt-1">
+          <span className="px-2 py-0.5 rounded-full text-[11px] font-bold tracking-wide bg-apple-gray-900 text-white dark:bg-white dark:text-apple-gray-900">TEST OPTA</span>
+          <span className="text-sm text-apple-gray-500 dark:text-apple-gray-400 truncate">River Plate</span>
+        </div>
+      </div>
+      <svg className="w-5 h-5 flex-shrink-0 text-apple-gray-300 dark:text-apple-gray-600 transition-transform duration-200 ease-apple group-hover:translate-x-0.5 group-hover:text-brand-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+      </svg>
+    </Link>
+  )
+}
+
 export default function CoachesListPage() {
   const { t } = useLanguage()
   // undefined = cargando, null = falló la carga, [] = cargó pero no hay entrenadores.
@@ -146,6 +168,7 @@ export default function CoachesListPage() {
             </Link>
           )
         })}
+        <OptaTestCard />
       </div>
       )}
     </div>

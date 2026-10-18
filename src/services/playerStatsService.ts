@@ -702,6 +702,31 @@ export async function fetchAgencyPlayerLinks(): Promise<Map<string, number>> {
     const canonical = r.player?.canonical_id as number | null | undefined;
     if (r.full_name && canonical != null) links.set(norm(r.full_name), canonical);
   }
+
+  // Altas desde la plataforma que guardaron el id de la fila en `api_player_id`
+  // y dejaron `supabase_player_id` vacío (caso real: Ulises Albano Ciccioli,
+  // api_player_id 311329 = players.id): sin esto quedaban sin identidad y sin
+  // ningún partido en el Tablero. Sólo se acepta si la fila tiene su apellido.
+  const { data: byApiId } = await supabase
+    .from('agency_players')
+    .select('full_name, api_player_id')
+    .eq('kind', 'add')
+    .is('supabase_player_id', null)
+    .not('api_player_id', 'is', null);
+  const pending = ((byApiId ?? []) as { full_name: string | null; api_player_id: number }[])
+    .filter(r => r.full_name && !links.has(norm(r.full_name)));
+  if (pending.length > 0) {
+    const { data: rows } = await supabase
+      .from('players')
+      .select('id, name, canonical_id')
+      .in('id', pending.map(r => r.api_player_id));
+    const byId = new Map(((rows ?? []) as { id: number; name: string; canonical_id: number | null }[]).map(p => [p.id, p]));
+    for (const r of pending) {
+      const p = byId.get(r.api_player_id);
+      const surname = norm(r.full_name!).split(/\s+/).pop()!;
+      if (p && norm(p.name).split(/\s+/).includes(surname)) links.set(norm(r.full_name!), p.canonical_id ?? p.id);
+    }
+  }
   return links;
 }
 

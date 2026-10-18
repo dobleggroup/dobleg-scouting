@@ -1,6 +1,30 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { handleOpta } from './netlify/functions/_shared/optaCore.mjs'
+
+/**
+ * /api/opta en desarrollo: misma lógica que netlify/functions/opta.mjs (las
+ * credenciales de Opta quedan en el servidor, nunca en el bundle).
+ */
+function optaDevProxy(env: Record<string, string>): Plugin {
+  return {
+    name: 'opta-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/opta', async (req, res) => {
+        try {
+          const q = new URL(req.url ?? '', 'http://localhost').searchParams
+          const r = await handleOpta({ feed: q.get('feed'), fx: q.get('fx'), authHeader: req.headers.authorization, env })
+          res.writeHead(r.status, r.headers)
+          res.end(r.body)
+        } catch (err) {
+          res.writeHead(502, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: (err as Error).message }))
+        }
+      })
+    },
+  }
+}
 
 export default defineConfig(({ mode }) => {
   // FOOTBALL_API_KEY (sin prefijo VITE_) para que Vite no la inyecte en el
@@ -8,7 +32,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   return {
-    plugins: [react()],
+    plugins: [react(), optaDevProxy(env)],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

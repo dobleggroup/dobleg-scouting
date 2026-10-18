@@ -407,7 +407,7 @@ interface EvolutionSectionProps {
 
 /**
  * Solo se muestra cuando el protagonista está linkeado a un jugador interno
- * (`dbPlayerName`) que además existe en la planilla Wyscout (`hasPlayer`).
+ * (`dbPlayerName`) que además tiene datos de Wyscout cargados (`hasPlayer`).
  * Los externos no tienen `dbPlayerName`, así que la sección nunca aparece.
  */
 function EvolutionChartsSection({ dbPlayerName, evolutionCharts, onChange }: EvolutionSectionProps) {
@@ -417,7 +417,7 @@ function EvolutionChartsSection({ dbPlayerName, evolutionCharts, onChange }: Evo
     let alive = true
     setWyscout(null)
     if (!dbPlayerName) return
-    loadWyscoutEvolution()
+    loadWyscoutEvolution(dbPlayerName)
       .then(w => { if (alive && w.hasPlayer(dbPlayerName)) setWyscout(w) })
       .catch(() => {})
     return () => { alive = false }

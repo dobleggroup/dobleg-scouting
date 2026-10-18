@@ -1,5 +1,7 @@
-import Papa from 'papaparse'
-import { SHEET_URLS } from '@/constants/scoring'
+import { supabase } from '@/lib/supabase'
+import { AGENCY_PLAYERS } from '@/constants/agencyPlayers'
+import { agencyKey } from '@/services/agencyPlayersService'
+import { wyscoutLabel, WYSCOUT_COLUMN_ORDER } from '@/features/wyscoutPerf/parsePlayerStats'
 import { normalizeName } from '@/utils/scoring'
 
 export interface WyscoutMetric {
@@ -135,51 +137,75 @@ export interface WyscoutEvolutionData {
   hasPlayer(playerName: string): boolean
 }
 
-let cache: Promise<WyscoutEvolutionData> | null = null
+const cache = new Map<string, Promise<WyscoutEvolutionData>>()
 
-export function loadWyscoutEvolution(): Promise<WyscoutEvolutionData> {
-  if (cache) return cache
-  cache = (async () => {
-    const res = await fetch(SHEET_URLS.wyscoutEvolucion)
-    const text = await res.text()
-    const parsed = Papa.parse<string[]>(text, { header: false, skipEmptyLines: true })
-    const matrix = parsed.data as string[][]
-    const headers = (matrix[0] ?? []).map(h => (h ?? '').trim())
-    const body = matrix.slice(1)
-    const metrics = parseMetricSchema(headers)
-    const idxJug = headers.indexOf('Jugador')
+/** Jugador de la agencia que corresponde a un nombre ("J. Paradela" o "José Paradela"). */
+function agencyKeyFor(name: string): string | null {
+  const keys = new Set(nameKeys(name))
+  const hit = AGENCY_PLAYERS.find(p => [...nameKeys(p.fullName), ...nameKeys(p.shortName)].some(k => keys.has(k)))
+  return hit ? agencyKey(hit.fullName) : null
+}
 
-    // Agrupar filas por nombre crudo de la planilla.
-    const byRawName = new Map<string, string[][]>()
-    for (const r of body) {
-      const raw = idxJug >= 0 ? (r[idxJug] ?? '') : ''
-      if (!raw.trim()) continue
-      if (!byRawName.has(raw)) byRawName.set(raw, [])
-      byRawName.get(raw)!.push(r)
-    }
+/**
+ * Datos partido a partido de Wyscout de UN jugador, cargados desde los Excel
+ * "Player stats" (página Carga de Wyscout). Antes salían de una planilla de
+ * Google Sheets que ya no se usa; la forma de los datos es la misma.
+ */
+export function loadWyscoutEvolution(playerName: string): Promise<WyscoutEvolutionData> {
+  const key = agencyKeyFor(playerName) ?? ''
+  const hit = cache.get(key)
+  if (hit) return hit
+  const promise = (async (): Promise<WyscoutEvolutionData> => {
+    const empty: WyscoutEvolutionData = { metrics: [], hasPlayer: () => false, getSeries: () => [] }
+    if (!key) return empty
+    const { data, error } = await supabase
+      .from('wyscout_player_matches')
+      .select('match_date, match_label, competition, stats')
+      .eq('player_key', key)
+      .order('match_date')
+    if (error) throw new Error(error.message)
+    const rows = (data ?? []) as Array<{ match_date: string; match_label: string; competition: string | null; stats: Record<string, number> }>
+    if (!rows.length) return empty
 
-    // Índice tolerante: cada jugador queda accesible por su nombre completo
-    // normalizado y por su clave inicial+apellido.
-    const byKey = new Map<string, string[][]>()
-    for (const [raw, rows] of byRawName) {
-      for (const k of nameKeys(raw)) {
-        if (!byKey.has(k)) byKey.set(k, rows)
-      }
-    }
-
-    const lookup = (name: string): string[][] => {
-      for (const k of nameKeys(name)) {
-        const rows = byKey.get(k)
-        if (rows) return rows
-      }
-      return []
-    }
+    // Una métrica por columna de Wyscout; si existe "<x>_ok" es un par (intentos / logrados) → %.
+    const rank = (k: string) => { const i = WYSCOUT_COLUMN_ORDER.indexOf(k); return i < 0 ? 999 : i }
+    const allKeys = [...new Set(rows.flatMap(r => Object.keys(r.stats ?? {})))].sort((a, b) => rank(a) - rank(b))
+    const metrics: WyscoutMetric[] = allKeys
+      .filter(k => !k.endsWith('_ok'))
+      .map((k, i) => {
+        const pair = allKeys.includes(`${k}_ok`)
+        return {
+          key: k,
+          label: wyscoutLabel(k, pair),
+          type: pair ? 'ratio' as const : 'simple' as const,
+          unit: pair ? '%' as const : '' as const,
+          attemptsIdx: i,
+          achievedIdx: pair ? i : null,
+        }
+      })
+    const keys = new Set(nameKeys(playerName))
+    const matches = (name: string) => nameKeys(name).some(k => keys.has(k)) || agencyKeyFor(name) === key
 
     return {
       metrics,
-      hasPlayer: (name: string) => lookup(name).length > 0,
-      getSeries: (name: string, metricKey: string) => buildMetricSeries(lookup(name), headers, metricKey),
+      hasPlayer: matches,
+      getSeries: (name: string, metricKey: string) => {
+        if (!matches(name)) return []
+        const m = metrics.find(x => x.key === metricKey)
+        if (!m) return []
+        return rows.map(r => {
+          const attempts = r.stats?.[metricKey]
+          let value: number | null = attempts ?? null
+          if (m.type === 'ratio') {
+            const ok = r.stats?.[`${metricKey}_ok`]
+            value = attempts && attempts > 0 && ok !== undefined ? (ok / attempts) * 100 : null
+          }
+          return { date: r.match_date, matchLabel: r.match_label, competition: r.competition ?? '', value }
+        })
+      },
     }
   })()
-  return cache
+  cache.set(key, promise)
+  promise.catch(() => cache.delete(key))
+  return promise
 }

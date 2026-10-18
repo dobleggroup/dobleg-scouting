@@ -45,6 +45,7 @@ import VideosTab from '@/components/videos/VideosTab'
 import type { EnrichedPlayer, SubjectiveMetric } from '@/types'
 
 const SupabasePlayerDetailLazy = lazy(() => import('@/components/players/SupabasePlayerDetail'))
+const PlayerWyscoutTab = lazy(() => import('@/features/wyscoutPerf/components/PlayerWyscoutTab'))
 
 // ─── PLAYER COMMENTS SYSTEM ───────────────────────────────────────────────────
 
@@ -810,10 +811,16 @@ export default function PlayerDetailPage() {
   const [wyscout, setWyscout] = useState<WyscoutEvolutionData | null>(null)
   const [wyscoutMetric, setWyscoutMetric] = useState<string>('')
   const [wyscoutMode, setWyscoutMode] = useState<'weekly' | 'monthly'>('weekly')
+  const wyscoutPlayerName = player?.Jugador ?? ''
   useEffect(() => {
-    if (source !== 'interno') return
-    import('@/services/wyscoutEvolutionService').then(m => m.loadWyscoutEvolution()).then(setWyscout).catch(() => {})
-  }, [source])
+    if (source !== 'interno' || !wyscoutPlayerName) return
+    let alive = true
+    import('@/services/wyscoutEvolutionService')
+      .then(m => m.loadWyscoutEvolution(wyscoutPlayerName))
+      .then(w => { if (alive) setWyscout(w) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [source, wyscoutPlayerName])
 
   const wyscoutSeries = useMemo(() => {
     if (!wyscout || !player || !wyscoutMetric) return []
@@ -2277,30 +2284,35 @@ export default function PlayerDetailPage() {
               </div>
             )}
 
-            {/* EVOLUCIÓN TAB */}
-            {activeTab === 'Rendimiento evolutivo' && source === 'interno' && (
+            {/* RENDIMIENTO TAB: Wyscout por temporada + rating, partido a partido e historial */}
+            {activeTab === 'Rendimiento evolutivo' && source === 'interno' && player && (
               <div className="animate-fade-in" id="tab-content-evolution">
-                {allPlayerMatches.length > 0 ? (
-                  <div className="space-y-6">
-                    <div>
-                      <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-1">
-                        Evolución del Rating
-                      </h3>
-                      <p className="text-xs text-apple-gray-400 mb-4">
-                        Rating por partido · La línea punteada indica el promedio
-                      </p>
+                <Suspense fallback={<div className="h-48 rounded-apple bg-apple-gray-100 dark:bg-apple-gray-700/40 animate-pulse" />}>
+                  <PlayerWyscoutTab
+                    playerName={dgEntry?.fullName ?? player.Jugador}
+                    ratingSection={allPlayerMatches.length > 0 ? (
                       <ScoreEvolutionChart
                         matches={allPlayerMatches}
                         avgScore={supabaseAvgScore}
+                        title={null}
                       />
-                    </div>
-
-                    {wyscout && player && wyscout.hasPlayer(player.Jugador) && (
+                    ) : (
+                      playerJugadorSK ? (
+                        <EvolutionChart evolution={evolution} playerSK={playerJugadorSK} />
+                      ) : (
+                        <EmptyState
+                          title="Sin datos de evolución"
+                          description="No se encontraron datos de evolución para este jugador."
+                          icon="search"
+                        />
+                      )
+                    )}
+                    perMatchSection={wyscout && wyscout.hasPlayer(player.Jugador) ? (
                       <div>
                         <div className="flex items-center justify-between mb-1 gap-3 flex-wrap">
-                          <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
-                            Métricas evolutivas
-                          </h3>
+                          <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400">
+                            Cualquier columna del Excel de Wyscout, partido por partido
+                          </p>
                           <select
                             value={wyscoutMetric}
                             onChange={e => setWyscoutMetric(e.target.value)}
@@ -2331,13 +2343,11 @@ export default function PlayerDetailPage() {
                           </div>
                         )}
                       </div>
-                    )}
-
+                    ) : undefined}
+                    historySection={allPlayerMatches.length > 0 ? (
+                      <div>
                     {/* Match history table */}
                     <div>
-                      <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-3">
-                        Historial de Partidos
-                      </h3>
                       <div className="overflow-x-auto rounded-xl border border-apple-gray-100 dark:border-apple-gray-700">
                         <table className="w-full text-sm">
                           <thead>
@@ -2396,64 +2406,10 @@ export default function PlayerDetailPage() {
                         </p>
                       )}
                     </div>
-                  </div>
-                ) : (
-                  <>
-                    <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-1">
-                      Rendimiento por partido
-                    </h3>
-                    <p className="text-xs text-apple-gray-400 mb-5">
-                      La línea punteada indica el promedio del jugador
-                    </p>
-                    {playerJugadorSK ? (
-                      <EvolutionChart evolution={evolution} playerSK={playerJugadorSK} />
-                    ) : (
-                      <EmptyState
-                        title="Sin datos de evolución"
-                        description="No se encontraron datos de evolución para este jugador."
-                        icon="search"
-                      />
-                    )}
-
-                    {wyscout && player && wyscout.hasPlayer(player.Jugador) && (
-                      <div className="mt-8">
-                        <div className="flex items-center justify-between mb-1 gap-3 flex-wrap">
-                          <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
-                            Métricas evolutivas
-                          </h3>
-                          <select
-                            value={wyscoutMetric}
-                            onChange={e => setWyscoutMetric(e.target.value)}
-                            className="px-3 py-1.5 rounded-lg text-sm bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-700 dark:text-apple-gray-200 border-0 focus:ring-2 focus:ring-brand-green"
-                          >
-                            {wyscout.metrics.map(m => (
-                              <option key={m.key} value={m.key}>{m.label}{m.unit === '%' ? ' (%)' : ''}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <p className="text-xs text-apple-gray-400 mb-4">{wyscoutMode === 'monthly' ? 'Promedio por mes' : 'Por partido'} · la línea punteada indica el promedio</p>
-                        {wyscoutMetricDef && (
-                          <MetricEvolutionChart series={wyscoutSeries} unit={wyscoutMetricDef.unit} label={wyscoutMetricDef.label} mode={wyscoutMode} onModeChange={setWyscoutMode} />
-                        )}
-                        {wyscoutInsights.length > 0 && (
-                          <div className="mt-3 space-y-1.5">
-                            {wyscoutInsights.map((ins, i) => (
-                              <div key={i} className={`text-xs px-3 py-2 rounded-lg ${
-                                ins.tone === 'positive'
-                                  ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20'
-                                  : ins.tone === 'negative'
-                                    ? 'text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20'
-                                    : 'text-apple-gray-600 dark:text-apple-gray-300 bg-apple-gray-50 dark:bg-apple-gray-700/50'
-                              }`}>
-                                {ins.text}
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
-                    )}
-                  </>
-                )}
+                    ) : undefined}
+                  />
+                </Suspense>
               </div>
             )}
 
