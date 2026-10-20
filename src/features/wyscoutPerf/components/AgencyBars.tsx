@@ -1,16 +1,22 @@
+import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { PlayerPhoto } from '@/components/ui/PlayerPhoto'
-import { fmtMetric, type MetricDef } from '../metrics'
+import { fmtMetric, unitSuffix, type MetricDef } from '../metrics'
 import type { PlayerValue } from '../analysis'
 
 /**
  * Barras horizontales: un renglón por jugador de la agencia, ordenados del
  * mejor al peor en la métrica. El elegido queda resaltado.
  */
-export default function AgencyBars({ values, metric, highlight, photo, limit = 14 }: {
+export default function AgencyBars({ values, metric, highlight, photo, limit = 14, badge, colorOf }: {
   values: PlayerValue[]
   metric: MetricDef
-  highlight?: string | null
+  /** Uno o varios jugadores resaltados. */
+  highlight?: string | string[] | null
+  /** Algo chico al lado del nombre (la clase de la agencia). */
+  badge?: (key: string) => ReactNode
+  /** Color propio de cada resaltado (al comparar varios). */
+  colorOf?: (key: string) => string | undefined
   photo: (key: string) => string | null
   limit?: number
 }) {
@@ -18,9 +24,8 @@ export default function AgencyBars({ values, metric, highlight, photo, limit = 1
   if (!values.length) return <p className="text-sm text-apple-gray-400">Nadie tiene minutos suficientes en este período.</p>
 
   // Si el elegido queda afuera del top, se agrega al final para que siempre se vea.
-  let shown = values.slice(0, limit)
-  const hiIdx = highlight ? values.findIndex(v => v.key === highlight) : -1
-  if (hiIdx >= limit) shown = [...shown, values[hiIdx]]
+  const marked = new Set(highlight ? (Array.isArray(highlight) ? highlight : [highlight]) : [])
+  const shown = values.filter((v, i) => i < limit || marked.has(v.key))
 
   const max = Math.max(...values.map(v => Math.abs(v.value)), metric.unit === '%' ? 100 : 0.0001)
   const avg = values.reduce((s, v) => s + v.value, 0) / values.length
@@ -30,7 +35,8 @@ export default function AgencyBars({ values, metric, highlight, photo, limit = 1
       <div className="space-y-1.5">
         {shown.map(v => {
           const pos = values.indexOf(v) + 1
-          const me = v.key === highlight
+          const me = marked.has(v.key)
+          const own = me ? colorOf?.(v.key) : undefined
           return (
             <button
               key={v.key}
@@ -40,12 +46,13 @@ export default function AgencyBars({ values, metric, highlight, photo, limit = 1
               <span className="text-2xs tabular-nums text-apple-gray-400 text-right">{pos}</span>
               <span className="flex items-center gap-1.5 min-w-0">
                 <PlayerPhoto src={photo(v.key)} name={v.name} size="xs" rounded="full" />
+                {badge?.(v.key)}
                 <span className={`text-xs truncate ${me ? 'font-semibold text-apple-gray-900 dark:text-white' : 'text-apple-gray-700 dark:text-apple-gray-200'}`}>{v.name}</span>
               </span>
               <span className="h-2.5 rounded-full bg-apple-gray-100 dark:bg-apple-gray-700/60 overflow-hidden">
                 <span
-                  className={`block h-full rounded-full ${me ? 'bg-brand-green' : 'bg-apple-gray-400/70 dark:bg-apple-gray-500'}`}
-                  style={{ width: `${Math.max(2, (Math.abs(v.value) / max) * 100)}%` }}
+                  className={`block h-full rounded-full ${me ? (own ? '' : 'bg-brand-green') : 'bg-apple-gray-400/70 dark:bg-apple-gray-500'}`}
+                  style={{ width: `${Math.max(2, (Math.abs(v.value) / max) * 100)}%`, background: own }}
                 />
               </span>
               <span className="text-xs font-semibold tabular-nums text-right text-apple-gray-800 dark:text-white">{fmtMetric(metric, v.value)}</span>
@@ -55,7 +62,7 @@ export default function AgencyBars({ values, metric, highlight, photo, limit = 1
       </div>
       <p className="mt-3 text-2xs text-apple-gray-400 dark:text-apple-gray-500">
         Promedio de la lista: <span className="font-semibold tabular-nums">{fmtMetric(metric, avg)}</span>
-        {metric.unit === '%' ? '' : ' por partido'}{metric.lowerIsBetter ? ' · en esta métrica, menos es mejor' : ''} · {values.length} jugadores con minutos suficientes
+        {unitSuffix(metric)}{metric.lowerIsBetter ? ' · en esta métrica, menos es mejor' : ''} · {values.length} jugadores con minutos suficientes
       </p>
     </div>
   )

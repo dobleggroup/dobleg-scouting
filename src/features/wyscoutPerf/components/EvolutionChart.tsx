@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useElementWidth } from '@/features/tablero/components/useElementWidth'
-import { fmtMetric, type MetricDef } from '../metrics'
+import { fmtMetric, unitSuffix, type MetricDef } from '../metrics'
 import type { EvolutionPoint } from '../analysis'
 
 const PAD = { l: 44, r: 16, t: 18, b: 40 }
@@ -79,7 +79,7 @@ function Chart({ points, metric, W }: { points: EvolutionPoint[]; metric: Metric
             style={{ left: `${(x(hover) / W) * 100}%`, top: 4, transform: `translateX(${x(hover) > W * 0.6 ? 'calc(-100% - 8px)' : '8px'})` }}
           >
             <p className="font-semibold text-xs">{hp.label}</p>
-            <p className="tabular-nums">Jugador: {fmtMetric(metric, hp.value)}{metric.unit === '%' ? '' : ' por partido'}</p>
+            <p className="tabular-nums">Jugador: {fmtMetric(metric, hp.value)}{unitSuffix(metric)}</p>
             <p className="tabular-nums opacity-70">Su posición en la agencia: {fmtMetric(metric, hp.agency)}</p>
             <p className="opacity-70 tabular-nums">{hp.matches} partidos · {hp.minutes.toLocaleString('es-AR')}'</p>
           </div>

@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { readPersistentCache, writePersistentCache } from '@/utils/persistentCache'
 import type { ParsedPlayerStats } from '@/features/wyscoutPerf/parsePlayerStats'
 import type { MonthRow } from '@/features/wyscoutPerf/periods'
 
@@ -125,18 +126,36 @@ export function fetchMonthly(force = false): Promise<MonthRow[]> {
       all.push(...((data ?? []) as MonthRow[]))
       if (!data || data.length < PAGE) break
     }
-    return all.map(r => ({
+    const out = all.map(r => ({
       ...r,
       sums: Object.fromEntries(Object.entries(r.sums ?? {}).map(([k, v]) => [k, Number(v)])),
     }))
+    void writePersistentCache(MONTHLY_KEY, out)
+    return out
   })()
   monthlyCache = { at: Date.now(), rows }
   rows.catch(() => { monthlyCache = null })
   return rows
 }
 
+const MONTHLY_KEY = 'wyscout_monthly_v1'
+const MINUTES_KEY = 'wyscout_match_minutes_v1'
+/** Lo guardado en el navegador se muestra al instante mientras llega lo nuevo. */
+const STORED_MAX_AGE = 60 * 24 * 60 * 60 * 1000
+
+/** Última copia guardada en el navegador (null si no hay). */
+export function storedMonthly(): Promise<MonthRow[] | null> {
+  return readPersistentCache<MonthRow[]>(MONTHLY_KEY, STORED_MAX_AGE)
+}
+
+export async function storedMatchMinutes(): Promise<Map<string, MatchMinutes[]> | null> {
+  const entries = await readPersistentCache<Array<[string, MatchMinutes[]]>>(MINUTES_KEY, STORED_MAX_AGE)
+  return entries ? new Map(entries) : null
+}
+
 export function invalidateWyscoutCache() {
   monthlyCache = null
+  minutesCache = null
 }
 
 /** Partidos de un jugador (para la ficha: evolución partido a partido). */
@@ -159,4 +178,35 @@ export function uploadedThisMonth(uploads: WyscoutUploadRow[], today = new Date(
 /** Del 1 al 10 de cada mes se avisa si faltan cargas. */
 export function isUploadWindow(today = new Date()) {
   return today.getDate() <= 10
+}
+
+export interface MatchMinutes { date: string; minutes: number }
+
+let minutesCache: { at: number; rows: Promise<Map<string, MatchMinutes[]>> } | null = null
+
+/** Minutos de cada partido de cada jugador (para contar titularidades). Cache 60 s. */
+export function fetchMatchMinutes(): Promise<Map<string, MatchMinutes[]>> {
+  if (minutesCache && Date.now() - minutesCache.at < 60_000) return minutesCache.rows
+  const rows = (async () => {
+    const out = new Map<string, MatchMinutes[]>()
+    const PAGE = 1000
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('wyscout_player_matches')
+        .select('player_key, match_date, minutes')
+        .order('id')
+        .range(from, from + PAGE - 1)
+      if (error) throw new Error(error.message)
+      for (const r of data ?? []) {
+        if (!out.has(r.player_key)) out.set(r.player_key, [])
+        out.get(r.player_key)!.push({ date: r.match_date, minutes: r.minutes })
+      }
+      if (!data || data.length < PAGE) break
+    }
+    void writePersistentCache(MINUTES_KEY, [...out])
+    return out
+  })()
+  minutesCache = { at: Date.now(), rows }
+  rows.catch(() => { minutesCache = null })
+  return rows
 }

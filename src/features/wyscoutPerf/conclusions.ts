@@ -5,7 +5,7 @@
  */
 import {
   METRICS, POS_GROUP_LABEL, dominantGroup, fmtMetric, metricsFor,
-  type MetricDef, type PosGroup, type Totals,
+  type MetricDef, type PosGroup, type Totals, isRate, unitSuffix,
 } from './metrics'
 import { groupPeriods, monthsAgo, totalsBetween, type MonthRow } from './periods'
 
@@ -22,10 +22,12 @@ export interface Conclusion {
 }
 
 export const MIN_MINUTES = 450
+/** Para comparar una temporada con otra: unos 10 partidos enteros en cada una. */
+const SEASON_MINUTES = 900
 const MIN_REL = 0.15
 
 function unitText(m: MetricDef): string {
-  return m.unit === '%' ? '' : ' por partido'
+  return unitSuffix(m)
 }
 
 /** Diferencia clara: ≥15% y, para porcentajes, al menos 4 puntos. */
@@ -35,6 +37,22 @@ function clearChange(m: MetricDef, now: number, before: number): number | null {
   if (Math.abs(diff) < 0.1 || Math.abs(before) < 0.05) return null
   const rel = diff / Math.abs(before)
   return Math.abs(rel) >= MIN_REL ? rel : null
+}
+
+/**
+ * En métricas "por partido" de cosas que pasan poco (goles, asistencias…) una
+ * diferencia grande puede ser casualidad: pedimos que la diferencia equivalga
+ * a 2 jugadas o más en los minutos del período más corto.
+ */
+function enoughEvents(m: MetricDef, now: number, before: number, minutes: number): boolean {
+  if (m.unit !== 'pp') return true
+  return (Math.abs(now - before) * minutes) / 90 >= 2
+}
+
+/** En los %: al menos 30 intentos en cada período (18 pases largos en un año no dicen nada). */
+const MIN_TRIES = 30
+function enoughTries(m: MetricDef, ...periods: Totals[]): boolean {
+  return !m.tries || periods.every(t => (t.s[m.tries!] ?? 0) >= MIN_TRIES)
 }
 
 function isGood(m: MetricDef, diff: number) {
@@ -81,11 +99,11 @@ export function playerGroup(rows: MonthRow[]): PosGroup | null {
 export function playerConclusions(rows: MonthRow[], peers: MonthRow[] = [], today = new Date()): Conclusion[] {
   if (rows.length === 0) return []
   const group = playerGroup(rows)
-  const metrics = metricsFor(group).filter(m => !m.signed)
+  const metrics = metricsFor(group).filter(m => !m.signed && isRate(m))
   const out: Conclusion[] = []
 
   // 1) Temporada vs la anterior (las dos últimas con minutos suficientes).
-  const seasons = groupPeriods(rows, 'season').filter(p => p.minutes >= MIN_MINUTES)
+  const seasons = groupPeriods(rows, 'season').filter(p => p.minutes >= SEASON_MINUTES)
   if (seasons.length >= 2) {
     const cur = seasons[seasons.length - 1]
     const prev = seasons[seasons.length - 2]
@@ -93,7 +111,7 @@ export function playerConclusions(rows: MonthRow[], peers: MonthRow[] = [], toda
       const a = m.compute(cur), b = m.compute(prev)
       if (a === null || b === null) continue
       const rel = clearChange(m, a, b)
-      if (rel === null) continue
+      if (rel === null || !enoughEvents(m, a, b, Math.min(cur.minutes, prev.minutes)) || !enoughTries(m, cur, prev)) continue
       const good = isGood(m, a - b)
       const verb = a > b ? 'subió' : 'bajó'
       out.push({
@@ -124,10 +142,12 @@ export function playerConclusions(rows: MonthRow[], peers: MonthRow[] = [], toda
   const history = totalsBetween(rows, '0000-00', monthsAgo(3, today))
   if (recent.minutes >= 360 && history.minutes >= MIN_MINUTES * 2) {
     for (const m of metrics) {
+      // Un porcentaje de 3 meses con pocos partidos se mueve mucho: se pide más minutos.
+      if (m.unit === '%' && recent.minutes < 540) continue
       const a = m.compute(recent), b = m.compute(history)
       if (a === null || b === null) continue
       const rel = clearChange(m, a, b)
-      if (rel === null || Math.abs(rel) < 0.25) continue
+      if (rel === null || Math.abs(rel) < 0.25 || !enoughEvents(m, a, b, recent.minutes) || !enoughTries(m, recent, history)) continue
       const good = isGood(m, a - b)
       out.push({
         kind: 'reciente', metricKey: m.key, tone: good ? 'positive' : 'negative', score: Math.abs(rel) * 0.9,
@@ -155,6 +175,8 @@ export function playerConclusions(rows: MonthRow[], peers: MonthRow[] = [], toda
           .sort((a, b) => (m.lowerIsBetter ? a.v - b.v : b.v - a.v))
         if (ranked.length < 3) continue
         const pos = ranked.findIndex(x => x.k === me)
+        // Empatado con otro (por ejemplo, todos en 0): no es "el que más" ni "el que menos".
+        if (pos < 0 || ranked.some((x, j) => j !== pos && x.v === ranked[pos].v)) continue
         if (pos === 0) {
           out.push({
             kind: 'agencia', metricKey: m.key, tone: 'positive', score: 0.6 + (m.headline ? 0.2 : 0),
@@ -206,9 +228,9 @@ export function playerTrend(rows: MonthRow[], today = new Date()): TrendResult |
   const before = totalsBetween(rows, monthsAgo(17, today), monthsAgo(6, today))
   if (now.minutes < MIN_MINUTES || before.minutes < MIN_MINUTES) return null
   const changes: Array<{ metric: MetricDef; rel: number; now: number; before: number }> = []
-  for (const m of metricsFor(group).filter(x => !x.signed)) {
+  for (const m of metricsFor(group).filter(x => !x.signed && isRate(x))) {
     const a = m.compute(now), b = m.compute(before)
-    if (a === null || b === null || Math.abs(b) < 0.05) continue
+    if (a === null || b === null || Math.abs(b) < 0.05 || !enoughTries(m, now, before)) continue
     const rel = Math.max(-1, Math.min(1, (a - b) / Math.abs(b)))
     changes.push({ metric: m, rel: m.lowerIsBetter ? -rel : rel, now: a, before: b })
   }

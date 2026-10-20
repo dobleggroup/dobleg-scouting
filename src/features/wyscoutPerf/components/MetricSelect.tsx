@@ -18,7 +18,7 @@ export default function MetricSelect({ value, metrics, onChange, label }: {
       {cats.map(c => (
         <optgroup key={c} label={CATEGORY_LABEL[c]}>
           {metrics.filter(m => m.category === c).map(m => (
-            <option key={m.key} value={m.key}>{m.label}{m.unit === '%' ? '' : ' (por partido)'}</option>
+            <option key={m.key} value={m.key}>{m.label}{(m.unit === 'pp' ? ' (por partido)' : '')}</option>
           ))}
         </optgroup>
       ))}
