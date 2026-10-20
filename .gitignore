@@ -30,3 +30,6 @@ scripts/sync-sofascore/chrome-profile/
 
 # Test Opta: caché local del script de descarga (datos confidenciales de Opta)
 scripts/opta/.cache/
+
+# salidas locales del reporte mensual (datos internos)
+scripts/minuta-mensual/output-*
