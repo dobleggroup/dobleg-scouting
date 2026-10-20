@@ -5,7 +5,7 @@ import { AGENCY_PLAYERS } from '@/constants/agencyPlayers'
 import { agencyKey } from '@/services/agencyPlayersService'
 import { nameKeys } from '@/services/wyscoutEvolutionService'
 import { useWyscoutMonthly } from '../useWyscoutMonthly'
-import { METRIC_BY_KEY, POS_GROUP_LABEL, metricsFor } from '../metrics'
+import { METRIC_BY_KEY, POS_GROUP_LABEL, metricsFor, unitSuffix } from '../metrics'
 import { groupPeriods, monthLabel, type Grouping } from '../periods'
 import { playerConclusions, playerGroup } from '../conclusions'
 import { evolution, playerValues, WINDOW_LABEL } from '../analysis'
@@ -119,7 +119,7 @@ export default function PlayerWyscoutTab({ playerName, ratingSection, perMatchSe
             )}
           </Section>
 
-          <Section title={`Contra los ${groupMany} de la agencia`} subtitle={`${metric.label}${metric.unit === '%' ? '' : ' por partido'} · ${WINDOW_LABEL['12m'].toLowerCase()}. Cambiá la métrica arriba, en "Cómo evolucionó".`}>
+          <Section title={`Contra los ${groupMany} de la agencia`} subtitle={`${metric.label}${unitSuffix(metric)} · ${WINDOW_LABEL['12m'].toLowerCase()}. Cambiá la métrica arriba, en "Cómo evolucionó".`}>
             <AgencyBars values={bars} metric={metric} highlight={key} photo={photo} limit={8} />
           </Section>
         </>

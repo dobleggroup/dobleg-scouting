@@ -2,15 +2,12 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getAgencyPlayers, agencyKey } from '@/services/agencyPlayersService'
 import { fetchUploads, isUploadWindow, uploadedThisMonth } from '@/services/wyscoutPerfService'
-import { useWyscoutMonthly } from '../useWyscoutMonthly'
-import { METRIC_BY_KEY } from '../metrics'
-import { playerConclusions, playerTrend, type TrendResult } from '../conclusions'
-import { playerValues, type Window } from '../analysis'
-import ConclusionList from './ConclusionList'
-import AgencyBars from './AgencyBars'
-import TrendList from './TrendList'
+import { useMatchMinutes, useWyscoutMonthly } from '../useWyscoutMonthly'
+import { diagnoseAll, isConcern, isHot, positionBoard, type Diagnosis } from '../diagnosis'
+import { MomentList, PositionBoard } from './DiagnosisViews'
+import { ClassBadge, classRank, useClassOf } from './classes'
+import MonthlyUpdateNote from './MonthlyUpdateNote'
 
-const HOME_METRICS = ['regates_ok_90', 'duelos_pct', 'ult_tercio_ok_90', 'recup_rival_90', 'goles_asist_90', 'perdidas_propia_90']
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 
 function Card({ title, to, children }: { title: string; to?: string; children: ReactNode }) {
@@ -48,25 +45,24 @@ function UploadReminder() {
   )
 }
 
-/** Sección "Rendimiento individual" del Inicio: lo más destacado de los datos de Wyscout. */
+/** Sección "Datos internos Wyscout" del Inicio: cómo está cada jugador y lo bueno y lo malo de cada posición. */
 export default function HomeRendimientoSection() {
   const { rows, byPlayer, photo, name } = useWyscoutMonthly()
   const navigate = useNavigate()
-  const [metricKey, setMetricKey] = useState(HOME_METRICS[0])
-  const [win, setWin] = useState<Window>('12m')
-  const metric = METRIC_BY_KEY[metricKey]
 
-  const highlights = useMemo(() => {
-    if (!rows) return []
-    return [...byPlayer.entries()]
-      .flatMap(([k, rs]) => playerConclusions(rs, rows).slice(0, 1).map(c => ({ ...c, who: name(k), onClick: () => navigate(`/jugador/${encodeURIComponent(name(k))}?source=interno`) })))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5)
-  }, [rows, byPlayer, name, navigate])
-  const ranking = useMemo(() => playerValues(byPlayer, metric, win).map(v => ({ ...v, name: name(v.key) })), [byPlayer, metric, win, name])
-  const trends = useMemo(() => [...byPlayer.values()].map(rs => playerTrend(rs)).filter((t): t is TrendResult => !!t)
-    .map(t => ({ ...t, player_name: name(t.player_key) })), [byPlayer, name])
-
+  const matchMinutes = useMatchMinutes()
+  const classOf = useClassOf()
+  const diags = useMemo(() => [...diagnoseAll(byPlayer, matchMinutes).values()], [byPlayer, matchMinutes])
+  const open = (k: string) => navigate(`/jugador/${encodeURIComponent(name(k))}?source=interno`)
+  const moments = useMemo(() => {
+    const rank = (k: string) => classRank(classOf(name(k)))
+    const item = (d: Diagnosis) => ({ d, name: name(d.key), lead: <ClassBadge c={classOf(name(d.key))} size="xs" /> })
+    return {
+      hot: diags.filter(isHot).sort((a, b) => rank(a.key) - rank(b.key) || b.score - a.score).map(item),
+      concern: diags.filter(isConcern).sort((a, b) => rank(a.key) - rank(b.key) || a.score - b.score).map(item),
+      board: positionBoard(diags, k => (3 - rank(k)) * 0.08),
+    }
+  }, [diags, name, classOf])
   if (rows === null) return <div className="h-40 rounded-apple-lg bg-apple-gray-100 dark:bg-apple-gray-800 animate-pulse" />
 
   if (rows.length === 0) {
@@ -85,38 +81,21 @@ export default function HomeRendimientoSection() {
   return (
     <>
       <UploadReminder />
-
-      <Card title="Lo más destacado" to="/rendimiento-individual">
-        <ConclusionList items={highlights} who />
-      </Card>
+      <MonthlyUpdateNote />
 
       <div className="grid lg:grid-cols-2 gap-5">
-        <Card title="Ranking de la agencia" to="/rendimiento-individual">
-          <div className="flex flex-wrap items-center gap-2 mb-2">
-            {(['3m', '12m'] as Window[]).map(w => (
-              <button key={w} onClick={() => setWin(w)}
-                className={`px-3 py-1 rounded-lg text-2xs font-semibold transition-all ${win === w ? 'bg-apple-gray-900 text-white dark:bg-white dark:text-apple-gray-900' : 'bg-apple-gray-100 dark:bg-apple-gray-700/60 text-apple-gray-500 dark:text-apple-gray-400'}`}>
-                {w === '3m' ? 'Últimos 3 meses' : 'Último año'}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-1.5 overflow-x-auto scrollbar-thin mb-1 pb-1">
-            {HOME_METRICS.map(k => (
-              <button key={k} onClick={() => setMetricKey(k)}
-                className={`px-3 py-1.5 rounded-full text-2xs font-semibold whitespace-nowrap transition-all ${metricKey === k ? 'bg-brand-green text-apple-gray-900' : 'bg-apple-gray-100 dark:bg-apple-gray-800 text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-700'}`}>
-                {METRIC_BY_KEY[k].label}
-              </button>
-            ))}
-          </div>
-          <p className="text-2xs text-apple-gray-400 dark:text-apple-gray-500 mb-3">{metric.hint}</p>
-          <AgencyBars values={ranking} metric={metric} photo={photo} limit={8} />
+        <Card title={`En su mejor momento · ${moments.hot.length}`} to="/rendimiento-individual">
+          <MomentList items={moments.hot.slice(0, 5)} photo={photo} onOpen={open} empty="Nadie se destaca por ahora." />
         </Card>
-
-        <Card title="En alza y en baja" to="/rendimiento-individual">
-          <p className="text-2xs text-apple-gray-400 dark:text-apple-gray-500 mb-3">Últimos 6 meses contra el año anterior, en las métricas de su posición.</p>
-          <TrendList trends={trends} photo={photo} limit={4} />
+        <Card title={`Preocupan · ${moments.concern.length}`} to="/rendimiento-individual">
+          <MomentList items={moments.concern.slice(0, 5)} photo={photo} onOpen={open} empty="Nadie preocupante por ahora." />
         </Card>
       </div>
+
+      <Card title="Por posición: lo bueno y lo malo" to="/rendimiento-individual">
+        <p className="text-2xs text-apple-gray-400 dark:text-apple-gray-500 -mt-2 mb-4">Solo las métricas que importan en cada puesto. Comparado con los de su posición en la agencia (último año) y con él mismo (últimos 6 meses contra el año anterior).</p>
+        <PositionBoard rows={moments.board} name={name} photo={photo} onOpen={open} />
+      </Card>
     </>
   )
 }

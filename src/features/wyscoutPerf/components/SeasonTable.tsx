@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { CATEGORY_LABEL, fmtMetric, type MetricCategory, type MetricDef } from '../metrics'
+import { CATEGORY_LABEL, fmtMetric, unitSuffix, type MetricCategory, type MetricDef } from '../metrics'
 import type { PeriodTotals } from '../periods'
 
 const MIN_MINUTES = 450
@@ -107,7 +107,7 @@ function CategoryRows({ title, metrics, periods, allPeriods, best, last, cols }:
         <tr key={m.key} className="border-t border-apple-gray-100 dark:border-apple-gray-700/50">
           <td className="px-3 py-2 sticky left-0 z-10 bg-white dark:bg-apple-gray-800">
             <div className="text-xs font-semibold text-apple-gray-800 dark:text-white">
-              {m.label}<span className="font-normal text-apple-gray-400">{m.unit === '%' ? '' : ' por partido'}</span>
+              {m.label}<span className="font-normal text-apple-gray-400">{unitSuffix(m)}</span>
             </div>
             <div className="text-2xs text-apple-gray-400 leading-snug max-w-[16rem]">{m.hint}</div>
           </td>

@@ -21,6 +21,8 @@ import HeadlinesPanel from '@/features/tablero/components/HeadlinesPanel'
 import { weeklyHeadlines, BEST_RATING, RETURN_DAYS, STREAK_MIN } from '@/features/tablero/tableroHeadlines'
 import SeasonRace from '@/features/tablero/components/SeasonRace'
 import WyscoutAnalysis from '@/features/wyscoutPerf/components/WyscoutAnalysis'
+import MonthSummaryView from '@/features/minuta/components/MonthSummaryView'
+import MonthlyUpdateNote from '@/features/wyscoutPerf/components/MonthlyUpdateNote'
 import ImpactChart from '@/features/tablero/components/ImpactChart'
 import ValueChart, { VALUE_GAP } from '@/features/tablero/components/ValueChart'
 import { coverageGaps, teamImpact, valueVsRating, IMPACT_MIN_MATCHES, IMPACT_MIN_MINUTES } from '@/features/tablero/tableroInsights'
@@ -51,7 +53,10 @@ function agoLabel(ms: number): string {
 
 export default function TableroPage() {
   const { internal, gpsEntries, agencyPlayers } = useData()
-  const [view, setView] = useState<'wyscout' | 'vivo'>(() => (new URLSearchParams(window.location.search).get('vista') === 'vivo' ? 'vivo' : 'wyscout'))
+  const [view, setView] = useState<'mes' | 'wyscout' | 'vivo'>(() => {
+    const v = new URLSearchParams(window.location.search).get('vista')
+    return v === 'vivo' || v === 'mes' ? v : 'wyscout'
+  })
   const [data, setData] = useState<TableroDataset | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
@@ -199,10 +204,13 @@ export default function TableroPage() {
         <div>
           <h1 className="text-xl font-bold text-apple-gray-900 dark:text-white">Rendimiento individual</h1>
           <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
-            {view === 'wyscout'
+            {view === 'mes'
+              ? 'El resumen del mes de cada jugador de Doble G: partidos, Wyscout, GPS y lo que hay que decidir.'
+              : view === 'wyscout'
               ? 'Cómo rinde cada jugador de Doble G temporada a temporada, con los datos de Wyscout.'
               : 'Cómo vienen los jugadores de Doble G, partido a partido. Preguntale a los datos lo que necesites.'}
           </p>
+          {view !== 'vivo' && <MonthlyUpdateNote className="mt-2" />}
         </div>
         {view === 'vivo' && <div className="flex items-center gap-3 self-start sm:self-auto">
           <span className="inline-flex items-center gap-2 text-2xs text-apple-gray-500 dark:text-apple-gray-400">
@@ -229,10 +237,10 @@ export default function TableroPage() {
         label="Vista"
         value={view}
         onChange={setView}
-        options={[{ id: 'wyscout', label: 'Wyscout · por temporada' }, { id: 'vivo', label: 'Semana en vivo' }]}
+        options={[{ id: 'mes', label: 'Resumen del mes' }, { id: 'wyscout', label: 'Wyscout · por temporada' }, { id: 'vivo', label: 'Semana en vivo' }]}
       />
 
-      {view === 'wyscout' ? <WyscoutAnalysis /> : <>
+      {view === 'mes' ? <MonthSummaryView /> : view === 'wyscout' ? <WyscoutAnalysis /> : <>
 
       {error && (
         <div className="flex items-center gap-3 px-4 py-3 rounded-apple-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 text-sm text-red-700 dark:text-red-300">

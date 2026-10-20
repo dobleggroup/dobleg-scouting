@@ -18,19 +18,23 @@ const PAD = { l: 48, r: 16, t: 16, b: 40 }
  * punteadas son el promedio: arriba a la derecha están los que son buenos en
  * las dos cosas.
  */
-export default function ScatterChart({ points, mx, my, highlight }: {
+export default function ScatterChart({ points, mx, my, highlight, colorOf }: {
   points: ScatterPoint[]
   mx: MetricDef
   my: MetricDef
-  highlight?: string | null
+  /** Uno o varios jugadores resaltados. */
+  highlight?: string | string[] | null
+  colorOf?: (key: string) => string | undefined
 }) {
   const [boxRef, W] = useElementWidth<HTMLDivElement>()
   return <div ref={boxRef}>{points.length < 3
     ? <p className="text-sm text-apple-gray-400 py-10 text-center">Hacen falta al menos 3 jugadores con minutos suficientes en las dos métricas.</p>
-    : <Chart points={points} mx={mx} my={my} highlight={highlight ?? null} W={W} />}</div>
+    : <Chart points={points} mx={mx} my={my} marked={new Set(highlight ? (Array.isArray(highlight) ? highlight : [highlight]) : [])} colorOf={colorOf} W={W} />}</div>
 }
 
-function Chart({ points, mx, my, highlight, W }: { points: ScatterPoint[]; mx: MetricDef; my: MetricDef; highlight: string | null; W: number }) {
+function Chart({ points, mx, my, marked, colorOf, W }: {
+  points: ScatterPoint[]; mx: MetricDef; my: MetricDef; marked: Set<string>; colorOf?: (key: string) => string | undefined; W: number
+}) {
   const navigate = useNavigate()
   const [hover, setHover] = useState<string | null>(null)
   const H = W < 480 ? 300 : 380
@@ -73,14 +77,15 @@ function Chart({ points, mx, my, highlight, W }: { points: ScatterPoint[]; mx: M
         <line x1={PAD.l} x2={W - PAD.r} y1={Y(ay)} y2={Y(ay)} className="stroke-apple-gray-300 dark:stroke-apple-gray-600" strokeDasharray="4 4" />
         <text x={W - PAD.r - 6} y={PAD.t + 12} textAnchor="end" className="fill-emerald-700 dark:fill-emerald-400 text-[10px] font-semibold uppercase tracking-wide">Bueno en las dos</text>
         {points.map(p => {
-          const me = p.key === highlight
+          const me = marked.has(p.key)
+          const own = me ? colorOf?.(p.key) : undefined
           const show = me || hover === p.key || points.length <= 12
           return (
             <g key={p.key} className="cursor-pointer" onMouseEnter={() => setHover(p.key)} onMouseLeave={() => setHover(null)}
               onClick={() => navigate(`/jugador/${encodeURIComponent(p.name)}?source=interno`)}>
               <circle cx={X(p.x)} cy={Y(p.y)} r={14} fill="transparent" />
               <circle cx={X(p.x)} cy={Y(p.y)} r={me ? 7 : 5}
-                className={`${me ? 'fill-brand-green' : 'fill-apple-gray-400 dark:fill-apple-gray-500'} stroke-white dark:stroke-apple-gray-800`} strokeWidth={2}
+                className={`${me ? (own ? '' : 'fill-brand-green') : 'fill-apple-gray-400 dark:fill-apple-gray-500'} stroke-white dark:stroke-apple-gray-800`} strokeWidth={2} fill={own}
                 opacity={hover && hover !== p.key && !me ? 0.35 : 1} />
               {show && (
                 <text x={X(p.x) + 9} y={Y(p.y) + 3} className={`text-[10px] ${me ? 'fill-apple-gray-900 dark:fill-white font-semibold' : 'fill-apple-gray-500 dark:fill-apple-gray-400'}`}>

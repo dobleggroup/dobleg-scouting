@@ -31,6 +31,7 @@ describe('metrics', () => {
     expect(posGroupOf('LAMF')).toBe('EXT')
     expect(dominantGroup(['AMF, RCMF', 'RW', 'RCMF'])).toBe('MED')
     expect(posGroupOf('AMF')).toBe('MED')
+    expect(posGroupOf('LDMF')).toBe('VC')
   })
   it('regates completados por partido y formato', () => {
     const m = METRIC_BY_KEY.regates_ok_90
@@ -55,12 +56,12 @@ describe('playerConclusions', () => {
     const c = playerConclusions(rows, [], today)
     const reg = c.find(x => x.metricKey === 'regates_ok_90')
     expect(reg?.tone).toBe('negative')
-    expect(reg?.text).toContain('Empeoró en regates completados')
+    expect(reg?.text).toContain('Empeoró en gambetas completadas')
     expect(reg?.text).toContain('de 3,5 a 1,8 por partido')
     expect(reg?.text).toContain('casi la mitad')
     expect(reg?.text).toContain('24/25 → 25/26')
-    // Pérdidas iguales: no se inventa conclusión.
-    expect(c.find(x => x.metricKey === 'perdidas_90')).toBeUndefined()
+    // Sin duelos cargados: no se inventa conclusión.
+    expect(c.find(x => x.metricKey === 'duelos_pct')).toBeUndefined()
   })
 
   it('no concluye con pocos minutos', () => {
@@ -72,7 +73,7 @@ describe('playerConclusions', () => {
     const mk = (key: string, ok: number) => ['2026-03', '2026-05', '2026-07'].map(m => row(m, MEX, { regates: 30, regates_ok: ok }, 360, key))
     const peers = [...mk('a', 20), ...mk('b', 10), ...mk('c', 5)]
     const c = playerConclusions(peers.filter(r => r.player_key === 'a'), peers, today)
-    expect(c.some(x => x.kind === 'agencia' && x.text.includes('Es el extremo de la agencia con más regates completados'))).toBe(true)
+    expect(c.some(x => x.kind === 'agencia' && x.text.includes('Es el extremo de la agencia con más gambetas completadas'))).toBe(true)
   })
 })
 

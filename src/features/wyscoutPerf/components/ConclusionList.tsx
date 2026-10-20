@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { Conclusion } from '../conclusions'
 
 const TONE = {
@@ -8,7 +9,7 @@ const TONE = {
 
 /** Frases de conclusión con su color. `who` antepone el nombre (para listas de toda la agencia). */
 export default function ConclusionList({ items, who, empty }: {
-  items: Array<Conclusion & { who?: string; onClick?: () => void }>
+  items: Array<Conclusion & { who?: string; onClick?: () => void; lead?: ReactNode }>
   who?: boolean
   empty?: string
 }) {
@@ -27,6 +28,7 @@ export default function ConclusionList({ items, who, empty }: {
               className={`w-full text-left flex gap-2.5 px-3 py-2.5 rounded-apple text-sm leading-snug ${t.box} ${c.onClick ? 'hover:brightness-95 dark:hover:brightness-110 transition' : ''}`}
             >
               <span className={`shrink-0 text-xs mt-0.5 ${t.iconCls}`}>{t.icon}</span>
+              {c.lead && <span className="shrink-0">{c.lead}</span>}
               <span>
                 {who && c.who && <span className="font-semibold">{c.who}. </span>}
                 {c.text}

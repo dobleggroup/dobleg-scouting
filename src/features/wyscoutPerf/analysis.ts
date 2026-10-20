@@ -3,7 +3,7 @@
  * valores por jugador en una ventana de tiempo, evolución contra el promedio de
  * su posición en la agencia, etc. Todo puro (sin React ni Supabase).
  */
-import { EMPTY_TOTALS, addTotals, type MetricDef, type PosGroup, type Totals } from './metrics'
+import { EMPTY_TOTALS, addTotals, isRate, type MetricDef, type PosGroup, type Totals } from './metrics'
 import { groupPeriods, monthsAgo, totalsBetween, type Grouping, type MonthRow } from './periods'
 import { MIN_MINUTES, playerGroup } from './conclusions'
 
@@ -82,7 +82,7 @@ export function evolution(
     return {
       label: p.label, from: p.from, to: p.to, minutes: p.minutes, matches: p.matches,
       value: p.minutes >= minMinutes ? metric.compute(p) : null,
-      agency: peers.length && pool.minutes >= minMinutes * 2 ? metric.compute(pool) : null,
+      agency: isRate(metric) && peers.length && pool.minutes >= minMinutes * 2 ? metric.compute(pool) : null,
     }
   })
 }
@@ -92,4 +92,18 @@ export function lastMonthByPlayer(byPlayer: Map<string, MonthRow[]>): Map<string
   const m = new Map<string, string>()
   for (const [k, rows] of byPlayer) m.set(k, rows[rows.length - 1].month.slice(0, 7))
   return m
+}
+
+/**
+ * El Excel de Wyscout no dice si fue titular: se estima por los minutos. Con
+ * 55' o más casi siempre arrancó (el que entra en el entretiempo juega ~45-50').
+ */
+export const STARTER_MINUTES = 55
+
+/** Titularidades y partidos entrando desde el banco en una ventana de tiempo. */
+export function startsIn(matches: Array<{ date: string; minutes: number }> | undefined, w: Window, today = new Date()) {
+  const from = w === 'all' ? '0000-00' : monthsAgo(w === '3m' ? 2 : 11, today)
+  const list = (matches ?? []).filter(m => m.date.slice(0, 7) >= from && m.minutes > 0)
+  const starts = list.filter(m => m.minutes >= STARTER_MINUTES).length
+  return { starts, subs: list.length - starts }
 }

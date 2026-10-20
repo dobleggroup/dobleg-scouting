@@ -4,7 +4,7 @@ import { FILTER_POSITION_MAP } from '@/constants/scoring'
 import { useData } from '@/context/DataContext'
 import { normalizeName } from '@/utils/scoring'
 import { agencyKey } from '@/services/agencyPlayersService'
-import { fetchMonthly } from '@/services/wyscoutPerfService'
+import { fetchMatchMinutes, fetchMonthly, storedMatchMinutes, storedMonthly, type MatchMinutes } from '@/services/wyscoutPerfService'
 import { splitByPlayer } from './analysis'
 import { setPositionOverrides } from './conclusions'
 import type { PosGroup } from './metrics'
@@ -13,9 +13,20 @@ import type { MonthRow } from './periods'
 const APP_POSITION_GROUP: Record<string, PosGroup> = {
   'Arquero': 'ARQ', 'Defensor Central': 'DEF',
   'Lateral Derecho': 'LAT', 'Lateral Izquierdo': 'LAT', 'Lateral': 'LAT',
-  'Volante Central': 'MED', 'Volante Interno': 'MED',
+  'Volante Central': 'VC', 'Volante Interno': 'MED',
   'Extremo Derecho': 'EXT', 'Extremo Izquierdo': 'EXT', 'Extremo': 'EXT',
   'Delantero': 'DEL',
+}
+
+/** Minutos de cada partido (titular / suplente): primero la copia del navegador, después la de la base. */
+export function useMatchMinutes() {
+  const [matchMinutes, setMatchMinutes] = useState<Map<string, MatchMinutes[]>>(new Map())
+  useEffect(() => {
+    let fresh = false
+    storedMatchMinutes().then(m => { if (m && !fresh) setMatchMinutes(m) })
+    fetchMatchMinutes().then(m => { fresh = true; setMatchMinutes(m) }).catch(() => {})
+  }, [])
+  return matchMinutes
 }
 
 /** Datos de Wyscout por mes de toda la agencia + helpers de nombre y foto. */
@@ -26,7 +37,11 @@ export function useWyscoutMonthly() {
   const load = useCallback((force = false) => {
     fetchMonthly(force).then(r => { setRows(r); setError(null) }).catch(e => { setError((e as Error).message); setRows(prev => prev ?? []) })
   }, [])
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    // La copia guardada en el navegador aparece al instante; la de la base la reemplaza al llegar.
+    storedMonthly().then(r => { if (r) setRows(prev => prev ?? r) })
+    load()
+  }, [load])
 
   const { internal } = useData()
   const roster = useMemo(() => new Map(AGENCY_PLAYERS.map(p => [agencyKey(p.fullName), p])), [])
