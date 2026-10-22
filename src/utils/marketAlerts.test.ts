@@ -12,21 +12,21 @@ describe('computeAlerts', () => {
   // negativo (ej. Argentina, UTC-3).
   const today = new Date(2026, 7, 18)
 
-  it('marca "vencido" un seguimiento con fecha de hoy o anterior', () => {
+  it('marca "hoy" el mismo día y "vencido" una fecha anterior', () => {
     const items = [item({ id: 1, kind: 'negotiation', next_followup_date: '2026-08-18' }), item({ id: 2, kind: 'negotiation', next_followup_date: '2026-08-10' })]
     const alerts = computeAlerts(items, today)
-    expect(alerts.map(a => a.urgency)).toEqual(['vencido', 'vencido'])
+    expect(alerts.map(a => [a.id, a.urgency])).toEqual([[2, 'vencido'], [1, 'hoy']])
   })
 
-  it('marca "proximo" un seguimiento entre mañana y 3 días', () => {
-    const items = [item({ id: 1, kind: 'need', next_followup_date: '2026-08-20' })]
+  it('marca "manana" un seguimiento del día siguiente', () => {
+    const items = [item({ id: 1, kind: 'need', next_followup_date: '2026-08-19' })]
     const alerts = computeAlerts(items, today)
     expect(alerts).toHaveLength(1)
-    expect(alerts[0].urgency).toBe('proximo')
+    expect(alerts[0].urgency).toBe('manana')
   })
 
-  it('no incluye seguimientos a mas de 3 dias', () => {
-    const items = [item({ id: 1, kind: 'need', next_followup_date: '2026-08-25' })]
+  it('no avisa con más de un día de anticipación', () => {
+    const items = [item({ id: 1, kind: 'need', next_followup_date: '2026-08-20' })]
     expect(computeAlerts(items, today)).toHaveLength(0)
   })
 
@@ -44,9 +44,9 @@ describe('computeAlerts', () => {
     expect(computeAlerts(items, today)).toHaveLength(0)
   })
 
-  it('ordena vencidos antes que proximos', () => {
+  it('ordena vencidos antes que los de mañana', () => {
     const items = [
-      item({ id: 1, kind: 'need', next_followup_date: '2026-08-20' }),
+      item({ id: 1, kind: 'need', next_followup_date: '2026-08-19' }),
       item({ id: 2, kind: 'negotiation', next_followup_date: '2026-08-15' }),
     ]
     const alerts = computeAlerts(items, today)

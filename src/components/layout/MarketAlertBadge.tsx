@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchClubNeeds, fetchNegotiations, fetchTeamMembers } from '@/services/marketService'
-import { computeAlerts, type AlertableItem } from '@/utils/marketAlerts'
+import { computeAlerts, type AlertableItem, type MarketAlert } from '@/utils/marketAlerts'
 import { NEGOTIATION_STATUS_LABEL_KEY, NEGOTIATION_STATUS_COLOR, NEED_STATUS_LABEL_KEY, NEED_STATUS_COLOR } from '@/components/market/marketLabels'
 import { useAuth } from '@/context/AuthContext'
 import { useLanguage } from '@/context/LanguageContext'
@@ -11,7 +11,7 @@ import { fetchNotifications, markAllNotificationsRead, type AppNotification } fr
 interface AlertEntry {
   kind: 'negotiation' | 'need'
   id: number
-  urgency: 'vencido' | 'proximo'
+  urgency: MarketAlert['urgency']
   title: string
   subtitle: string
   dueDate: string
@@ -36,6 +36,14 @@ const CACHE_TTL_MS = 60_000
  * sincronice entre el celu y la compu para esto.
  */
 const SEEN_STORAGE_KEY = 'mercado_alertas_vistas'
+
+const URGENCY_LABEL_KEY: Record<MarketAlert['urgency'], string> = {
+  vencido: 'mercado.urgenciaVencido',
+  hoy: 'mercado.urgenciaHoy',
+  manana: 'mercado.urgenciaManana',
+}
+const URGENCY_DOT: Record<MarketAlert['urgency'], string> = { vencido: 'bg-red-500', hoy: 'bg-brand-green', manana: 'bg-amber-500' }
+const URGENCY_TEXT: Record<MarketAlert['urgency'], string> = { vencido: 'text-red-500', hoy: 'text-brand-green', manana: 'text-amber-500' }
 
 function notifTimeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
@@ -248,7 +256,7 @@ export default function MarketAlertBadge() {
                 onClick={() => handleSelect(entry)}
                 className="w-full flex items-start gap-2.5 px-3.5 py-2.5 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/60 transition-colors"
               >
-                <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${entry.urgency === 'vencido' ? 'bg-red-500' : 'bg-amber-500'}`} />
+                <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${URGENCY_DOT[entry.urgency]}`} />
                 <div className="min-w-0 flex-1 space-y-0.5">
                   <div className="flex items-center gap-1.5">
                     <p className={`text-sm truncate ${unread ? 'font-semibold text-apple-gray-900 dark:text-white' : 'font-medium text-apple-gray-500 dark:text-apple-gray-400'}`}>{entry.title}</p>
@@ -263,8 +271,8 @@ export default function MarketAlertBadge() {
                   <p className="text-2xs text-apple-gray-400 truncate">
                     {entry.assignedToName || t('mercado.sinAsignar')}
                     {' · '}
-                    <span className={entry.urgency === 'vencido' ? 'text-red-500 font-medium' : 'text-amber-500 font-medium'}>
-                      {t(entry.urgency === 'vencido' ? 'mercado.urgenciaVencido' : 'mercado.urgenciaProximo')}
+                    <span className={`font-medium ${URGENCY_TEXT[entry.urgency]}`}>
+                      {t(URGENCY_LABEL_KEY[entry.urgency])}
                     </span>
                   </p>
                 </div>

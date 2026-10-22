@@ -14,7 +14,8 @@ export type CandidateStatus = 'propuesto' | 'en_negociacion' | 'descartado' | 'f
 
 export interface ClubNeed {
   id: number
-  team_id: number
+  /** Null cuando el club se escribió a mano (no estaba en la lista). */
+  team_id: number | null
   team_name: string
   team_logo: string | null
   position_label: string
@@ -116,6 +117,14 @@ export interface NeedCandidate {
 
 export interface MarketTeamSearchResult {
   id: number
+  name: string
+  logo: string | null
+}
+
+/** Club elegido en un formulario de Mercado: de la lista (con id) o escrito a
+ * mano cuando no aparece (id null, sin escudo). */
+export interface MarketTeamChoice {
+  id: number | null
   name: string
   logo: string | null
 }

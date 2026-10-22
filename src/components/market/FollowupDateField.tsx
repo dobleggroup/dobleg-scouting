@@ -1,6 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLanguage } from '@/context/LanguageContext'
+import { LANGUAGE_LOCALES } from '@/constants/translations'
+
+/** "vie 23 oct" en vez de "2026-10-23" — fecha leída con componentes locales (ver marketAlerts.ts). */
+function formatFollowup(iso: string, locale: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  if (!y || !m || !d) return iso
+  return new Date(y, m - 1, d).toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' })
+}
 
 /**
  * Fecha de "volver a hablar", editable directo desde la fila colapsada de la
@@ -22,7 +30,7 @@ export default function FollowupDateField({
   overdue: boolean
   onChange: (date: string | null) => void
 }) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(value ?? '')
   const [pos, setPos] = useState({ top: 0, right: 0 })
@@ -83,7 +91,7 @@ export default function FollowupDateField({
             : 'text-apple-gray-300 dark:text-apple-gray-600 border border-dashed border-apple-gray-300 dark:border-apple-gray-600 rounded px-1.5 hover:border-brand-green hover:text-brand-green'
         }`}
       >
-        {value ?? `+ ${t('mercado.agregarFecha')}`}
+        {value ? formatFollowup(value, LANGUAGE_LOCALES[language]) : `+ ${t('mercado.agregarFecha')}`}
       </button>
 
       {open && createPortal(

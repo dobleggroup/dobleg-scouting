@@ -7,11 +7,10 @@ export interface AlertableItem {
 }
 
 export interface MarketAlert extends AlertableItem {
-  urgency: 'vencido' | 'proximo'
+  urgency: 'vencido' | 'hoy' | 'manana'
 }
 
 const CLOSED_STATUSES = new Set(['cerrado', 'cerrado_exito', 'cerrado_caido'])
-const UPCOMING_WINDOW_DAYS = 3
 
 function daysBetween(from: Date, to: Date): number {
   const msPerDay = 24 * 60 * 60 * 1000
@@ -19,9 +18,11 @@ function daysBetween(from: Date, to: Date): number {
 }
 
 /**
- * Vencido: fecha de seguimiento hoy o anterior. Proximo: entre mañana y
- * `UPCOMING_WINDOW_DAYS` días. Se excluyen los items cerrados aunque tengan
- * fecha vencida — cerrar una negociación/objetivo apaga su alerta.
+ * Avisa el día anterior ("mañana"), el mismo día ("hoy") y después, mientras
+ * siga sin resolverse ("vencido") — pedido de la agencia: con 3 días de
+ * anticipación la campanita se llenaba de cosas que todavía no tocaban. Se
+ * excluyen los items cerrados aunque tengan fecha vencida — cerrar una
+ * negociación/objetivo apaga su alerta.
  */
 export function computeAlerts(items: AlertableItem[], today: Date): MarketAlert[] {
   // Se leen los componentes de fecha LOCALES de `today` (no UTC), igual que
@@ -42,12 +43,13 @@ export function computeAlerts(items: AlertableItem[], today: Date): MarketAlert[
     const [y, m, d] = item.next_followup_date.split('-').map(Number)
     const dueDate = new Date(y, m - 1, d)
     const diff = daysBetween(todayMidnight, dueDate)
-    if (diff > UPCOMING_WINDOW_DAYS) continue
-    alerts.push({ ...item, urgency: diff <= 0 ? 'vencido' : 'proximo' })
+    if (diff > 1) continue
+    alerts.push({ ...item, urgency: diff < 0 ? 'vencido' : diff === 0 ? 'hoy' : 'manana' })
   }
 
+  const rank = { vencido: 0, hoy: 1, manana: 2 }
   return alerts.sort((a, b) => {
-    if (a.urgency !== b.urgency) return a.urgency === 'vencido' ? -1 : 1
+    if (a.urgency !== b.urgency) return rank[a.urgency] - rank[b.urgency]
     return (a.next_followup_date ?? '').localeCompare(b.next_followup_date ?? '')
   })
 }

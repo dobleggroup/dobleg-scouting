@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { fetchClubNeeds, fetchNegotiations, fetchTeamMembers } from '@/services/marketService'
+import { fetchClubNeeds, fetchNegotiations, fetchTeamMembers, fetchAllCandidates } from '@/services/marketService'
 import { computeAlerts, type AlertableItem } from '@/utils/marketAlerts'
 import { NEGOTIATION_STATUS_LABEL_KEY, NEGOTIATION_STATUS_ACCENT, NEED_STATUS_ACCENT } from '@/components/market/marketLabels'
 import NegotiationRow from '@/components/market/NegotiationRow'
@@ -12,7 +12,7 @@ import NegotiationBoard from '@/components/market/NegotiationBoard'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import EmptyState from '@/components/ui/EmptyState'
 import { useLanguage } from '@/context/LanguageContext'
-import type { ClubNeed, Negotiation, NegotiationStatus, NeedStatus, TeamMember } from '@/types/market'
+import type { ClubNeed, Negotiation, NegotiationStatus, NeedStatus, NeedCandidate, TeamMember } from '@/types/market'
 
 type Tab = 'negociaciones' | 'objetivos'
 
@@ -34,6 +34,7 @@ export default function MarketPage() {
   }, [highlight])
   const [negotiations, setNegotiations] = useState<Negotiation[]>([])
   const [needs, setNeeds] = useState<ClubNeed[]>([])
+  const [candidates, setCandidates] = useState<NeedCandidate[]>([])
   const [members, setMembers] = useState<TeamMember[]>([])
   const [loading, setLoading] = useState(true)
   const [clubFilter, setClubFilter] = useState('')
@@ -58,19 +59,41 @@ export default function MarketPage() {
     setSearchParams({ highlight: `negotiation-${id}` })
   }
 
-  // El calendario vive debajo de cada lista y solo scrollea dentro de ella
-  // (no cambia de pestaña) — el resalte es momentáneo, solo para ubicar la
-  // fila con la mirada, no reemplaza al click normal para expandirla.
+  // El calendario muestra lo de las dos pestañas. Si la fila está en la
+  // pestaña que se está mirando, solo scrollea y la resalta un momento; si
+  // está en la otra, cambia de pestaña y la abre (mismo `highlight` que la
+  // campanita).
   const handleCalendarSelect = (kind: 'negotiation' | 'need', id: number) => {
+    const rowTab: Tab = kind === 'need' ? 'objetivos' : 'negociaciones'
+    if (rowTab !== tab || (kind === 'negotiation' && negotiationView === 'tablero')) {
+      setNegotiationView('lista')
+      setSearchParams({ highlight: `${kind}-${id}` })
+      return
+    }
     document.getElementById(`market-${kind}-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     setFlashId(id)
     setTimeout(() => setFlashId(f => f === id ? null : f), 1800)
   }
 
+  const openNegotiation = (id: number) => {
+    setNegotiationView('lista')
+    setSearchParams({ highlight: `negotiation-${id}` })
+  }
+
+  const negotiationsById = useMemo(() => new Map(negotiations.map(n => [n.id, n])), [negotiations])
+  const candidatesByNeed = useMemo(() => {
+    const map = new Map<number, NeedCandidate[]>()
+    for (const c of candidates) map.set(c.need_id, [...(map.get(c.need_id) ?? []), c])
+    return map
+  }, [candidates])
+  const upsertNegotiation = (n: Negotiation) => setNegotiations(prev =>
+    prev.some(x => x.id === n.id) ? prev.map(x => x.id === n.id ? n : x) : [n, ...prev])
+  const removeNegotiation = (id: number) => setNegotiations(prev => prev.filter(x => x.id !== id))
+
   const loadData = () => {
     setLoading(true)
-    Promise.all([fetchNegotiations(), fetchClubNeeds(), fetchTeamMembers()])
-      .then(([n, c, m]) => { setNegotiations(n); setNeeds(c); setMembers(m) })
+    Promise.all([fetchNegotiations(), fetchClubNeeds(), fetchTeamMembers(), fetchAllCandidates()])
+      .then(([n, c, m, cands]) => { setNegotiations(n); setNeeds(c); setMembers(m); setCandidates(cands) })
       .finally(() => setLoading(false))
   }
 
@@ -83,6 +106,7 @@ export default function MarketPage() {
   // refetch puntual la lista "hermana" queda vieja hasta recargar la página.
   const refreshNeeds = () => { fetchClubNeeds().then(setNeeds) }
   const refreshNegotiations = () => { fetchNegotiations().then(setNegotiations) }
+  const refreshCandidates = () => { fetchAllCandidates().then(setCandidates) }
 
   const overdueIds = useMemo(() => {
     const items: AlertableItem[] = [
@@ -91,8 +115,8 @@ export default function MarketPage() {
     ]
     const alerts = computeAlerts(items, new Date())
     return {
-      negotiations: new Set(alerts.filter(a => a.kind === 'negotiation' && a.urgency === 'vencido').map(a => a.id)),
-      needs: new Set(alerts.filter(a => a.kind === 'need' && a.urgency === 'vencido').map(a => a.id)),
+      negotiations: new Set(alerts.filter(a => a.kind === 'negotiation' && a.urgency !== 'manana').map(a => a.id)),
+      needs: new Set(alerts.filter(a => a.kind === 'need' && a.urgency !== 'manana').map(a => a.id)),
     }
   }, [negotiations, needs])
 
@@ -129,29 +153,60 @@ export default function MarketPage() {
     return true
   }), [needs, clubFilter, assigneeFilter, needStatusFilter])
 
-  // El calendario respeta los mismos filtros que la lista de arriba —
-  // muestra la misma "foto" que se está mirando, solo agrupada por fecha.
-  const negotiationCalendarEntries = useMemo((): CalendarEntry[] => (
-    visibleNegotiations
-      .filter(n => n.next_followup_date)
+  // Las búsquedas cerradas van aparte, al final: ya no piden acción.
+  const openNeeds = visibleNeeds.filter(n => n.status !== 'cerrado')
+  const closedNeeds = visibleNeeds.filter(n => n.status === 'cerrado')
+
+  // Un solo calendario para las dos pestañas: "a quién tengo que llamar" no
+  // depende de en qué pestaña se cargó. Respeta el filtro de responsable (el
+  // de texto y el de estado son propios de cada lista). Sin cerrados.
+  const calendarEntries = useMemo((): CalendarEntry[] => [
+    ...negotiations
+      .filter(n => n.next_followup_date && n.status !== 'cerrado_exito' && n.status !== 'cerrado_caido')
+      .filter(n => assigneeFilter === 'all' || n.assigned_to_id === assigneeFilter)
       .map(n => ({
+        kind: 'negotiation' as const,
         id: n.id,
         date: n.next_followup_date as string,
         title: n.player_name,
-        subtitle: [n.current_team_name, n.team_name].filter(Boolean).join(' → '),
-      }))
-  ), [visibleNegotiations])
-
-  const needCalendarEntries = useMemo((): CalendarEntry[] => (
-    visibleNeeds
-      .filter(n => n.next_followup_date)
+        subtitle: n.team_name ? `→ ${n.team_name}` : (n.current_team_name ?? ''),
+        assignee: n.assigned_to_name,
+      })),
+    ...needs
+      .filter(n => n.next_followup_date && n.status !== 'cerrado')
+      .filter(n => assigneeFilter === 'all' || n.assigned_to_id === assigneeFilter)
       .map(n => ({
+        kind: 'need' as const,
         id: n.id,
         date: n.next_followup_date as string,
         title: n.team_name,
         subtitle: n.position_label,
-      }))
-  ), [visibleNeeds])
+        assignee: n.assigned_to_name,
+      })),
+  ], [negotiations, needs, assigneeFilter])
+
+  const renderNeed = (n: ClubNeed) => (
+    <NeedRow
+      key={n.id}
+      need={n}
+      overdue={overdueIds.needs.has(n.id)}
+      defaultExpanded={highlightKind === 'need' && n.id === highlightId}
+      flash={flashId === n.id}
+      onUpdated={updated => setNeeds(prev => prev.map(x => x.id === updated.id ? updated : x))}
+      onNegotiationMightHaveChanged={refreshNegotiations}
+      candidates={candidatesByNeed.get(n.id) ?? []}
+      negotiationsById={negotiationsById}
+      overdueNegotiationIds={overdueIds.negotiations}
+      members={members}
+      onCandidatesChange={update => setCandidates(prev => [
+        ...update(prev.filter(c => c.need_id === n.id)),
+        ...prev.filter(c => c.need_id !== n.id),
+      ])}
+      onNegotiationUpserted={upsertNegotiation}
+      onNegotiationRemoved={removeNegotiation}
+      onOpenNegotiation={openNegotiation}
+    />
+  )
 
   return (
     <div className={`mx-auto px-4 sm:px-6 py-6 transition-[max-width] ${tab === 'negociaciones' && negotiationView === 'tablero' ? 'max-w-[1600px]' : 'max-w-screen-xl'}`}>
@@ -284,14 +339,14 @@ export default function MarketPage() {
               negotiations={visibleNegotiations}
               overdueIds={overdueIds.negotiations}
               onUpdated={updated => setNegotiations(prev => prev.map(x => x.id === updated.id ? updated : x))}
-              onNeedMightHaveChanged={refreshNeeds}
+              onNeedMightHaveChanged={() => { refreshNeeds(); refreshCandidates() }}
               onSelect={handleBoardCardSelect}
             />
             <MarketWeekCalendar
-              entries={negotiationCalendarEntries}
+              entries={calendarEntries}
               weekOffset={weekOffset}
               onWeekOffsetChange={setWeekOffset}
-              onSelect={handleBoardCardSelect}
+              onSelect={handleCalendarSelect}
             />
           </div>
         ) : (
@@ -311,14 +366,14 @@ export default function MarketPage() {
                 defaultExpanded={highlightKind === 'negotiation' && n.id === highlightId}
                 flash={flashId === n.id}
                 onUpdated={updated => setNegotiations(prev => prev.map(x => x.id === updated.id ? updated : x))}
-                onNeedMightHaveChanged={refreshNeeds}
+                onNeedMightHaveChanged={() => { refreshNeeds(); refreshCandidates() }}
               />
             ))}
             <MarketWeekCalendar
-              entries={negotiationCalendarEntries}
+              entries={calendarEntries}
               weekOffset={weekOffset}
               onWeekOffsetChange={setWeekOffset}
-              onSelect={id => handleCalendarSelect('negotiation', id)}
+              onSelect={handleCalendarSelect}
             />
           </div>
         )
@@ -336,22 +391,21 @@ export default function MarketPage() {
             <span>{t('mercado.responsable')}</span>
             <span className="text-right">{t('mercado.columnaSeguimiento')}</span>
           </div>
-          {visibleNeeds.map(n => (
-            <NeedRow
-              key={n.id}
-              need={n}
-              overdue={overdueIds.needs.has(n.id)}
-              defaultExpanded={highlightKind === 'need' && n.id === highlightId}
-              flash={flashId === n.id}
-              onUpdated={updated => setNeeds(prev => prev.map(x => x.id === updated.id ? updated : x))}
-              onNegotiationMightHaveChanged={refreshNegotiations}
-            />
-          ))}
+          {openNeeds.map(renderNeed)}
+          {closedNeeds.length > 0 && (
+            <>
+              <p className="pt-4 pb-1 px-1 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-apple-gray-400">
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                {t('mercado.busquedasCerradas')} ({closedNeeds.length})
+              </p>
+              {closedNeeds.map(renderNeed)}
+            </>
+          )}
           <MarketWeekCalendar
-            entries={needCalendarEntries}
+            entries={calendarEntries}
             weekOffset={weekOffset}
             onWeekOffsetChange={setWeekOffset}
-            onSelect={id => handleCalendarSelect('need', id)}
+            onSelect={handleCalendarSelect}
           />
         </div>
       )}
@@ -359,7 +413,7 @@ export default function MarketPage() {
       <NewNegotiationForm
         open={showNewNegotiation}
         onClose={() => setShowNewNegotiation(false)}
-        onCreated={n => { setNegotiations(prev => [n, ...prev]); if (n.need_id) refreshNeeds() }}
+        onCreated={n => { setNegotiations(prev => [n, ...prev]); if (n.need_id) { refreshNeeds(); refreshCandidates() } }}
       />
       <NewNeedForm
         open={showNewNeed}

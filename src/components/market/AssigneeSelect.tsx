@@ -3,13 +3,16 @@ import { fetchTeamMembers } from '@/services/marketService'
 import { useLanguage } from '@/context/LanguageContext'
 import type { TeamMember } from '@/types/market'
 
-export default function AssigneeSelect({ value, onChange }: { value: number | null; onChange: (id: number, name: string) => void }) {
+/** `members` opcional: en listas con muchas filas (ofrecidos de una búsqueda) se pasa ya cargado para no pedirlo una vez por fila. */
+export default function AssigneeSelect({ value, onChange, members: preloaded }: { value: number | null; onChange: (id: number, name: string) => void; members?: TeamMember[] }) {
   const { t } = useLanguage()
-  const [members, setMembers] = useState<TeamMember[]>([])
+  const [fetched, setFetched] = useState<TeamMember[]>([])
+  const members = preloaded ?? fetched
 
   useEffect(() => {
-    fetchTeamMembers().then(setMembers).catch(() => setMembers([]))
-  }, [])
+    if (preloaded) return
+    fetchTeamMembers().then(setFetched).catch(() => setFetched([]))
+  }, [preloaded])
 
   return (
     <select

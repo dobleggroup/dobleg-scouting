@@ -8,11 +8,12 @@ import PlayerLinkField from './PlayerLinkField'
 import MarketNotesPanel from './MarketNotesPanel'
 import StatusPill from './StatusPill'
 import FollowupDateField from './FollowupDateField'
+import ClubContactsField from './ClubContactsField'
 import { NEGOTIATION_STATUS_LABEL_KEY, NEGOTIATION_STATUS_COLOR, NEGOTIATION_STATUS_ORDER, NEGOTIATION_STATUS_ACCENT } from './marketLabels'
 import { buildPlayerPhotoUrl } from '@/utils/marketAlerts'
 import { useLinkedPlayerAge } from '@/hooks/useLinkedPlayerAge'
-import { updateNegotiationStatus, updateFollowupDate, reassignNegotiation, linkNegotiationPlayer, isMarketLinkAdmin } from '@/services/marketService'
-import type { Negotiation, NegotiationStatus } from '@/types/market'
+import { updateNegotiationStatus, updateFollowupDate, reassignNegotiation, linkNegotiationPlayer, updateNegotiationTargetContacts, isMarketLinkAdmin } from '@/services/marketService'
+import type { ClubContact, Negotiation, NegotiationStatus } from '@/types/market'
 
 export default function NegotiationRow({
   negotiation,
@@ -55,6 +56,8 @@ export default function NegotiationRow({
   const [pendingApiId, setPendingApiId] = useState<number | null>(null)
   const [pendingIdentity, setPendingIdentity] = useState<{ name: string; age: number | null } | null>(null)
   const [notesRefreshSignal, setNotesRefreshSignal] = useState(0)
+  const [editingContacts, setEditingContacts] = useState(false)
+  const [contactsDraft, setContactsDraft] = useState<ClubContact[]>([])
 
   const canLink = isMarketLinkAdmin(user?.email)
   const age = useLinkedPlayerAge(negotiation.player_api_id)
@@ -85,6 +88,16 @@ export default function NegotiationRow({
     }
   }
 
+  const handleSaveContacts = async () => {
+    const cleaned = contactsDraft
+      .map(c => ({ name: c.name.trim(), role: c.role?.trim() || null }))
+      .filter(c => c.name)
+    if (await updateNegotiationTargetContacts(negotiation.id, cleaned)) {
+      onUpdated({ ...negotiation, target_club_contacts: cleaned })
+      setEditingContacts(false)
+    }
+  }
+
   const openLinking = () => {
     setPendingApiId(negotiation.player_api_id)
     setPendingIdentity(null)
@@ -109,7 +122,9 @@ export default function NegotiationRow({
     <div
       ref={rowRef}
       id={`market-negotiation-${negotiation.id}`}
-      className={`bg-white dark:bg-apple-gray-800 rounded-xl border overflow-hidden transition-all ${defaultExpanded || flash ? 'border-brand-green ring-1 ring-brand-green/30' : 'border-apple-gray-200 dark:border-apple-gray-700'}`}
+      className={`rounded-xl border overflow-hidden transition-all ${
+        negotiation.status === 'cerrado_caido' ? 'bg-apple-gray-50 dark:bg-apple-gray-800/40 border-dashed' : 'bg-white dark:bg-apple-gray-800'
+      } ${defaultExpanded || flash ? 'border-brand-green ring-1 ring-brand-green/30' : 'border-apple-gray-200 dark:border-apple-gray-700'}`}
     >
       <div
         role="button"
@@ -131,7 +146,7 @@ export default function NegotiationRow({
           <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-none">
             <PlayerPhoto src={photoUrl} name={negotiation.player_name} size="sm" />
             <div className="min-w-0">
-              <p className="font-semibold text-sm text-apple-gray-800 dark:text-white truncate">
+              <p className={`font-semibold text-sm truncate ${negotiation.status === 'cerrado_caido' ? 'text-apple-gray-400 line-through decoration-apple-gray-300' : 'text-apple-gray-800 dark:text-white'}`}>
                 {negotiation.player_name}
                 {age != null && <span className="font-normal text-apple-gray-400">, {age} {t('externo.anios')}</span>}
               </p>
@@ -209,7 +224,17 @@ export default function NegotiationRow({
               ))}
             </div>
             <div>
-              <p className="text-2xs font-medium text-apple-gray-400 mb-0.5">{t('mercado.contactoClubDestino')}</p>
+              <p className="text-2xs font-medium text-apple-gray-400 mb-0.5 flex items-center gap-2">
+                {t('mercado.hablamosCon')}{negotiation.team_name ? ` (${negotiation.team_name})` : ''}
+                {!editingContacts && (
+                  <button
+                    onClick={() => { setContactsDraft(negotiation.target_club_contacts); setEditingContacts(true) }}
+                    className="font-medium text-brand-green hover:text-emerald-600"
+                  >
+                    {t('mercado.editar')}
+                  </button>
+                )}
+              </p>
               {negotiation.target_club_contacts.length === 0 ? (
                 <p className="text-apple-gray-700 dark:text-apple-gray-200">—</p>
               ) : negotiation.target_club_contacts.map((c, i) => (
@@ -217,6 +242,20 @@ export default function NegotiationRow({
               ))}
             </div>
           </div>
+
+          {editingContacts && (
+            <div className="space-y-2 rounded-lg bg-apple-gray-50 dark:bg-apple-gray-800/50 p-3">
+              <ClubContactsField value={contactsDraft} onChange={setContactsDraft} />
+              <div className="flex items-center gap-3">
+                <button onClick={handleSaveContacts} className="text-xs font-semibold text-white bg-brand-green px-3 py-1.5 rounded-lg hover:bg-emerald-600">
+                  {t('mercado.guardar')}
+                </button>
+                <button onClick={() => setEditingContacts(false)} className="text-xs text-apple-gray-400 hover:text-apple-gray-700 dark:hover:text-white">
+                  {t('mercado.cancelar')}
+                </button>
+              </div>
+            </div>
+          )}
 
           {canLink && (
             <div className="space-y-2">
