@@ -16,7 +16,7 @@ serve(async () => {
   try {
     const { data: fixtures } = await supabase
       .from('fixtures')
-      .select('id, league_id, season, date')
+      .select('id, league_id, season, date, home_team_id, away_team_id')
       .eq('stats_synced', false)
       .order('date', { ascending: false })
       .limit(BATCH_SIZE);
@@ -66,7 +66,19 @@ serve(async () => {
 
         const allRows: PlayerMatchRow[] = [];
 
+        // A veces API-Football devuelve un equipo con un id que no es ninguno de
+        // los dos del partido (Chapecoense vino como 22722, sin nombre): el
+        // guardado fallaba y el partido se reintentaba para siempre. Si un id no
+        // es de este partido, es el equipo que falta.
+        const fixtureTeams = [fixture.home_team_id, fixture.away_team_id].filter((t): t is number => t != null);
+        const seenTeams = playerStats.map((t: any) => t.team.id as number);
+        const teamIdFor = (apiTeamId: number) => {
+          if (fixtureTeams.length < 2 || fixtureTeams.includes(apiTeamId)) return apiTeamId;
+          return fixtureTeams.find(t => !seenTeams.includes(t)) ?? apiTeamId;
+        };
+
         for (const teamData of playerStats) {
+          const teamId = teamIdFor(teamData.team.id);
           for (const p of teamData.players) {
             const stats = p.statistics[0];
             if (!stats) continue;
@@ -86,14 +98,14 @@ serve(async () => {
               id: p.player.id,
               name: p.player.name,
               photo: p.player.photo,
-              current_team_id: teamData.team.id,
+              current_team_id: teamId,
               updated_at: new Date().toISOString(),
             }, { onConflict: 'id' });
 
             const row: PlayerMatchRow = {
               player_id: p.player.id,
               fixture_id: fixture.id,
-              team_id: teamData.team.id,
+              team_id: teamId,
               detected_position: position,
               formation,
               grid_position: grid,
