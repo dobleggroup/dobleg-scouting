@@ -6,7 +6,7 @@ import { useElementWidth } from '@/features/tablero/components/useElementWidth'
 import { METRICS, METRIC_BY_KEY, POS_GROUP_LABEL, fmtMetric, metricsFor, unitSuffix, type MetricDef } from '../metrics'
 import { groupPeriods, monthsAgo, type MonthRow } from '../periods'
 import { playerConclusions, playerGroup } from '../conclusions'
-import { STARTER_MINUTES, WINDOW_LABEL, startsIn, windowTotals, type Window } from '../analysis'
+import { WINDOW_LABEL, playIn, windowTotals, type Window } from '../analysis'
 import ConclusionList from './ConclusionList'
 import MetricSelect from './MetricSelect'
 import { ClassBadge, type ClassOrNone } from './classes'
@@ -71,10 +71,10 @@ export default function CompareView({ players, allRows, matchMinutes, photo, sou
               </tr>
             </thead>
             <tbody>
-              <Row label="Partidos" cells={totals.map(t => String(t.matches))} best={null} />
-              <Row label="De titular" hint={`Estimado: partidos en los que jugó ${STARTER_MINUTES} minutos o más`} unit="estimado por minutos" cells={players.map(p => (matchMinutes.has(p.key) ? String(startsIn(matchMinutes.get(p.key), win).starts) : '—'))} best={null} />
-              <Row label="Entrando de suplente" cells={players.map(p => (matchMinutes.has(p.key) ? String(startsIn(matchMinutes.get(p.key), win).subs) : '—'))} best={null} />
-              <Row label="Minutos" cells={totals.map(t => t.minutes.toLocaleString('es-AR'))} best={null} />
+              <Row label="Partidos jugados" hint="De API-Football y Sofascore (los de Reserva, de Wyscout)" cells={players.map(p => (matchMinutes.has(p.key) ? String(playIn(matchMinutes.get(p.key), win).played) : '—'))} best={null} />
+              <Row label="De titular" cells={players.map(p => (matchMinutes.has(p.key) ? String(playIn(matchMinutes.get(p.key), win).starts) : '—'))} best={null} />
+              <Row label="Entrando de suplente" cells={players.map(p => (matchMinutes.has(p.key) ? String(playIn(matchMinutes.get(p.key), win).subs) : '—'))} best={null} />
+              <Row label="Minutos" cells={players.map(p => (matchMinutes.has(p.key) ? playIn(matchMinutes.get(p.key), win).minutes.toLocaleString('es-AR') : '—'))} best={null} />
               {metrics.map(m => {
                 const vals = totals.map(t => (t.minutes >= min ? m.compute(t) : null))
                 const ok = vals.filter((v): v is number => v !== null)

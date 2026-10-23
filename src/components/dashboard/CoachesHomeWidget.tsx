@@ -96,7 +96,7 @@ function CoachCard({ snap }: { snap: CoachSnapshot }) {
               const { result, scoreLabel } = matchOutcome(f)
               const rival = f.isHome ? f.awayTeam : f.homeTeam
               return (
-                <li key={f.fixtureId} className="flex flex-col items-center gap-1 rounded-lg bg-apple-gray-50 dark:bg-apple-gray-900/40 px-1 py-2" title={`${f.isHome ? 'vs' : '@'} ${rival.name} · ${scoreLabel}`}>
+                <li key={f.fixtureId} className="flex flex-col items-center gap-1 rounded-lg bg-apple-gray-50 dark:bg-apple-gray-900/40 px-1 py-2" title={`vs ${rival.name} (${f.isHome ? 'L' : 'V'}) · ${scoreLabel}`}>
                   <img src={rival.logo} alt="" className="w-6 h-6 object-contain" loading="lazy" />
                   <span className="text-[11px] font-semibold tabular-nums text-apple-gray-700 dark:text-apple-gray-200 whitespace-nowrap">{scoreLabel.replace(/\s/g, '')}</span>
                   {result && (
@@ -109,7 +109,7 @@ function CoachCard({ snap }: { snap: CoachSnapshot }) {
           {next && (
             <p className="mt-2.5 text-xs text-apple-gray-500 dark:text-apple-gray-400 flex items-center gap-1.5 truncate">
               <span className="w-1.5 h-1.5 rounded-full bg-brand-green flex-shrink-0" />
-              Próximo: {next.isHome ? 'vs' : '@'} {shortTeam((next.isHome ? next.awayTeam : next.homeTeam).name)}
+              Próximo: vs {shortTeam((next.isHome ? next.awayTeam : next.homeTeam).name)} {next.isHome ? '(L)' : '(V)'}
               <span className="text-apple-gray-400">· {new Date(next.date).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
             </p>
           )}

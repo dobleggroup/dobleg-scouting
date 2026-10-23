@@ -442,10 +442,10 @@ function describe(p: PlayerMonth) {
     const pos = p.group ? ` de ${GROUP_ONE[p.group]}` : ''
     const src = p.wyReserve ? 'Wyscout en Reserva' : 'Wyscout'
     if (b.length || w.length) {
-      det.push(`${src} (${p.wy.total} métricas${pos}): ${b.length} mejor, ${w.length} peor y ${p.wy.total - b.length - w.length} igual que en sus 6 meses anteriores.`
-        + (b.length ? ` Lo mejor: ${b.slice(0, 2).map(i => i.text).join('; ')}.` : '')
-        + (w.length ? ` A mirar: ${w.slice(0, 2).map(i => i.text).join('; ')}.` : ''))
-    } else det.push(`${src}: rindió como siempre en las ${p.wy.total} métricas${pos} (ninguna cambió de forma clara).`)
+      det.push(`${src}, contra sus 6 meses anteriores:`
+        + (b.length ? ` mejoró en ${b.slice(0, 2).map(i => i.text).join('; ')}.` : ' no mejoró en nada importante.')
+        + (w.length ? ` Empeoró en ${w.slice(0, 2).map(i => i.text).join('; ')}.` : ' No empeoró en nada importante.'))
+    } else det.push(`${src}: rindió como siempre en lo que importa para su puesto${pos}.`)
   }
   if (p.wySnapshot) det.push(`Wyscout en Reserva: ${p.wySnapshot} (todavía sin meses anteriores para comparar).`)
   if (p.gps) {

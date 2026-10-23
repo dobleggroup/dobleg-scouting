@@ -185,6 +185,9 @@ export interface ScoutPlayerWithScore extends ScoutPlayer {
    * reserva, etc., que no están en la API pero cuyo club sí puede estarlo). */
   club_team_name: string | null
   club_team_logo: string | null
+  /** Agente según la base (Transfermarkt), cuando está vinculado por
+   * `supabase_player_id`: el dato más importante para la agencia. */
+  player_agent: string | null
 }
 
 export async function fetchScoutPlayersWithScores(
@@ -206,7 +209,7 @@ export async function fetchScoutPlayersWithScores(
     .filter((id): id is number => id !== null)
 
   let scoreMap = new Map<number, { score: number; percentile: number | null; position: string; matches: number }>()
-  let playerInfoMap = new Map<number, { photo: string | null; team_name: string | null; team_logo: string | null; age: number | null }>()
+  let playerInfoMap = new Map<number, { photo: string | null; team_name: string | null; team_logo: string | null; age: number | null; agent: string | null; tm_url: string | null }>()
 
   if (supabaseIds.length > 0) {
     // Posición declarada de cada jugador -- se usa para preferir la fila de
@@ -271,7 +274,7 @@ export async function fetchScoutPlayersWithScores(
 
     const { data: playerInfos } = await supabase
       .from('players')
-      .select('id, photo, birth_date, team:teams(name, logo)')
+      .select('id, photo, birth_date, agent, transfermarkt_url, team:teams(name, logo)')
       .in('id', supabaseIds)
 
     if (playerInfos) {
@@ -282,6 +285,8 @@ export async function fetchScoutPlayersWithScores(
           team_name: team?.name ?? null,
           team_logo: team?.logo ?? null,
           age: computeAge(p.birth_date ?? null),
+          agent: p.agent ?? null,
+          tm_url: p.transfermarkt_url ?? null,
         })
       }
     }
@@ -321,6 +326,8 @@ export async function fetchScoutPlayersWithScores(
       player_age: info?.age ?? null,
       club_team_name: clubTeam?.name ?? null,
       club_team_logo: clubTeam?.logo ?? null,
+      player_agent: info?.agent ?? null,
+      transfermarkt_url: p.transfermarkt_url ?? info?.tm_url ?? null,
     }
   })
 }

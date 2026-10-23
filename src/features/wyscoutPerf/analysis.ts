@@ -100,10 +100,21 @@ export function lastMonthByPlayer(byPlayer: Map<string, MonthRow[]>): Map<string
  */
 export const STARTER_MINUTES = 55
 
-/** Titularidades y partidos entrando desde el banco en una ventana de tiempo. */
-export function startsIn(matches: Array<{ date: string; minutes: number }> | undefined, w: Window, today = new Date()) {
+/** Titular según la fuente del partido; si no lo dice, jugó 55 minutos o más. */
+export const isStart = (m: { minutes: number; starter?: boolean }) => m.starter ?? m.minutes >= STARTER_MINUTES
+
+/** Partidos jugados, titularidades, entradas desde el banco y minutos en una ventana de tiempo. */
+export function playIn(matches: Array<{ date: string; minutes: number; starter?: boolean }> | undefined, w: Window, today = new Date()) {
   const from = w === 'all' ? '0000-00' : monthsAgo(w === '3m' ? 2 : 11, today)
   const list = (matches ?? []).filter(m => m.date.slice(0, 7) >= from && m.minutes > 0)
-  const starts = list.filter(m => m.minutes >= STARTER_MINUTES).length
+  const starts = list.filter(isStart).length
+  return { played: list.length, starts, subs: list.length - starts, minutes: list.reduce((s, m) => s + m.minutes, 0) }
+}
+
+/** Titularidades y partidos entrando desde el banco en una ventana de tiempo. */
+export function startsIn(matches: Array<{ date: string; minutes: number; starter?: boolean }> | undefined, w: Window, today = new Date()) {
+  const from = w === 'all' ? '0000-00' : monthsAgo(w === '3m' ? 2 : 11, today)
+  const list = (matches ?? []).filter(m => m.date.slice(0, 7) >= from && m.minutes > 0)
+  const starts = list.filter(isStart).length
   return { starts, subs: list.length - starts }
 }

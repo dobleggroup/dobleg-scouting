@@ -7,7 +7,7 @@ import { NEGOTIATION_STATUS_ORDER, NEGOTIATION_STATUS_LABEL_KEY } from './market
 import { createNegotiation, addNoteTo, MARKET_POSITION_OPTIONS } from '@/services/marketService'
 import { useAuth } from '@/context/AuthContext'
 import { useLanguage } from '@/context/LanguageContext'
-import type { Negotiation, NegotiationStatus, MarketTeamSearchResult, ClubContact } from '@/types/market'
+import type { Negotiation, NegotiationStatus, MarketTeamChoice, ClubContact } from '@/types/market'
 
 const EMPTY_CONTACTS: ClubContact[] = [{ name: '', role: null }]
 
@@ -19,11 +19,11 @@ export default function NewNegotiationForm({ open, onClose, onCreated }: { open:
   const [positionLabel, setPositionLabel] = useState('')
 
   const [isFreeAgent, setIsFreeAgent] = useState(false)
-  const [currentTeam, setCurrentTeam] = useState<MarketTeamSearchResult | null>(null)
+  const [currentTeam, setCurrentTeam] = useState<MarketTeamChoice | null>(null)
   const [currentContacts, setCurrentContacts] = useState<ClubContact[]>(EMPTY_CONTACTS)
 
   const [noTargetYet, setNoTargetYet] = useState(false)
-  const [targetTeam, setTargetTeam] = useState<MarketTeamSearchResult | null>(null)
+  const [targetTeam, setTargetTeam] = useState<MarketTeamChoice | null>(null)
   const [targetContacts, setTargetContacts] = useState<ClubContact[]>(EMPTY_CONTACTS)
 
   const [belongsToAgency, setBelongsToAgency] = useState<boolean | null>(null)
@@ -145,7 +145,7 @@ export default function NewNegotiationForm({ open, onClose, onCreated }: { open:
           </div>
           {!isFreeAgent && (
             <>
-              <TeamSearchSelect value={currentTeam} onChange={setCurrentTeam} />
+              <TeamSearchSelect value={currentTeam} onChange={setCurrentTeam} onCustom={name => setCurrentTeam({ id: null, name, logo: null })} />
               <ClubContactsField value={currentContacts} onChange={setCurrentContacts} />
             </>
           )}
@@ -162,7 +162,7 @@ export default function NewNegotiationForm({ open, onClose, onCreated }: { open:
           </div>
           {!noTargetYet && (
             <>
-              <TeamSearchSelect value={targetTeam} onChange={setTargetTeam} />
+              <TeamSearchSelect value={targetTeam} onChange={setTargetTeam} onCustom={name => setTargetTeam({ id: null, name, logo: null })} />
               <ClubContactsField value={targetContacts} onChange={setTargetContacts} />
             </>
           )}

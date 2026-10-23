@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
 import { getSupabaseAdmin } from '../_shared/supabase-client.ts';
-import { fetchPlayerProfile as fetchApiFootballProfile } from '../_shared/api-football.ts';
+import { fetchPlayerProfile as fetchApiFootballProfile, fetchLeaguePlayersPage, fetchQuotaUsage } from '../_shared/api-football.ts';
 
 const TM_API_BASE = 'https://tmapi-alpha.transfermarkt.technology';
 const TM_HEADERS = {
@@ -181,6 +181,43 @@ function extractAgent(profile: TmProfile): string | null {
   return null;
 }
 
+/** Club actual según Transfermarkt y desde cuándo está ahí. */
+function extractCurrentClub(profile: TmProfile): { id: number; since: string | null } | null {
+  const list = Array.isArray(profile.clubAssignments) ? profile.clubAssignments : [];
+  const current = list.find((a: any) => a?.type === 'current') ?? null;
+  const id = Number(current?.clubId);
+  if (!current || !Number.isFinite(id) || id <= 0) return null;
+  const since = typeof current.start === 'string' && /^\d{4}-\d{2}-\d{2}/.test(current.start) ? current.start.slice(0, 10) : null;
+  return { id, since };
+}
+
+// Nombre de un club de Transfermarkt: se consulta una vez y queda en tm_clubs.
+const tmClubNameCache = new Map<number, string | null>();
+async function tmClubName(supabase: ReturnType<typeof getSupabaseAdmin>, clubId: number): Promise<string | null> {
+  if (tmClubNameCache.has(clubId)) return tmClubNameCache.get(clubId) ?? null;
+  const { data: cached } = await supabase.from('tm_clubs').select('name').eq('id', clubId).maybeSingle();
+  if (cached?.name) { tmClubNameCache.set(clubId, cached.name); return cached.name; }
+  const raw = await fetchUrl(`${TM_API_BASE}/club/${clubId}`, TM_HEADERS);
+  let name: string | null = null;
+  let countryId: number | null = null;
+  try {
+    const data = raw ? JSON.parse(raw)?.data : null;
+    name = data?.name ?? null;
+    countryId = data?.baseDetails?.countryId ?? null;
+  } catch { /* sin nombre */ }
+  if (name) await supabase.from('tm_clubs').upsert({ id: clubId, name, country_id: countryId }, { onConflict: 'id' });
+  tmClubNameCache.set(clubId, name);
+  return name;
+}
+
+/** Campos de club actual de Transfermarkt para guardar en players. */
+async function tmClubPatch(supabase: ReturnType<typeof getSupabaseAdmin>, profile: TmProfile): Promise<Record<string, unknown>> {
+  const club = extractCurrentClub(profile);
+  if (!club) return {};
+  const name = await tmClubName(supabase, club.id);
+  return { tm_club_id: club.id, tm_club_name: name, tm_club_since: club.since };
+}
+
 function extractMarketValue(profile: TmProfile): number | null {
   const mv = profile.marketValueDetails;
   if (mv && typeof mv === 'object') {
@@ -282,10 +319,21 @@ async function enrichSingle(supabase: ReturnType<typeof getSupabaseAdmin>, playe
 
   const profile = await tmProfile(tmId);
 
-  if (isFreshMatch && profile) {
-    const birthDate = extractBirthDate(profile);
+  if (isFreshMatch) {
+    const birthDate = profile ? extractBirthDate(profile) : null;
     if (birthDate && impliesImplausibleAge(birthDate)) {
       return { status: 'rejected_implausible_age', player: player.name, tm_id: tmId, birth_date: birthDate };
+    }
+    // Solo por nombre se emparejaba con homónimos (J. Córdoba de Instituto con el
+    // Jhon Córdoba de Krasnodar) y se copiaban agente, valor y fecha de otra
+    // persona. Un vínculo nuevo exige que la fecha de nacimiento de nuestra fuente
+    // y la de Transfermarkt coincidan (±1 día).
+    if (!player.birth_date || !birthDate) {
+      return { status: 'skipped_no_birth_date', player: player.name, tm_id: tmId };
+    }
+    const diffDays = Math.abs(new Date(player.birth_date).getTime() - new Date(birthDate).getTime()) / 86400_000;
+    if (diffDays > 1) {
+      return { status: 'rejected_birth_mismatch', player: player.name, tm_id: tmId, ours: player.birth_date, tm: birthDate };
     }
   }
 
@@ -298,9 +346,8 @@ async function enrichSingle(supabase: ReturnType<typeof getSupabaseAdmin>, playe
     if (contractEnd) patch.contract_end_date = contractEnd;
     const agent = extractAgent(profile);
     if (agent) patch.agent = agent;
-    const birthDate = extractBirthDate(profile);
-    if (birthDate && !player.birth_date) patch.birth_date = birthDate;
     patch.transfermarkt_url = buildTmUrl(profile, tmId);
+    Object.assign(patch, await tmClubPatch(supabase, profile));
   } else {
     if (mvFromSearch) patch.market_value_eur = mvFromSearch;
     patch.transfermarkt_url = `https://www.transfermarkt.com/x/profil/spieler/${tmId}`;
@@ -367,6 +414,7 @@ async function refreshAll(supabase: ReturnType<typeof getSupabaseAdmin>) {
         if (mv !== null) patch.market_value_eur = mv;
         if (contractEnd) patch.contract_end_date = contractEnd;
         if (agent) patch.agent = agent;
+        Object.assign(patch, await tmClubPatch(supabase, profile));
       } else {
         results.errors++; // se marca igual como visitado para no trabar la rotación
       }
@@ -411,6 +459,152 @@ async function refreshAll(supabase: ReturnType<typeof getSupabaseAdmin>) {
   return { status: 'done', ...results };
 }
 
+// Nacionalidad de los jugadores nuevos. Los syncs de partidos crean jugadores
+// sin nacionalidad (los endpoints livianos no la traen) y para la agencia es un
+// dato clave (filtros por país). Cada corrida toma los que jugaron hace poco,
+// sin nacionalidad y sin consultar en el último mes, hasta NATIONALITY_BATCH
+// consultas: con el atraso ya cargado son pocos por día, y el tope cuida la
+// cuota compartida de API-Football. Los de Sofascore (id>=20M) quedan para el
+// script local (ver backfillOwnSourceProfile).
+const NATIONALITY_BATCH = 40;
+const NATIONALITY_RECHECK_DAYS = 30;
+
+// Hasta cuántas páginas de una liga se leen por corrida (20 jugadores cada una).
+const LEAGUE_PAGES_PER_RUN = 10;
+
+/**
+ * Si una liga tiene muchos jugadores sin nacionalidad (ej. recién agregada), se
+ * completan con sus planteles: 20 jugadores por consulta. Sigue donde quedó la
+ * corrida anterior (nationality_league_progress).
+ */
+async function fillNationalitiesByLeague(supabase: ReturnType<typeof getSupabaseAdmin>) {
+  const { data } = await supabase.rpc('league_missing_nationality');
+  const target = (data ?? [])[0] as { league_id: number; season: number; missing: number; next_page: number } | undefined;
+  if (!target) return { league: null, pages: 0, filled: 0 };
+  let page = target.next_page || 1;
+  let total = page;
+  let filled = 0;
+  let pages = 0;
+  for (; pages < LEAGUE_PAGES_PER_RUN && page <= total; pages++, page++) {
+    const { players, totalPages } = await fetchLeaguePlayersPage(target.league_id, target.season, page);
+    total = totalPages;
+    for (const pl of players) {
+      if (!pl.id || !pl.nationality) continue;
+      const { data: updated } = await supabase
+        .from('players')
+        .update({ nationality: pl.nationality, nationality_checked_at: new Date().toISOString() })
+        .eq('id', pl.id)
+        .is('nationality', null)
+        .select('id, birth_date');
+      if (updated?.length) {
+        filled++;
+        if (pl.birthDate && !updated[0].birth_date) {
+          await supabase.from('players').update({ birth_date: pl.birthDate }).eq('id', pl.id);
+        }
+      }
+    }
+    await new Promise(r => setTimeout(r, 400));
+  }
+  const done = page > total;
+  await supabase.from('nationality_league_progress').upsert({
+    league_id: target.league_id,
+    season: target.season,
+    next_page: done ? 1 : page,
+    total_pages: total,
+    done_at: done ? new Date().toISOString() : null,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'league_id,season' });
+  return { league: target.league_id, pages, filled };
+}
+
+// El cupo de API-Football lo comparten otras plataformas: con más del 65 % usado
+// del día, la carga de nacionalidades espera a la próxima hora.
+const NATIONALITY_MAX_QUOTA = 0.65;
+
+async function fillNationalities(supabase: ReturnType<typeof getSupabaseAdmin>) {
+  const usage = await fetchQuotaUsage();
+  if (usage != null && usage > NATIONALITY_MAX_QUOTA) {
+    return { status: 'skipped_quota', usage };
+  }
+  let byLeague: Record<string, unknown> = {};
+  try { byLeague = await fillNationalitiesByLeague(supabase); } catch (e) { byLeague = { error: (e as Error).message }; }
+
+  const recheckCutoff = new Date(Date.now() - NATIONALITY_RECHECK_DAYS * 86400_000).toISOString();
+  const { data: pending, error } = await supabase.rpc('players_missing_nationality', {
+    p_limit: NATIONALITY_BATCH,
+    p_recheck_before: recheckCutoff,
+  });
+  if (error) return { status: 'error', error: error.message };
+
+  const year = new Date().getFullYear();
+  const results = { checked: 0, filled: 0, no_data: 0 };
+  for (const p of (pending ?? []) as Array<{ id: number; birth_date: string | null; profile_recheck: boolean }>) {
+    const patch: Record<string, any> = { nationality_checked_at: new Date().toISOString() };
+    if (p.profile_recheck) patch.profile_recheck = false;
+    try {
+      // Temporada actual y, si no figura, la anterior (ligas europeas / jugador sin partidos este año)
+      let profile = await fetchApiFootballProfile(p.id, year);
+      if (!profile?.nationality) profile = await fetchApiFootballProfile(p.id, year - 1);
+      if (profile?.nationality) {
+        patch.nationality = profile.nationality;
+        results.filled++;
+      } else {
+        results.no_data++;
+      }
+      // En una revisión (vínculo equivocado con Transfermarkt) la fecha se pisa con la de la fuente propia.
+      if (profile?.birthDate && (!p.birth_date || p.profile_recheck)) patch.birth_date = profile.birthDate;
+    } catch {
+      results.no_data++;
+    }
+    results.checked++;
+    if (p.profile_recheck) {
+      await supabase.from('players').update(patch).eq('id', p.id);
+    } else {
+      await supabase.from('players').update(patch).eq('id', p.id).is('nationality', null);
+    }
+  }
+
+  await supabase.from('sync_log').insert({
+    function_name: 'fill-nationality',
+    status: 'success',
+    fixtures_processed: results.filled + Number((byLeague as any).filled ?? 0),
+    error_message: JSON.stringify({ byLeague }),
+  });
+  return { status: 'done', ...results, byLeague };
+}
+
+// Jugadores desvinculados de un Transfermarkt equivocado: se vuelven a buscar
+// (con la regla de fecha de nacimiento) de a tandas que entren en el tiempo.
+const REMATCH_BUDGET_MS = 100_000;
+async function rematchPending(supabase: ReturnType<typeof getSupabaseAdmin>) {
+  const startedAt = Date.now();
+  const { data: pending } = await supabase
+    .from('players')
+    .select('id')
+    .eq('tm_rematch_pending', true)
+    .eq('profile_recheck', false)
+    .limit(25);
+  const results: Record<string, number> = {};
+  for (const p of pending ?? []) {
+    if (Date.now() - startedAt > REMATCH_BUDGET_MS) break;
+    let status = 'error';
+    try {
+      const r = await enrichSingle(supabase, p.id);
+      status = (r as any).status ?? 'error';
+    } catch { /* se marca igual para no trabar la cola */ }
+    results[status] = (results[status] ?? 0) + 1;
+    await supabase.from('players').update({ tm_rematch_pending: false }).eq('id', p.id);
+    await new Promise(r => setTimeout(r, 500));
+  }
+  await supabase.from('sync_log').insert({
+    function_name: 'tm-rematch',
+    status: 'success',
+    fixtures_processed: results['enriched'] ?? 0,
+    error_message: JSON.stringify(results),
+  });
+  return { status: 'done', ...results };
+}
+
 serve(async (req) => {
   const supabase = getSupabaseAdmin();
   let body: { mode?: string; player_id?: number } = {};
@@ -427,6 +621,20 @@ serve(async (req) => {
 
   if (mode === 'refresh') {
     const result = await refreshAll(supabase);
+    return new Response(JSON.stringify(result), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (mode === 'rematch') {
+    const result = await rematchPending(supabase);
+    return new Response(JSON.stringify(result), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (mode === 'nationality') {
+    const result = await fillNationalities(supabase);
     return new Response(JSON.stringify(result), {
       headers: { 'Content-Type': 'application/json' },
     });

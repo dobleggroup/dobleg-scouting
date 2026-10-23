@@ -45,7 +45,7 @@ export default function ManualFixturesEditor({ playerName }: { playerName: strin
           {rows.map(r => (
             <li key={r.id} className="flex items-center justify-between text-sm bg-apple-gray-50 dark:bg-apple-gray-800/50 rounded-lg px-3 py-2">
               <span className="text-apple-gray-700 dark:text-apple-gray-300">
-                {r.match_date} · {r.is_home ? 'vs' : '@'} {r.opponent}{r.competition ? ` · ${r.competition}` : ''}
+                {r.match_date} · vs {r.opponent} {r.is_home ? '(L)' : '(V)'}{r.competition ? ` · ${r.competition}` : ''}
               </span>
               <button onClick={() => handleDelete(r.id)} className="text-xs text-red-500 hover:text-red-600">Quitar</button>
             </li>

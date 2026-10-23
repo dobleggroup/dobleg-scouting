@@ -1,11 +1,13 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { usePlayersList, useLeagues, useAgents } from '@/hooks/usePlayerStats'
-import { fetchTeamsByLeague, type TeamInfo } from '@/services/playerStatsService'
+import { usePlayersList, useLeagues, useAgents, useNationalities } from '@/hooks/usePlayerStats'
+import { fetchTeamsByLeague, type TeamInfo, type PlayerListSort } from '@/services/playerStatsService'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import EmptyState from '@/components/ui/EmptyState'
 import { getScoreColorClass, getScoreBgClass } from '@/components/ui/ScoreBar'
 import { PlayerPhoto, TeamLogo } from '@/components/ui/PlayerPhoto'
+import { AgentBadge, agentKind } from '@/components/ui/AgentBadge'
+import MultiSelect from '@/components/filters/MultiSelect'
 import type { Position, PlayerWithScore } from '@/types/scoring'
 import { POSITION_DISPLAY, displayPosition } from '@/types/scoring'
 import { useAuth } from '@/context/AuthContext'
@@ -19,6 +21,7 @@ import 'rc-slider/assets/index.css'
 import { useLanguage } from '@/context/LanguageContext'
 import { LANGUAGE_LOCALES } from '@/constants/translations'
 import { leagueLabel } from '@/utils/leagueLabels'
+import { groupNationalities, type NationalityOption } from '@/utils/nationalities'
 
 const POSITIONS: { key: Position; label: string }[] = (
   Object.entries(POSITION_DISPLAY) as [Position, string][]
@@ -39,6 +42,10 @@ interface Filters {
   max_market_value: number
   max_contract_months: number
   agents: string[]
+  /** Nombres en castellano (ver groupNationalities). */
+  nationalities: string[]
+  sort: PlayerListSort
+  sortDir: 'asc' | 'desc'
 }
 
 const DEFAULT_FILTERS: Filters = {
@@ -54,6 +61,19 @@ const DEFAULT_FILTERS: Filters = {
   max_market_value: 50_000_000,
   max_contract_months: 0,
   agents: [],
+  nationalities: [],
+  sort: 'rating',
+  sortDir: 'desc',
+}
+
+/** Un filtro elegido se nota sin gritar: borde y texto verdes. */
+const ACTIVE_SELECT = '!border-brand-green/50 !text-brand-green font-semibold'
+
+/** Primer toque en una columna: de mayor a menor; en Edad, los más jóvenes primero. */
+const FIRST_SORT_DIR: Record<PlayerListSort, 'asc' | 'desc'> = {
+  rating: 'desc', goals: 'desc', assists: 'desc', matches: 'desc', value: 'desc', age: 'asc',
+  // Agente: primero los "sin dato" (los que hay que averiguar), después sin representante y A-Z
+  agent: 'asc',
 }
 
 const MARKET_VALUE_STEPS = [
@@ -77,122 +97,84 @@ function getAge(birthDate: string | null): number | null {
   return Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000))
 }
 
-function AgentMultiSelect({
-  agents,
-  selected,
-  onChange,
+function NationalityAndAgentFilters({
+  filters,
+  setFilters,
+  allAgents,
+  nationalityOptions,
   inline = false,
 }: {
-  agents: string[]
-  selected: string[]
-  onChange: (agents: string[]) => void
-  /** En mobile (dentro del bottom-sheet) la lista se despliega en flujo, no absoluta,
-   *  para que participe del scroll del panel y no quede recortada. */
+  filters: Filters
+  setFilters: React.Dispatch<React.SetStateAction<Filters>>
+  allAgents: string[]
+  nationalityOptions: NationalityOption[]
   inline?: boolean
 }) {
   const { t } = useLanguage()
-  const [open, setOpen] = useState(false)
-  const [search, setSearch] = useState('')
-
-  const filtered = agents.filter(a =>
-    a.toLowerCase().includes(search.toLowerCase())
-  )
-
-  const toggle = (agent: string) => {
-    if (selected.includes(agent)) {
-      onChange(selected.filter(a => a !== agent))
-    } else {
-      onChange([...selected, agent])
-    }
-  }
-
-  const list = (
-    <div
-      className={
-        inline
-          ? 'relative mt-2 bg-apple-gray-50 dark:bg-apple-gray-800/60 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 w-full max-h-72 flex flex-col'
-          : 'absolute top-full left-0 mt-1 z-[101] bg-white dark:bg-apple-gray-800 rounded-xl shadow-2xl border border-apple-gray-200 dark:border-apple-gray-700 w-64 max-h-72 flex flex-col'
-      }
-    >
-      <div className="p-2 border-b border-apple-gray-100 dark:border-apple-gray-700">
-        <input
-          type="text"
-          placeholder={t('externo.buscarAgente')}
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-full text-xs px-2.5 py-1.5 rounded-lg bg-white dark:bg-apple-gray-700 border-0 focus:ring-1 focus:ring-brand-green/50 text-apple-gray-800 dark:text-white placeholder:text-apple-gray-400"
-          autoFocus={!inline}
-        />
-      </div>
-      <div className="overflow-y-auto flex-1 p-1.5">
-        {filtered.length === 0 ? (
-          <p className="text-xs text-apple-gray-400 px-2 py-3 text-center">{t('externo.sinResultadosTitulo')}</p>
-        ) : (
-          filtered.map(agent => (
-            <button
-              key={agent}
-              type="button"
-              onClick={() => toggle(agent)}
-              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left text-xs hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700/50 transition-colors"
-            >
-              <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-all ${
-                selected.includes(agent)
-                  ? 'bg-brand-green border-brand-green'
-                  : 'border-apple-gray-300 dark:border-apple-gray-600'
-              }`}>
-                {selected.includes(agent) && (
-                  <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
-              </div>
-              <span className="text-apple-gray-700 dark:text-apple-gray-200 truncate">{agent}</span>
-            </button>
-          ))
-        )}
-      </div>
-      {selected.length > 0 && (
-        <div className="p-2 border-t border-apple-gray-100 dark:border-apple-gray-700">
-          <button
-            type="button"
-            onClick={() => onChange([])}
-            className="w-full text-xs text-apple-gray-500 hover:text-red-500 transition-colors"
-          >
-            {t('externo.limpiarSeleccionAgentes')}
-          </button>
-        </div>
-      )}
-    </div>
-  )
-
   return (
-    <div className={inline ? 'w-full' : 'relative'}>
+    <>
+      {nationalityOptions.length > 0 && <MultiSelect
+        options={nationalityOptions.map(o => o.label)}
+        selected={filters.nationalities}
+        onChange={nationalities => setFilters(f => ({ ...f, nationalities }))}
+        allLabel={t('externo.todasLasNacionalidades')}
+        pluralLabel={t('externo.nacionalidadesLabel')}
+        searchPlaceholder={t('externo.buscarNacionalidad')}
+        clearLabel={t('externo.limpiarSeleccion')}
+        inline={inline}
+      />}
+      <MultiSelect
+        options={[t('agente.sinDato'), t('agente.sinRepresentante'), ...allAgents.filter(a => agentKind(a) !== 'none')]}
+        selected={filters.agents}
+        onChange={agents => setFilters(f => ({ ...f, agents }))}
+        allLabel={t('externo.todosLosAgentes')}
+        pluralLabel={t('externo.agentesLabel')}
+        searchPlaceholder={t('externo.buscarAgente')}
+        clearLabel={t('externo.limpiarSeleccionAgentes')}
+        inline={inline}
+      />
+    </>
+  )
+}
+
+/** Encabezado de columna que ordena la lista: un toque elige la columna, otro invierte. */
+function SortHeader({
+  column,
+  label,
+  filters,
+  setFilters,
+  align = 'center',
+}: {
+  column: PlayerListSort
+  label: string
+  filters: Filters
+  setFilters: React.Dispatch<React.SetStateAction<Filters>>
+  align?: 'center' | 'right' | 'left'
+}) {
+  const active = filters.sort === column
+  const onClick = () => setFilters(f => f.sort === column
+    ? { ...f, sortDir: f.sortDir === 'desc' ? 'asc' : 'desc' }
+    : { ...f, sort: column, sortDir: FIRST_SORT_DIR[column] })
+  return (
+    <th
+      aria-sort={active ? (filters.sortDir === 'desc' ? 'descending' : 'ascending') : 'none'}
+      className={`py-3 px-3 text-xs font-semibold uppercase tracking-wider ${align === 'right' ? 'text-right' : align === 'left' ? 'text-left' : 'text-center'}`}
+    >
       <button
         type="button"
-        onClick={() => setOpen(v => !v)}
-        className={`input-apple text-xs px-3 text-left flex items-center justify-between gap-2 ${inline ? 'py-2.5 w-full' : 'py-1.5 min-w-[160px]'}`}
+        onClick={onClick}
+        className={`group inline-flex items-center gap-1 uppercase tracking-wider transition-colors ${
+          active
+            ? 'text-brand-green'
+            : 'text-apple-gray-500 dark:text-apple-gray-400 hover:text-apple-gray-800 dark:hover:text-white'
+        }`}
       >
-        <span className="truncate">
-          {selected.length === 0
-            ? t('externo.todosLosAgentes')
-            : selected.length === 1
-            ? selected[0]
-            : `${selected.length} ${t('externo.agentesLabel')}`}
-        </span>
-        <svg className={`w-3 h-3 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        {label}
+        <svg className={`w-3 h-3 transition-all ${active ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'} ${active && filters.sortDir === 'asc' ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
-
-      {open && (inline ? (
-        list
-      ) : (
-        <>
-          <div className="fixed inset-0 z-[100]" onClick={() => setOpen(false)} />
-          {list}
-        </>
-      ))}
-    </div>
+    </th>
   )
 }
 
@@ -314,6 +296,7 @@ function ScoutingFilters({
   leagues,
   teams,
   allAgents,
+  nationalityOptions,
   activeCount,
   onReset,
   agentInline = false,
@@ -323,6 +306,7 @@ function ScoutingFilters({
   leagues: ReturnType<typeof useLeagues>
   teams: TeamInfo[]
   allAgents: string[]
+  nationalityOptions: NationalityOption[]
   activeCount: number
   onReset: () => void
   agentInline?: boolean
@@ -475,13 +459,90 @@ function ScoutingFilters({
         </select>
 
         {/* Agentes */}
-        <AgentMultiSelect
-          agents={allAgents}
-          selected={filters.agents}
-          onChange={agents => setFilters(f => ({ ...f, agents }))}
+        <NationalityAndAgentFilters
+          filters={filters}
+          setFilters={setFilters}
+          allAgents={allAgents}
+          nationalityOptions={nationalityOptions}
           inline={agentInline}
         />
       </div>
+    </div>
+  )
+}
+
+/**
+ * Lo que está filtrando la lista, siempre a la vista (sutil): cada filtro activo
+ * es un chip que se saca con la ×, y a la derecha la cantidad de jugadores.
+ * Antes uno se olvidaba de un filtro o de lo escrito en el buscador y creía que
+ * faltaban jugadores.
+ */
+function ActiveFiltersBar({
+  filters,
+  setFilters,
+  leagues,
+  teams,
+  count,
+  loading,
+  onReset,
+}: {
+  filters: Filters
+  setFilters: React.Dispatch<React.SetStateAction<Filters>>
+  leagues: ReturnType<typeof useLeagues>
+  teams: TeamInfo[]
+  count: number
+  loading: boolean
+  onReset: () => void
+}) {
+  const { t, language } = useLanguage()
+  const { currency, rate } = useCurrency()
+  const chips: { key: string; label: string; clear: () => void }[] = []
+  const add = (key: string, label: string, clear: (f: Filters) => Filters) =>
+    chips.push({ key, label, clear: () => setFilters(f => clear(f)) })
+
+  if (filters.search.trim()) add('search', `“${filters.search.trim()}”`, f => ({ ...f, search: '' }))
+  for (const pos of filters.positions) {
+    add(`pos-${pos}`, POSITIONS.find(p => p.key === pos)?.label ?? pos, f => ({ ...f, positions: f.positions.filter(p => p !== pos) }))
+  }
+  if (filters.league_id) {
+    const league = leagues.find(l => l.id === filters.league_id)
+    add('league', league ? leagueLabel(league) : t('externo.liga'), f => ({ ...f, league_id: undefined, team_id: undefined }))
+  }
+  if (filters.team_id) add('team', teams.find(tm => tm.id === filters.team_id)?.name ?? t('externo.equipo'), f => ({ ...f, team_id: undefined }))
+  for (const n of filters.nationalities) add(`nat-${n}`, n, f => ({ ...f, nationalities: f.nationalities.filter(x => x !== n) }))
+  for (const a of filters.agents) add(`agent-${a}`, a, f => ({ ...f, agents: f.agents.filter(x => x !== a) }))
+  if (filters.min_matches > 0) add('pj', `${filters.min_matches}+ ${t('externo.colPJ')}`, f => ({ ...f, min_matches: 0 }))
+  if (filters.min_score > 0) add('score', `${t('externo.colScore')} ${filters.min_score}+`, f => ({ ...f, min_score: 0 }))
+  if (filters.min_age > 15 || filters.max_age < 40) add('age', `${filters.min_age}–${filters.max_age} ${t('externo.anios')}`, f => ({ ...f, min_age: 15, max_age: 40 }))
+  if (filters.min_market_value > 0 || filters.max_market_value < 50_000_000) {
+    add('value', `${formatMarketValueInCurrency(filters.min_market_value, currency, rate)} – ${formatMarketValueInCurrency(filters.max_market_value, currency, rate)}`,
+      f => ({ ...f, min_market_value: 0, max_market_value: 50_000_000 }))
+  }
+  if (filters.max_contract_months > 0) add('contract', t('externo.contratoHastaMeses').replace('{n}', String(filters.max_contract_months)), f => ({ ...f, max_contract_months: 0 }))
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-4 min-h-[28px]">
+      {chips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-2xs font-semibold uppercase tracking-wider text-apple-gray-400 mr-0.5">{t('externo.filtrando')}</span>
+          {chips.map(chip => (
+            <span key={chip.key} className="inline-flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-full text-xs font-medium bg-brand-green/10 text-brand-green ring-1 ring-brand-green/20">
+              {chip.label}
+              <button type="button" onClick={chip.clear} aria-label={t('externo.quitarFiltro')} className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-brand-green/20 transition-colors">
+                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </span>
+          ))}
+          {chips.length > 1 && (
+            <button type="button" onClick={onReset} className="text-xs text-apple-gray-400 hover:text-red-500 transition-colors ml-1">
+              {t('externo.limpiarTodo')}
+            </button>
+          )}
+        </div>
+      )}
+      <span className={`ml-auto text-xs tabular-nums whitespace-nowrap ${loading ? 'text-apple-gray-300 dark:text-apple-gray-600' : 'text-apple-gray-500 dark:text-apple-gray-400'}`}>
+        <span className="font-semibold text-apple-gray-700 dark:text-apple-gray-200">{count.toLocaleString(LANGUAGE_LOCALES[language])}</span> {count === 1 ? t('externo.jugadorSingular') : t('externo.jugadores')}
+      </span>
     </div>
   )
 }
@@ -509,6 +570,9 @@ export default function ExternalScoutingPage() {
     }
   }, [filters.league_id])
 
+  const rawNationalities = useNationalities()
+  const nationalityOptions = useMemo(() => groupNationalities(rawNationalities), [rawNationalities])
+
   const queryFilters = useMemo(() => ({
     positions: filters.positions.length ? filters.positions : undefined,
     league_id: filters.league_id,
@@ -520,11 +584,19 @@ export default function ExternalScoutingPage() {
     min_market_value: filters.min_market_value > 0 ? filters.min_market_value : undefined,
     max_market_value: filters.max_market_value < 50_000_000 ? filters.max_market_value : undefined,
     max_contract_months: filters.max_contract_months || undefined,
-    agents: filters.agents.length ? filters.agents : undefined,
+    // "Sin dato" y "Sin representante" viajan como marcas especiales (ver fetch_players_list)
+    agents: filters.agents.length
+      ? filters.agents.map(a => a === t('agente.sinDato') ? '__sin_dato__' : a === t('agente.sinRepresentante') ? '__sin_representante__' : a)
+      : undefined,
+    nationalities: filters.nationalities.length
+      ? nationalityOptions.filter(o => filters.nationalities.includes(o.label)).flatMap(o => o.values)
+      : undefined,
     search: filters.search || undefined,
+    sort: filters.sort !== 'rating' || filters.sortDir !== 'desc' ? filters.sort : undefined,
+    sortDir: filters.sortDir,
     page,
     pageSize: PAGE_SIZE,
-  }), [filters, page])
+  }), [filters, page, nationalityOptions, t])
 
   const { players, count, loading, error } = usePlayersList(queryFilters)
   const allAgents = useAgents()
@@ -558,8 +630,7 @@ export default function ExternalScoutingPage() {
   useEffect(() => { setSelectedIds(new Set()) }, [page, filters])
 
   const handleReset = useCallback(() => {
-    setFilters(DEFAULT_FILTERS)
-    sessionStorage.removeItem(STORAGE_KEY)
+    setFilters(f => ({ ...DEFAULT_FILTERS, sort: f.sort, sortDir: f.sortDir }))
   }, [])
 
   const handlePlayerClick = (player: PlayerWithScore) => {
@@ -576,6 +647,7 @@ export default function ExternalScoutingPage() {
     filters.min_market_value > 0 || filters.max_market_value < 50_000_000,
     filters.max_contract_months > 0,
     filters.agents.length > 0,
+    filters.nationalities.length > 0,
   ].filter(Boolean).length
 
   if (error) return (
@@ -593,8 +665,7 @@ export default function ExternalScoutingPage() {
             {t('externo.title')}
           </h1>
           <p className="text-sm text-apple-gray-500 dark:text-apple-gray-400 mt-0.5">
-            {count.toLocaleString(LANGUAGE_LOCALES[language])} {t('externo.jugadores')}
-            {filters.positions.length > 0 && <span className="ml-1">· {filters.positions.join(', ')}</span>}
+            {t('externo.subtituloLista')}
           </p>
         </div>
         <div className="relative flex-1 sm:flex-initial sm:max-w-xs">
@@ -606,8 +677,18 @@ export default function ExternalScoutingPage() {
             placeholder={t('externo.buscarJugador')}
             value={filters.search}
             onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
-            className="input-apple pl-9 pr-4 w-full"
+            className={`input-apple pl-9 pr-9 w-full ${filters.search.trim() ? 'ring-2 ring-brand-green/30 border-brand-green/50' : ''}`}
           />
+          {filters.search && (
+            <button
+              type="button"
+              onClick={() => setFilters(f => ({ ...f, search: '' }))}
+              aria-label={t('externo.borrarBusqueda')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-full text-apple-gray-400 hover:text-apple-gray-700 dark:hover:text-white hover:bg-apple-gray-100 dark:hover:bg-apple-gray-700"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          )}
         </div>
       </div>
 
@@ -643,7 +724,7 @@ export default function ExternalScoutingPage() {
         <select
           value={filters.league_id ?? ''}
           onChange={e => setFilters(f => ({ ...f, league_id: e.target.value ? Number(e.target.value) : undefined, team_id: undefined }))}
-          className="input-apple text-xs py-1.5 px-3 min-w-0 w-auto"
+          className={`input-apple text-xs py-1.5 px-3 min-w-0 w-auto ${filters.league_id ? ACTIVE_SELECT : ''}`}
         >
           <option value="">{t('externo.todasLasLigas')}</option>
           {leagues.map(l => (
@@ -656,7 +737,7 @@ export default function ExternalScoutingPage() {
           <select
             value={filters.team_id ?? ''}
             onChange={e => setFilters(f => ({ ...f, team_id: e.target.value ? Number(e.target.value) : undefined }))}
-            className="input-apple text-xs py-1.5 px-3 min-w-0 w-auto"
+            className={`input-apple text-xs py-1.5 px-3 min-w-0 w-auto ${filters.team_id ? ACTIVE_SELECT : ''}`}
           >
             <option value="">{t('externo.todosLosEquipos')}</option>
             {teams.map(team => (
@@ -669,7 +750,7 @@ export default function ExternalScoutingPage() {
         <select
           value={filters.min_matches}
           onChange={e => setFilters(f => ({ ...f, min_matches: Number(e.target.value) }))}
-          className="input-apple text-xs py-1.5 px-3 min-w-0 w-auto"
+          className={`input-apple text-xs py-1.5 px-3 min-w-0 w-auto ${filters.min_matches > 0 ? ACTIVE_SELECT : ''}`}
         >
           <option value={0}>{t('externo.sinMinPartidos')}</option>
           <option value={3}>{t('externo.partidosMin3')}</option>
@@ -683,7 +764,7 @@ export default function ExternalScoutingPage() {
         <select
           value={filters.min_score}
           onChange={e => setFilters(f => ({ ...f, min_score: Number(e.target.value) }))}
-          className="input-apple text-xs py-1.5 px-3 min-w-0 w-auto"
+          className={`input-apple text-xs py-1.5 px-3 min-w-0 w-auto ${filters.min_score > 0 ? ACTIVE_SELECT : ''}`}
         >
           <option value={0}>{t('externo.sinMinScore')}</option>
           <option value={6.0}>6.0+</option>
@@ -746,7 +827,7 @@ export default function ExternalScoutingPage() {
         <select
           value={filters.max_contract_months}
           onChange={e => setFilters(f => ({ ...f, max_contract_months: Number(e.target.value) }))}
-          className="input-apple text-xs py-1.5 px-3 min-w-0 w-auto"
+          className={`input-apple text-xs py-1.5 px-3 min-w-0 w-auto ${filters.max_contract_months > 0 ? ACTIVE_SELECT : ''}`}
         >
           <option value={0}>{t('externo.finDeContrato')}</option>
           <option value={6}>{t('externo.vence6Meses')}</option>
@@ -756,10 +837,11 @@ export default function ExternalScoutingPage() {
         </select>
 
         {/* Agent multi-select */}
-        <AgentMultiSelect
-          agents={allAgents}
-          selected={filters.agents}
-          onChange={agents => setFilters(f => ({ ...f, agents }))}
+        <NationalityAndAgentFilters
+          filters={filters}
+          setFilters={setFilters}
+          allAgents={allAgents}
+          nationalityOptions={nationalityOptions}
         />
       </div>
       </div>
@@ -775,6 +857,7 @@ export default function ExternalScoutingPage() {
           leagues={leagues}
           teams={teams}
           allAgents={allAgents}
+          nationalityOptions={nationalityOptions}
           activeCount={activeCount}
           onReset={handleReset}
           agentInline
@@ -787,6 +870,16 @@ export default function ExternalScoutingPage() {
         </button>
       </MobileFilterPanel>
 
+      <ActiveFiltersBar
+        filters={filters}
+        setFilters={setFilters}
+        leagues={leagues}
+        teams={teams}
+        count={count}
+        loading={loading}
+        onReset={handleReset}
+      />
+
       {/* Table */}
       {loading && page === 0 ? (
         <LoadingSpinner message={t('externo.cargandoJugadores')} />
@@ -794,6 +887,37 @@ export default function ExternalScoutingPage() {
         <EmptyState title={t('externo.sinResultadosTitulo')} description={t('externo.sinResultadosDescripcion')} icon="filter" />
       ) : (
         <>
+          {/* Mobile: orden (en desktop se toca el encabezado de la columna) */}
+          <div className="flex lg:hidden items-center gap-2 mb-3">
+            <span className="text-xs text-apple-gray-500 dark:text-apple-gray-400">{t('externo.ordenarPor')}</span>
+            <select
+              value={filters.sort}
+              onChange={e => {
+                const sort = e.target.value as PlayerListSort
+                setFilters(f => ({ ...f, sort, sortDir: FIRST_SORT_DIR[sort] }))
+              }}
+              className="input-apple text-xs py-1.5 px-3 flex-1"
+            >
+              <option value="rating">{t('externo.colScore')}</option>
+              <option value="goals">{t('externo.colGoles')}</option>
+              <option value="assists">{t('externo.colAsist')}</option>
+              <option value="matches">{t('externo.colPJ')}</option>
+              <option value="age">{t('externo.edad')}</option>
+              <option value="value">{t('externo.colValor')}</option>
+              <option value="agent">{t('agente.columna')}</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => setFilters(f => ({ ...f, sortDir: f.sortDir === 'desc' ? 'asc' : 'desc' }))}
+              aria-label={filters.sortDir === 'desc' ? 'Mayor a menor' : 'Menor a mayor'}
+              className="input-apple py-1.5 px-2.5 text-brand-green"
+            >
+              <svg className={`w-4 h-4 transition-transform ${filters.sortDir === 'asc' ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          </div>
+
           {/* Mobile cards */}
           <div className="block lg:hidden space-y-2">
             {players.map(player => {
@@ -812,6 +936,9 @@ export default function ExternalScoutingPage() {
                       {player.team?.name ?? '—'} · {displayPosition(player.primary_position) || '—'}
                       {age !== null && <span> · {age} {t('externo.anios')}</span>}
                     </p>
+                    <span className="mt-1 flex min-w-0">
+                      <AgentBadge agent={player.agent} className="max-w-full" />
+                    </span>
                   </div>
                   {score !== null && (
                     <div className={`flex-shrink-0 px-2.5 py-1 rounded-lg text-sm font-bold tabular-nums ${getScoreColorClass(score, '10')} ${getScoreBgClass(score, '10')}`}>
@@ -839,13 +966,14 @@ export default function ExternalScoutingPage() {
                     </th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">{t('externo.colJugador')}</th>
                     <th className="text-left py-3 px-3 text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">{t('externo.colEquipo')}</th>
+                    <SortHeader column="agent" label={t('agente.columna')} filters={filters} setFilters={setFilters} align="left" />
                     <th className="text-center py-3 px-3 text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">{t('externo.colPos')}</th>
-                    <th className="text-center py-3 px-3 text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">{t('externo.edad')}</th>
-                    <th className="text-right py-3 px-3 text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">{t('externo.colValor')}</th>
-                    <th className="text-center py-3 px-3 text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">{t('externo.colPJ')}</th>
-                    <th className="text-center py-3 px-3 text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">{t('externo.colGoles')}</th>
-                    <th className="text-center py-3 px-3 text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">{t('externo.colAsist')}</th>
-                    <th className="text-center py-3 px-3 text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">{t('externo.colScore')}</th>
+                    <SortHeader column="age" label={t('externo.edad')} filters={filters} setFilters={setFilters} />
+                    <SortHeader column="value" label={t('externo.colValor')} filters={filters} setFilters={setFilters} align="right" />
+                    <SortHeader column="matches" label={t('externo.colPJ')} filters={filters} setFilters={setFilters} />
+                    <SortHeader column="goals" label={t('externo.colGoles')} filters={filters} setFilters={setFilters} />
+                    <SortHeader column="assists" label={t('externo.colAsist')} filters={filters} setFilters={setFilters} />
+                    <SortHeader column="rating" label={t('externo.colScore')} filters={filters} setFilters={setFilters} />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-apple-gray-100 dark:divide-apple-gray-800">
@@ -883,6 +1011,9 @@ export default function ExternalScoutingPage() {
                             </span>
                           </div>
                         </td>
+                        <td className="py-2.5 px-3 max-w-[170px]">
+                          <AgentBadge agent={player.agent} className="block max-w-full" />
+                        </td>
                         <td className="py-2.5 px-3 text-center">
                           <span className="inline-block px-2 py-0.5 rounded-md bg-apple-gray-100 dark:bg-apple-gray-800 text-xs font-semibold text-apple-gray-600 dark:text-apple-gray-300">
                             {displayPosition(ss?.position ?? player.primary_position) || '—'}
@@ -897,13 +1028,13 @@ export default function ExternalScoutingPage() {
                             : '—'}
                         </td>
                         <td className="py-2.5 px-3 text-center text-sm text-apple-gray-600 dark:text-apple-gray-300 tabular-nums">
-                          {ss?.matches_played ?? 0}
+                          {ss?.matches_played ?? '—'}
                         </td>
                         <td className="py-2.5 px-3 text-center text-sm text-apple-gray-600 dark:text-apple-gray-300 tabular-nums">
-                          {ss?.total_goals ?? 0}
+                          {ss?.total_goals ?? '—'}
                         </td>
                         <td className="py-2.5 px-3 text-center text-sm text-apple-gray-600 dark:text-apple-gray-300 tabular-nums">
-                          {ss?.total_assists ?? 0}
+                          {ss?.total_assists ?? '—'}
                         </td>
                         <td className="py-2.5 px-3 text-center">
                           {score !== null ? (

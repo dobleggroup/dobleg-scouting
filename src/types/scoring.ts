@@ -183,4 +183,6 @@ export interface RecentFormPlayer {
   recent_scores: number[];
   on_the_rise: boolean;
   window_used: 'window' | 'fallback';
+  nationality?: string | null;
+  agent?: string | null;
 }

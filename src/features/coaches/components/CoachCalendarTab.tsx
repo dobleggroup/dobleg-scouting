@@ -293,7 +293,7 @@ export default function CoachCalendarTab({ coach }: { coach: AgencyCoach }) {
                     <img src={opponent.logo} alt="" className="w-8 h-8 lg:w-10 lg:h-10 object-contain flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-apple-gray-800 dark:text-white truncate">
-                        {f.isHome ? 'vs' : '@'} {opponent.name}
+                        vs {opponent.name} {f.isHome ? '(L)' : '(V)'}
                       </p>
                       <p className="text-2xs text-apple-gray-400 truncate flex items-center gap-1">
                         <img src={f.leagueLogo} alt="" className="w-3 h-3 object-contain flex-shrink-0" />

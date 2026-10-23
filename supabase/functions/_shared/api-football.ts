@@ -97,3 +97,39 @@ export async function fetchLeagueInfo(leagueId: number, season: number) {
     season: String(season),
   });
 }
+
+/**
+ * Una página (20 jugadores) de los planteles de una liga, con nacionalidad y
+ * fecha de nacimiento. Sirve para completar nacionalidades de a una liga entera
+ * (20 por consulta) en vez de una consulta por jugador.
+ */
+export async function fetchLeaguePlayersPage(leagueId: number, season: number, page: number) {
+  const url = new URL('/players', BASE_URL);
+  url.searchParams.set('league', String(leagueId));
+  url.searchParams.set('season', String(season));
+  url.searchParams.set('page', String(page));
+  const res = await fetch(url.toString(), { headers: { 'x-apisports-key': API_KEY } });
+  if (res.status === 429) throw new Error('RATE_LIMITED');
+  if (!res.ok) throw new Error(`API-Football ${res.status}: ${await res.text()}`);
+  const json = await res.json();
+  const apiError = apiResponseError(json);
+  if (apiError) throw new Error(apiError);
+  const players = (json.response ?? []).map((r: any) => ({
+    id: r.player?.id as number,
+    nationality: (r.player?.nationality ?? null) as string | null,
+    birthDate: (r.player?.birth?.date ?? null) as string | null,
+  }));
+  return { players, totalPages: (json.paging?.total ?? 1) as number };
+}
+
+/** Parte usada del cupo diario (0 a 1). /status no descuenta del cupo. */
+export async function fetchQuotaUsage(): Promise<number | null> {
+  try {
+    const res = await fetch(new URL('/status', BASE_URL).toString(), { headers: { 'x-apisports-key': API_KEY } });
+    const json = await res.json();
+    const req = json?.response?.requests;
+    return req?.limit_day ? req.current / req.limit_day : null;
+  } catch {
+    return null;
+  }
+}

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { PlayerPhoto } from '@/components/ui/PlayerPhoto'
 import { POS_GROUP_LABEL, fmtMetric, lowerFirst, unitSuffix } from '../metrics'
 import { formChip, formText, levelChip, levelText, type BoardRow, type DiagItem, type Diagnosis, type Direction } from '../diagnosis'
@@ -36,7 +36,7 @@ export function DiagnosisChips({ d }: { d: Diagnosis }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       <Chip tone={role.tone} title={d.roleText}>{role.label}</Chip>
-      {d.form && <Chip tone={dirTone(d.form.state)} icon={dirIcon(d.form.state)} title="Últimos 6 meses contra el año anterior, en las métricas de su puesto">{formChip(d.form)}</Chip>}
+      {d.form && <Chip tone={dirTone(d.form.state)} icon={dirIcon(d.form.state)} title="Sus últimos 6 meses contra el año anterior, en lo que más importa para su puesto">{formChip(d.form)}</Chip>}
       {d.level && <Chip tone={dirTone(d.level.state)} title="Último año, contra los de su posición en la agencia">{levelChip(d.level, d.group)}</Chip>}
     </div>
   )
@@ -58,7 +58,7 @@ export function DiagnosisSummary({ d, size = 'sm', headline = true }: { d: Diagn
     <div className={`space-y-1 ${size === 'xs' ? 'text-xs' : 'text-sm'}`}>
       {headline && <p className="font-semibold text-apple-gray-800 dark:text-white leading-snug">{d.headline}</p>}
       <Line label="Rol">{d.roleText}</Line>
-      {d.form && <Line label="Últimos 6 meses contra el año anterior">{formText(d.form)}</Line>}
+      {d.form && <Line label="Contra él mismo el año anterior">{formText(d.form)}</Line>}
       {d.level && <Line label={`Contra los otros ${d.level.peers} ${many} de la agencia`}>{levelText(d.level)}</Line>}
     </div>
   )
@@ -97,7 +97,7 @@ export function DiagnosisPanel({ d }: { d: Diagnosis }) {
       <div className="grid md:grid-cols-2 gap-5 pt-3 border-t border-apple-gray-100 dark:border-apple-gray-700/60">
         {d.form && (
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-apple-gray-800 dark:text-white">Cómo viene <span className="font-normal text-apple-gray-400">· últimos 6 meses contra el año anterior ({d.form.total} métricas)</span></h3>
+            <h3 className="text-sm font-semibold text-apple-gray-800 dark:text-white">Cómo viene <span className="font-normal text-apple-gray-400">· últimos 6 meses contra el año anterior</span></h3>
             <ItemList title="Mejoró" items={d.form.better} icon="▲" iconCls={green} empty="En nada claro."
               fmt={i => `${i.metric.label}: de ${fmtMetric(i.metric, i.ref)} a ${val(i, i.value)}`} />
             <ItemList title="Bajó" items={d.form.worse} icon="▼" iconCls={red} empty="En nada claro."
@@ -106,7 +106,7 @@ export function DiagnosisPanel({ d }: { d: Diagnosis }) {
         )}
         {d.level && (
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-apple-gray-800 dark:text-white">Contra los otros {d.level.peers} {many} <span className="font-normal text-apple-gray-400">· último año ({d.level.total} métricas)</span></h3>
+            <h3 className="text-sm font-semibold text-apple-gray-800 dark:text-white">Contra los otros {d.level.peers} {many} <span className="font-normal text-apple-gray-400">· último año</span></h3>
             <ItemList title="Mejor que ellos" items={d.level.better} icon="✓" iconCls={green} empty="En nada claro."
               fmt={i => `${i.metric.label}: ${val(i, i.value)} (ellos ${fmtMetric(i.metric, i.ref)})`} />
             <ItemList title="Peor que ellos" items={d.level.worse} icon="✗" iconCls={red} empty="En nada claro."
@@ -137,36 +137,75 @@ export function DiagnosisMini({ d }: { d: Diagnosis }) {
   )
 }
 
-/** Lista de jugadores con su diagnóstico (para "En su mejor momento" / "Preocupan"). */
-export function MomentList({ items, photo, onOpen, empty }: {
+/** El motivo principal, en una línea: lo mejor (o lo peor) que se movió, con números. */
+function mainReason(d: Diagnosis, kind: 'hot' | 'concern'): { text: string; good: boolean } | null {
+  if (kind === 'concern' && (d.role === 'casiNoJuega' || d.role === 'sinPartidos' || d.roleChange === 'perdioElPuesto')) {
+    // "Alterna entre titular y suplente: 4 de 9 partidos de titular en los últimos 3 meses (antes…)." → lo corto.
+    const short = d.roleText.replace(/^[^:]*:\s*/, '').replace(/\.$/, '')
+      .replace(' partidos de titular en los últimos 3 meses', ' de titular en 3 meses')
+      .replace(' en los últimos 3 meses', ' en 3 meses')
+    return { text: short, good: false }
+  }
+  const fmt = (i: DiagItem, trend: boolean) => trend
+    ? `${lowerFirst(i.metric.label)}: ${fmtMetric(i.metric, i.ref)} → ${fmtMetric(i.metric, i.value)}`
+    : `${lowerFirst(i.metric.label)}: ${fmtMetric(i.metric, i.value)} (los de su puesto, ${fmtMetric(i.metric, i.ref)})`
+  const trend = kind === 'hot' ? d.form?.better[0] : d.form?.worse[0]
+  if (trend) return { text: fmt(trend, true), good: kind === 'hot' }
+  const level = kind === 'hot' ? d.level?.better[0] : d.level?.worse[0]
+  return level ? { text: fmt(level, false), good: kind === 'hot' } : null
+}
+
+/**
+ * Lista corta de jugadores ("En su mejor momento" / "Preocupan"): una fila por
+ * jugador con sus tres etiquetas y el motivo principal. El detalle completo, al tocarlo.
+ */
+export function MomentList({ items, photo, onOpen, empty, kind, limit }: {
   items: Array<{ d: Diagnosis; name: string; lead?: ReactNode }>
   photo: (k: string) => string | null
   onOpen?: (k: string) => void
   empty: string
+  kind: 'hot' | 'concern'
+  /** Cuántos mostrar antes de "Ver los N". */
+  limit?: number
 }) {
+  const [all, setAll] = useState(false)
   if (!items.length) return <p className="text-sm text-apple-gray-400 dark:text-apple-gray-500">{empty}</p>
+  const shown = limit && !all ? items.slice(0, limit) : items
   return (
+    <>
     <ul className="divide-y divide-apple-gray-100 dark:divide-apple-gray-700/60">
-      {items.map(({ d, name, lead }) => {
+      {shown.map(({ d, name, lead }) => {
         const Tag = onOpen ? 'button' : 'div'
+        const reason = mainReason(d, kind)
         return (
           <li key={d.key}>
-            <Tag onClick={onOpen ? () => onOpen(d.key) : undefined} className={`w-full text-left flex gap-3 py-3 ${onOpen ? 'hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/30 rounded-apple -mx-2 px-2 transition' : ''}`}>
+            <Tag onClick={onOpen ? () => onOpen(d.key) : undefined} className={`w-full text-left flex items-center gap-3 py-2.5 ${onOpen ? 'hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/30 rounded-apple -mx-2 px-2 transition' : ''}`}>
               <PlayerPhoto src={photo(d.key)} name={name} size="sm" rounded="full" />
-              <span className="min-w-0 flex-1 space-y-1.5">
-                <span className="flex items-center gap-1.5">
+              <span className="min-w-0 flex-1 space-y-1">
+                <span className="flex items-center gap-1.5 min-w-0">
                   <span className="text-sm font-semibold text-apple-gray-800 dark:text-white truncate">{name}</span>
                   {lead}
-                  {d.group && <span className="text-2xs text-apple-gray-400">{POS_GROUP_LABEL[d.group].one}</span>}
+                  {d.group && <span className="text-2xs text-apple-gray-400 shrink-0">{POS_GROUP_LABEL[d.group].one}</span>}
                 </span>
                 <DiagnosisChips d={d} />
-                <DiagnosisSummary d={d} size="xs" headline={false} />
+                {reason && (
+                  <span className="block text-xs text-apple-gray-600 dark:text-apple-gray-300 truncate">
+                    <span className={reason.good ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'} aria-hidden>{reason.good ? '▲ ' : '▼ '}</span>
+                    {reason.text}
+                  </span>
+                )}
               </span>
             </Tag>
           </li>
         )
       })}
     </ul>
+    {limit !== undefined && items.length > limit && (
+      <button onClick={() => setAll(v => !v)} className="mt-2 text-xs font-medium text-brand-green hover:underline">
+        {all ? 'Ver menos' : `Ver los ${items.length}`}
+      </button>
+    )}
+    </>
   )
 }
 

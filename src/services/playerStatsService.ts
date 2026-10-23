@@ -35,6 +35,9 @@ export function currentSeasons(): number[] {
   return [year - 1, year];
 }
 
+/** Columnas por las que se puede ordenar la lista de Scout Externo (se ordena en la base). */
+export type PlayerListSort = 'rating' | 'goals' | 'assists' | 'matches' | 'value' | 'age' | 'agent';
+
 export async function fetchPlayersList(filters: {
   positions?: Position[];
   league_id?: number;
@@ -47,8 +50,11 @@ export async function fetchPlayersList(filters: {
   max_market_value?: number;
   max_contract_months?: number;
   agents?: string[];
+  nationalities?: string[];
   search?: string;
   season?: number;
+  sort?: PlayerListSort;
+  sortDir?: 'asc' | 'desc';
   page?: number;
   pageSize?: number;
 }): Promise<{ players: PlayerWithScore[]; count: number }> {
@@ -59,7 +65,7 @@ export async function fetchPlayersList(filters: {
   // El colapso a 1 fila por jugador (sobre las múltiples filas posición/temporada/liga
   // de player_season_scores) se hace en el RPC fetch_players_list ANTES de paginar.
   // Así el contador es de JUGADORES únicos y un jugador no reaparece en varias páginas.
-  const { data, error } = await supabase.rpc('fetch_players_list', {
+  const call = (extra: Record<string, unknown>) => supabase.rpc('fetch_players_list', {
     p_seasons: seasons,
     p_positions: filters.positions?.length ? filters.positions : null,
     p_league_id: filters.league_id ?? null,
@@ -75,7 +81,18 @@ export async function fetchPlayersList(filters: {
     p_search: filters.search ?? null,
     p_page: page,
     p_page_size: pageSize,
+    ...extra,
   });
+  // Solo se mandan si se usan: así otras pantallas que llaman a la lista no
+  // dependen de estos parámetros.
+  const extra = {
+    ...(filters.nationalities?.length ? { p_nationalities: filters.nationalities } : {}),
+    ...(filters.sort ? { p_sort: filters.sort, p_sort_dir: filters.sortDir ?? 'desc' } : {}),
+  };
+  let { data, error } = await call(extra);
+  // Si la base todavía no tiene el orden / filtro por nacionalidad (migración
+  // 20261022_d sin aplicar), se muestra la lista con el orden de siempre en vez de un error.
+  if (error?.code === 'PGRST202' && Object.keys(extra).length) ({ data, error } = await call({}));
   if (error) throw error;
 
   const result = (data ?? { count: 0, players: [] }) as {
@@ -231,6 +248,13 @@ export async function fetchDistinctAgents(): Promise<string[]> {
   return unique;
 }
 
+/** Nacionalidades que hay en la base, las más frecuentes primero (en inglés, como vienen). */
+export async function fetchPlayerNationalities(): Promise<string[]> {
+  const { data, error } = await supabase.rpc('fetch_player_nationalities');
+  if (error) throw error;
+  return (data ?? []) as string[];
+}
+
 export async function fetchLeagues(): Promise<LeagueInfo[]> {
   const { data, error } = await supabase
     .from('leagues')
@@ -337,6 +361,9 @@ export async function fetchTeamsByLeague(leagueId: number): Promise<TeamInfo[]> 
     .from('teams')
     .select('id, name, logo, league_id')
     .eq('league_id', leagueId)
+    // Sin los duplicados de otra fuente (ej. Unión de Sofascore): sus jugadores
+    // ya quedan en el club oficial (teams.canonical_team_id).
+    .is('canonical_team_id', null)
     .order('name');
 
   if (error) throw error;

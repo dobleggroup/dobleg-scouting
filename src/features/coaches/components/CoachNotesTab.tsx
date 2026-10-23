@@ -90,7 +90,7 @@ function NoteRow({
         <img src={opponent.logo} alt="" className="w-6 h-6 object-contain flex-shrink-0" />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-apple-gray-800 dark:text-white truncate">
-            {fixture.isHome ? 'vs' : '@'} {opponent.name}
+            vs {opponent.name} {fixture.isHome ? '(L)' : '(V)'}
           </p>
           <p className="text-xs text-apple-gray-400">
             {fixture.goalsHome} - {fixture.goalsAway} &middot; {formatMatchDate(fixture.date, LANGUAGE_LOCALES[language])}

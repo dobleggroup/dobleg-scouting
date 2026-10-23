@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { useLanguage } from '@/context/LanguageContext'
@@ -101,6 +102,31 @@ function ScoreSelector({
         <span>{muyMaloLabel}</span>
         <span>{excelenteLabel}</span>
       </div>
+    </div>
+  )
+}
+
+// Comentario debajo de cada puntaje
+function CommentBox({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-apple-gray-600 dark:text-apple-gray-400 mb-2">
+        {label}
+      </label>
+      <textarea
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        rows={2}
+        className="w-full px-4 py-3 rounded-xl bg-apple-gray-50 dark:bg-apple-gray-800 border border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-800 dark:text-white placeholder-apple-gray-400 focus:outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/20 transition-all resize-y min-h-[4.5rem]"
+      />
     </div>
   )
 }
@@ -211,8 +237,11 @@ export default function ScoutEvaluationPage() {
   const [score, setScore] = useState<number>()
   const [tacticalScore, setTacticalScore] = useState<number>()
   const [mentalScore, setMentalScore] = useState<number>()
-  const [notes, setNotes] = useState('')
-  const [recommendation, setRecommendation] = useState<'fichar' | 'seguir_observando' | 'descartar' | ''>('')
+  const [physicalScore, setPhysicalScore] = useState<number>()
+  const [matchComment, setMatchComment] = useState('')
+  const [tacticalComment, setTacticalComment] = useState('')
+  const [mentalComment, setMentalComment] = useState('')
+  const [physicalComment, setPhysicalComment] = useState('')
   const [playerSource, setPlayerSource] = useState<PlayerSource | null>(null)
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
 
@@ -242,6 +271,17 @@ export default function ScoutEvaluationPage() {
     })
   }, [])
 
+  // Llegada desde otra pantalla (ej. Debutantes) con el jugador ya elegido
+  const [searchParams] = useSearchParams()
+  const prefillName = searchParams.get('jugador')
+  const prefillTeam = searchParams.get('equipo')
+  useEffect(() => {
+    if (!prefillName) return
+    setPlayerName(prefillName)
+    setSelectedPlayerId(prefillName)
+    if (prefillTeam) setTeam(prefillTeam)
+  }, [prefillName, prefillTeam])
+
   // Update scout name when user changes
   useEffect(() => {
     if (userDisplayName) {
@@ -259,6 +299,15 @@ export default function ScoutEvaluationPage() {
   const internalPlayerIds = useMemo(() => {
     return new Set(internal.map(p => p.Jugador))
   }, [internal])
+
+  // El origen (interno / seguimiento / externo) del jugador precargado se
+  // resuelve cuando terminan de cargar las listas
+  useEffect(() => {
+    if (!prefillName || playerName !== prefillName) return
+    if (internalPlayerIds.has(prefillName)) setPlayerSource('interno')
+    else setPlayerSource(monitoringStatuses[prefillName]?.status === 'seguimiento' ? 'seguimiento' : 'externo')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillName, internalPlayerIds, monitoringStatuses])
 
   // Combined player list for autocomplete with source info
   const allPlayers = useMemo(() => {
@@ -327,7 +376,7 @@ export default function ScoutEvaluationPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!user || !score || !tacticalScore || !mentalScore) return
+    if (!user || !score || !playerName.trim()) return
 
     setError('')
     setSubmitting(true)
@@ -349,8 +398,11 @@ export default function ScoutEvaluationPage() {
         technical_score: score,
         tactical_score: tacticalScore,
         mental_score: mentalScore,
-        notes: notes || undefined,
-        recommendation: recommendation || undefined,
+        physical_score: physicalScore,
+        match_comment: matchComment.trim() || undefined,
+        tactical_comment: tacticalComment.trim() || undefined,
+        mental_comment: mentalComment.trim() || undefined,
+        physical_comment: physicalComment.trim() || undefined,
       },
       user.id,
       scoutName
@@ -414,8 +466,11 @@ export default function ScoutEvaluationPage() {
       setScore(undefined)
       setTacticalScore(undefined)
       setMentalScore(undefined)
-      setNotes('')
-      setRecommendation('')
+      setPhysicalScore(undefined)
+      setMatchComment('')
+      setTacticalComment('')
+      setMentalComment('')
+      setPhysicalComment('')
       setPlayerSource(null)
       setSelectedPlayerId(null)
 
@@ -428,7 +483,7 @@ export default function ScoutEvaluationPage() {
     }
   }
 
-  const isFormValid = playerName && matchDate && score && tacticalScore && mentalScore && scoutName
+  const isFormValid = playerName.trim() && matchDate && score && scoutName
 
   return (
     <div className="min-h-screen bg-apple-gray-50 dark:bg-apple-gray-900">
@@ -632,66 +687,18 @@ export default function ScoutEvaluationPage() {
             <h2 className="text-sm font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">
               {t('evaluar.puntuacionesSeccion')}
             </h2>
-            <ScoreSelector label={t('evaluar.rendimientoGeneral')} value={score} onChange={setScore} required muyMaloLabel={t('evaluar.muyMalo')} excelenteLabel={t('evaluar.excelente')} />
-            <div className="border-t border-apple-gray-100 dark:border-apple-gray-700/60 pt-6">
-              <ScoreSelector label={t('evaluar.valoracionTactica')} value={tacticalScore} onChange={setTacticalScore} required muyMaloLabel={t('evaluar.muyMalo')} excelenteLabel={t('evaluar.excelente')} />
-            </div>
-            <div className="border-t border-apple-gray-100 dark:border-apple-gray-700/60 pt-6">
-              <ScoreSelector label={t('evaluar.valoracionMental')} value={mentalScore} onChange={setMentalScore} required muyMaloLabel={t('evaluar.muyMalo')} excelenteLabel={t('evaluar.excelente')} />
-            </div>
-          </div>
-
-          {/* Observations */}
-          <div className="bg-white dark:bg-apple-gray-800 rounded-2xl p-5 shadow-sm border border-apple-gray-100 dark:border-apple-gray-700 space-y-4">
-            <h2 className="text-sm font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">
-              {t('evaluar.observacionesSeccion')}
-            </h2>
-
-            <div>
-              <label className="block text-sm font-medium text-apple-gray-600 dark:text-apple-gray-400 mb-2">
-                {t('evaluar.notasPartido')}
-              </label>
-              <textarea
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                rows={3}
-                className="w-full px-4 py-3 rounded-xl bg-apple-gray-50 dark:bg-apple-gray-800 border border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-800 dark:text-white placeholder-apple-gray-400 focus:outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/20 transition-all resize-none"
-              />
-            </div>
-
-            {/* Recommendation */}
-            <div>
-              <label className="block text-sm font-medium text-apple-gray-600 dark:text-apple-gray-400 mb-3">
-                {t('evaluar.recomendacion')}
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { value: 'fichar', label: t('evaluar.fichar'), color: 'brand-green', icon: 'M5 13l4 4L19 7' },
-                  { value: 'seguir_observando', label: t('evaluar.seguir'), color: 'amber-500', icon: 'M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z' },
-                  { value: 'descartar', label: t('evaluar.descartar'), color: 'red-500', icon: 'M6 18L18 6M6 6l12 12' },
-                ].map(opt => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setRecommendation(recommendation === opt.value ? '' : opt.value as typeof recommendation)}
-                    className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
-                      recommendation === opt.value
-                        ? opt.color === 'brand-green'
-                          ? 'border-brand-green bg-brand-green/10 text-brand-green'
-                          : opt.color === 'amber-500'
-                          ? 'border-amber-500 bg-amber-500/10 text-amber-500'
-                          : 'border-red-500 bg-red-500/10 text-red-500'
-                        : 'border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-500 dark:text-apple-gray-400 hover:border-apple-gray-300 dark:hover:border-apple-gray-600'
-                    }`}
-                  >
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={opt.icon} />
-                    </svg>
-                    <span className="text-sm font-medium">{opt.label}</span>
-                  </button>
-                ))}
+            {[
+              { label: t('evaluar.rendimientoGeneral'), value: score, onChange: setScore, required: true, commentLabel: t('evaluar.comentarioPartido'), comment: matchComment, onComment: setMatchComment },
+              { label: t('evaluar.valoracionTactica'), value: tacticalScore, onChange: setTacticalScore, commentLabel: t('evaluar.comentarioTactico'), comment: tacticalComment, onComment: setTacticalComment },
+              { label: t('evaluar.valoracionMental'), value: mentalScore, onChange: setMentalScore, commentLabel: t('evaluar.comentarioMental'), comment: mentalComment, onComment: setMentalComment },
+              { label: t('evaluar.valoracionFisica'), value: physicalScore, onChange: setPhysicalScore, commentLabel: t('evaluar.comentarioFisico'), comment: physicalComment, onComment: setPhysicalComment },
+            ].map((block, i) => (
+              <div key={block.commentLabel} className={`space-y-4 ${i > 0 ? 'border-t border-apple-gray-100 dark:border-apple-gray-700/60 pt-6' : ''}`}>
+                <ScoreSelector label={block.label} value={block.value} onChange={block.onChange} required={block.required} muyMaloLabel={t('evaluar.muyMalo')} excelenteLabel={t('evaluar.excelente')} />
+                <CommentBox label={block.commentLabel} value={block.comment} onChange={block.onComment} />
               </div>
-            </div>
+            ))}
+            <p className="text-xs text-apple-gray-400">{t('evaluar.soloObligatorio')}</p>
           </div>
 
           {/* Error message */}
@@ -733,7 +740,7 @@ export default function ScoutEvaluationPage() {
                 {t('evaluar.guardando')}
               </span>
             ) : (
-              t('evaluar.guardarEvaluacion')
+              t('evaluar.guardar')
             )}
           </button>
         </div>

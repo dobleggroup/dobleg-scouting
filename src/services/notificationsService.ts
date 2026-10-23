@@ -35,6 +35,19 @@ export async function markAllNotificationsRead(ids: string[]): Promise<boolean> 
 
 // El RLS de `notifications` sólo deja crear notificaciones para gente del
 // MISMO club (ver migración) -- no hace falta validar acá, la base lo cuida.
+/** Avisa a todas las cuentas de una persona (menos a quien lo genera). */
+export async function notifyAccounts(
+  accounts: string[],
+  type: string,
+  message: string,
+  link?: string,
+  exceptUserId?: string | null,
+): Promise<void> {
+  for (const id of new Set(accounts)) {
+    if (id && id !== exceptUserId) await createNotification(id, type, message, link)
+  }
+}
+
 export async function createNotification(
   targetUserId: string,
   type: string,

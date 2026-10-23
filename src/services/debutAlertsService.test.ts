@@ -31,6 +31,7 @@ function chain(result: { data: unknown; error: unknown }) {
   builder.in = vi.fn(self)
   builder.eq = vi.fn(() => Promise.resolve(result))
   builder.not = vi.fn(() => Promise.resolve(result))
+  builder.or = vi.fn(() => Promise.resolve(result))
   return builder
 }
 
@@ -140,7 +141,7 @@ describe('fetchDebutAlerts', () => {
     await expect(fetchDebutAlerts()).rejects.toThrow('boom')
   })
 
-  it('filtra por los ultimos 40 dias, ordenados por fecha de debut descendente', async () => {
+  it('filtra por los ultimos 3 meses, ordenados por fecha de debut descendente', async () => {
     const builder = chain({ data: [], error: null })
     mockFrom.mockReturnValue(builder)
 
@@ -148,7 +149,7 @@ describe('fetchDebutAlerts', () => {
 
     expect(builder.gte).toHaveBeenCalledWith('debut_date', expect.any(String))
     expect(builder.order).toHaveBeenCalledWith('debut_date', { ascending: false })
-    expect(builder.limit).toHaveBeenCalledWith(300)
+    expect(builder.limit).toHaveBeenCalledWith(900)
   })
 
   it('solo muestra alertas confirmadas con Transfermarkt (no pendientes ni rechazadas)', async () => {
@@ -162,16 +163,19 @@ describe('fetchDebutAlerts', () => {
 })
 
 describe('fetchSeguimientoStatus', () => {
-  it('devuelve un mapa playerId -> scout_players.id para los que estan en seguimiento', async () => {
+  it('devuelve en qué listas (Datos / GG) está cada jugador', async () => {
     mockFrom.mockReturnValue(chain({
-      data: [{ id: 'sp-1', supabase_player_id: 1 }, { id: 'sp-2', supabase_player_id: 2 }],
+      data: [
+        { id: 'sp-1', supabase_player_id: 1, in_datos_list: false, in_scouts_gg_list: true },
+        { id: 'sp-2', supabase_player_id: 2, in_datos_list: true, in_scouts_gg_list: false },
+      ],
       error: null,
     }))
 
     const result = await fetchSeguimientoStatus([1, 2, 3])
 
-    expect(result.get(1)).toBe('sp-1')
-    expect(result.get(2)).toBe('sp-2')
+    expect(result.get(1)).toEqual({ scoutPlayerId: 'sp-1', datos: false, scouts_gg: true })
+    expect(result.get(2)).toEqual({ scoutPlayerId: 'sp-2', datos: true, scouts_gg: false })
     expect(result.has(3)).toBe(false)
   })
 
@@ -183,7 +187,7 @@ describe('fetchSeguimientoStatus', () => {
 })
 
 describe('addDebutAlertToSeguimiento', () => {
-  it('llama a addScoutPlayer con los datos del debutante y la lista scouts_gg', async () => {
+  it('llama a addScoutPlayer con los datos del debutante y la lista elegida', async () => {
     mockAddScoutPlayer.mockResolvedValue({ id: 'sp-nuevo' })
     const alert: DebutAlert = {
       playerId: 10, displayLeagueId: 128, competitionName: 'Liga Profesional', playerName: 'Nuevo Pibe', photo: null, position: 'DEL',
@@ -192,7 +196,7 @@ describe('addDebutAlertToSeguimiento', () => {
       minutesSince: 0, matchesSince: 0, rating: null,
     }
 
-    const id = await addDebutAlertToSeguimiento(alert, 'user-1', 'Marcos')
+    const id = await addDebutAlertToSeguimiento(alert, 'scouts_gg', 'user-1', 'Marcos')
 
     expect(mockAddScoutPlayer).toHaveBeenCalledWith(
       { full_name: 'Nuevo Pibe', supabase_player_id: 10, club: 'River', posicion: 'DEL', nacionalidad: 'Argentina', agente: undefined },
@@ -205,10 +209,10 @@ describe('addDebutAlertToSeguimiento', () => {
 })
 
 describe('removeDebutAlertFromSeguimiento', () => {
-  it('llama a removeScoutPlayerFromList con la lista scouts_gg', async () => {
+  it('llama a removeScoutPlayerFromList con la lista elegida', async () => {
     mockRemoveScoutPlayerFromList.mockResolvedValue(true)
-    const result = await removeDebutAlertFromSeguimiento('sp-1')
-    expect(mockRemoveScoutPlayerFromList).toHaveBeenCalledWith('sp-1', 'scouts_gg')
+    const result = await removeDebutAlertFromSeguimiento('sp-1', 'datos')
+    expect(mockRemoveScoutPlayerFromList).toHaveBeenCalledWith('sp-1', 'datos')
     expect(result).toBe(true)
   })
 })

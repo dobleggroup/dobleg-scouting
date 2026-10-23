@@ -15,6 +15,11 @@ const COUNTRY_ES: Record<string, string> = {
   Peru: 'Perú',
   Brazil: 'Brasil',
   'United-Arab-Emirates': 'Emiratos Árabes Unidos',
+  'Saudi-Arabia': 'Arabia Saudita',
+  Turkey: 'Turquía',
+  Greece: 'Grecia',
+  Russia: 'Rusia',
+  Portugal: 'Portugal',
   'South America': 'Sudamérica',
   Europe: 'Europa',
 }
@@ -25,7 +30,7 @@ const NAME_ES: Record<string, string> = {
 }
 
 /** Ligas de segunda división (el `tier` de la tabla es un nivel de calidad, no la división). */
-const SECOND_DIVISION = new Set([131, 240])
+const SECOND_DIVISION = new Set([131, 240, 141])
 
 export function countryEs(country: string): string {
   return COUNTRY_ES[country] ?? country

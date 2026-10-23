@@ -6,6 +6,7 @@ import {
   fetchPositionMetricAverages,
   fetchLeagues,
   fetchDistinctAgents,
+  fetchPlayerNationalities,
   fetchPlayerMatchHistory,
   fetchPlayerAllMatches,
   resolvePreferredPlayerId,
@@ -45,6 +46,7 @@ export function usePlayersList(filters: Parameters<typeof fetchPlayersList>[0]) 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setError(null);
 
     const cached = getCached<{ players: PlayerWithScore[]; count: number }>(
       `list:${filtersKey}`, 60
@@ -133,6 +135,21 @@ export function useAgents() {
   }, []);
 
   return agents;
+}
+
+export function useNationalities() {
+  const [nationalities, setNationalities] = useState<string[]>([]);
+
+  useEffect(() => {
+    const cached = getCached<string[]>('nationalities', 240);
+    if (cached) { setNationalities(cached); return; }
+
+    fetchPlayerNationalities()
+      .then(data => { setNationalities(data); setCache('nationalities', data); })
+      .catch(() => setNationalities([]));
+  }, []);
+
+  return nationalities;
 }
 
 export function useLeagues() {

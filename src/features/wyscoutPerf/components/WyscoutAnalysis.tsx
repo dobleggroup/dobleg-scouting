@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Panel, { PanelSkeleton, Segmented } from '@/features/tablero/components/Panel'
-import { useMatchMinutes, useWyscoutMonthly } from '../useWyscoutMonthly'
+import { useMatchMinutes, useParticipation, useWyscoutMonthly } from '../useWyscoutMonthly'
+import PlayingTimeTable from './PlayingTimeTable'
 import { METRIC_BY_KEY, METRICS, POS_GROUP_LABEL, lowerFirst, metricsFor, type PosGroup } from '../metrics'
 import { groupPeriods, type Grouping } from '../periods'
 import { playerConclusions, playerGroup } from '../conclusions'
@@ -27,7 +28,7 @@ export const DEFAULT_SCATTER: Record<PosGroup, [string, string]> = {
   VC: ['adelante_ok_90', 'duelos_def_pct'],
   MED: ['adelante_ok_90', 'pases_clave_90'],
   EXT: ['regates_ok_90', 'xa_90'],
-  DEL: ['xg_90', 'goles_90'],
+  DEL: ['goles_90', 'goles_menos_xg'],
 }
 
 const GROUPING_OPTS: { id: Grouping; label: string }[] = [
@@ -46,8 +47,9 @@ function withDiagStatus<T extends { status: Status }>(snap: T, d: Diagnosis | un
 
 const SOURCE = (
   <p>
-    Sale de los Excel "Player stats" de Wyscout que se suben en{' '}
+    El rendimiento sale de los Excel "Player stats" de Wyscout que se suben en{' '}
     <Link to="/carga-wyscout" className="text-brand-green hover:underline">Carga de Wyscout</Link>.
+    Los partidos, minutos y titularidades salen de API-Football y Sofascore (los de Reserva, de Wyscout).
     "Por partido" quiere decir cada 90 minutos jugados, así se puede comparar a un titular con uno que entra del banco.
     Solo se cuentan jugadores con 450 minutos o más en el período (270 en los últimos 3 meses).
   </p>
@@ -66,6 +68,7 @@ export default function WyscoutAnalysis() {
   const [classFilter, setClassFilter] = useState<ClassFilter>('all')
   const [status, setStatus] = useState<Status | null>(null)
   const matchMinutes = useMatchMinutes()
+  const participation = useParticipation()
   const diags = useMemo(() => diagnoseAll(byPlayer, matchMinutes), [byPlayer, matchMinutes])
 
   const cls = (k: string) => classOf(name(k))
@@ -102,7 +105,7 @@ export default function WyscoutAnalysis() {
 
   const overview = useMemo<OverviewPlayer[]>(() => [...scoped.entries()]
     .map(([k, rs]) => ({
-      ...withDiagStatus(playerSnapshot(rs, byPlayer), diags.get(k)), name: name(k), cls: classOf(name(k)),
+      ...withDiagStatus(playerSnapshot(rs, byPlayer, undefined, matchMinutes.get(k)), diags.get(k)), name: name(k), cls: classOf(name(k)),
       starts3m: matchMinutes.has(k) ? startsIn(matchMinutes.get(k), '3m').starts : null,
       diag: diags.get(k) ?? null,
     })), [scoped, byPlayer, name, classOf, matchMinutes, diags])
@@ -196,25 +199,30 @@ export default function WyscoutAnalysis() {
         <StatusTiles players={overview} active={status} onPick={setStatus} photo={photo} />
 
         <div className="grid lg:grid-cols-2 gap-5">
-          <Panel title={`En su mejor momento · ${moments.hot.length}`} subtitle="Juegan, y mejoraron en la mayoría de las métricas de su puesto o rinden mejor que los de su posición. Primero los de clase A." source={SOURCE}>
-            <MomentList items={moments.hot} photo={photo} onOpen={k => pick([k])} empty="Nadie con estos filtros." />
+          <Panel title={`En su mejor momento · ${moments.hot.length}`} subtitle="Juegan y vienen mejor, o rinden más que los de su puesto. Clase A primero." source={SOURCE}>
+            <MomentList kind="hot" limit={6} items={moments.hot} photo={photo} onOpen={k => pick([k])} empty="Nadie con estos filtros." />
           </Panel>
-          <Panel title={`Preocupan · ${moments.concern.length}`} subtitle="Perdieron el puesto, casi no juegan, o bajaron en la mayoría de las métricas de su puesto. Primero los de clase A." source={SOURCE}>
-            <MomentList items={moments.concern} photo={photo} onOpen={k => pick([k])} empty="Nadie preocupante con estos filtros." />
+          <Panel title={`Preocupan · ${moments.concern.length}`} subtitle="Perdieron el puesto, casi no juegan, o vienen peor. Clase A primero." source={SOURCE}>
+            <MomentList kind="concern" limit={6} items={moments.concern} photo={photo} onOpen={k => pick([k])} empty="Nadie preocupante con estos filtros." />
           </Panel>
         </div>
 
         <Panel
           title={status ? `Jugador por jugador · ${cards.length} con este filtro` : 'Jugador por jugador'}
-          subtitle="Las barras son los minutos de cada mes del último año. Tocá una tarjeta para ver el detalle del jugador."
+          subtitle="Tocá un jugador para ver su detalle."
           actions={status ? <button onClick={() => setStatus(null)} className="text-xs font-medium text-brand-green hover:underline">Ver todos</button> : undefined}
           source={SOURCE}
         >
           <PlayerCards players={cards} photo={photo} onOpen={k => pick([k])} />
         </Panel>
 
-        {rankingAndScatter}
-
+        <details className="group">
+          <summary className="cursor-pointer list-none inline-flex items-center gap-1.5 text-sm font-semibold text-apple-gray-600 dark:text-apple-gray-300 hover:text-apple-gray-900 dark:hover:text-white">
+            <svg className="w-4 h-4 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            Más análisis: ranking por métrica y comparar dos cosas a la vez
+          </summary>
+          <div className="mt-4">{rankingAndScatter}</div>
+        </details>
       </>)}
 
       {comparing && (<>
@@ -238,6 +246,14 @@ export default function WyscoutAnalysis() {
             <DiagnosisPanel d={diags.get(single)!} />
           </Panel>
         )}
+
+        <Panel
+          title="Cuánto juega"
+          subtitle="Mes a mes: partidos de su equipo, cuántos jugó, de titular o de suplente, y minutos."
+          source={<p>Sale de los partidos de API-Football y Sofascore. "No jugó" son los partidos de su equipo en los que no entró: quedó en el banco, no fue convocado o estaba lesionado.</p>}
+        >
+          {participation ? <PlayingTimeTable months={participation.months.get(single)} /> : <PanelSkeleton height="h-40" />}
+        </Panel>
 
         <Panel
           title={`Más datos de ${name(single)}`}

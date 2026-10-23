@@ -10,7 +10,7 @@
 import { POS_GROUP_LABEL, fmtMetric, isRate, lowerFirst, metricsFor, type MetricDef, type PosGroup, type Totals } from './metrics'
 import { monthLabel, monthsAgo, totalsBetween, type MonthRow } from './periods'
 import { MIN_MINUTES, playerGroup } from './conclusions'
-import { STARTER_MINUTES } from './analysis'
+import { isStart } from './analysis'
 
 const MIN_TRIES = 30
 /** Para hablar de "viene mejorando" o "rinde mejor": métricas comparables mínimas. */
@@ -57,7 +57,7 @@ export interface Diagnosis {
   score: number
 }
 
-export interface MatchMinutesLike { date: string; minutes: number }
+export interface MatchMinutesLike { date: string; minutes: number; starter?: boolean }
 
 const median = (xs: number[]) => {
   const s = [...xs].sort((a, b) => a - b)
@@ -103,7 +103,7 @@ function tally(items: Array<{ m: MetricDef; v: number; ref: number; gap: number 
 function startShare(rows: MonthRow[], matches: MatchMinutesLike[] | undefined, from: string, to: string) {
   if (matches?.length) {
     const list = matches.filter(m => m.minutes > 0 && m.date.slice(0, 7) >= from && m.date.slice(0, 7) <= to)
-    return { played: list.length, starts: list.filter(m => m.minutes >= STARTER_MINUTES).length }
+    return { played: list.length, starts: list.filter(isStart).length }
   }
   const t = totalsBetween(rows, from, to)
   // Sin el detalle por partido: 75' de promedio o más ≈ titular siempre.
@@ -111,9 +111,10 @@ function startShare(rows: MonthRow[], matches: MatchMinutesLike[] | undefined, f
 }
 
 function roleOf(rows: MonthRow[], matches: MatchMinutesLike[] | undefined, today: Date) {
-  const last = rows[rows.length - 1].month.slice(0, 7)
+  const playedDates = matches?.filter(m => m.minutes > 0).map(m => m.date.slice(0, 7)).sort()
+  const last = playedDates?.length ? playedDates[playedDates.length - 1] : rows[rows.length - 1].month.slice(0, 7)
   if (last < monthsAgo(1, today)) {
-    return { role: 'sinPartidos' as Role, change: null as RoleChange, text: `Sin partidos cargados desde ${monthLabel(`${last}-01`)}.` }
+    return { role: 'sinPartidos' as Role, change: null as RoleChange, text: `Sin jugar desde ${monthLabel(`${last}-01`)}.` }
   }
   const now = startShare(rows, matches, monthsAgo(2, today), monthsAgo(0, today))
   const before = startShare(rows, matches, monthsAgo(11, today), monthsAgo(3, today))
@@ -245,39 +246,40 @@ const name = (m: MetricDef) => lowerFirst(m.label)
 const trendExample = (i: DiagItem) => `${name(i.metric)} ${fmtMetric(i.metric, i.ref)} → ${fmtMetric(i.metric, i.value)}`
 const peerExample = (i: DiagItem) => `${name(i.metric)} ${fmtMetric(i.metric, i.value)} (ellos ${fmtMetric(i.metric, i.ref)})`
 const examples = (list: DiagItem[], fmt: (i: DiagItem) => string, n = 3) =>
-  list.slice(0, n).map(fmt).join(' · ') + (list.length > n ? ` y ${list.length - n} más` : '')
-const metricas = (n: number) => `${n} ${n === 1 ? 'métrica' : 'métricas'}`
+  list.slice(0, n).map(fmt).join(' · ') + (list.length > n ? ` y ${list.length - n} ${list.length - n === 1 ? 'cosa' : 'cosas'} más` : '')
 
-/** "Mejoró en 4 de 7 métricas de su puesto: gambetas 1,2 → 2,0 · xA 0,10 → 0,22. Bajó en 1: …" */
+// Sin "4 de 7 métricas": los textos dicen en qué mejoró o empeoró, con los números al lado.
+
+/** "Está mejor que el año anterior en: gambetas 1,2 → 2,0 · xA 0,10 → 0,22. Está peor en: …" */
 export function formText(f: Tally): string {
   const up = f.better.length, down = f.worse.length
-  if (!up && !down) return `Ningún cambio claro en las ${metricas(f.total)} de su puesto.`
-  const a = up ? `Mejoró en ${up} de ${metricas(f.total)}: ${examples(f.better, trendExample)}.` : `No mejoró en ninguna de las ${metricas(f.total)}.`
-  const b = down ? ` Bajó en ${down}: ${examples(f.worse, trendExample)}.` : ' No bajó en ninguna.'
+  if (!up && !down) return 'Está igual que el año anterior en lo que importa para su puesto.'
+  const a = up ? `Está mejor que el año anterior en: ${examples(f.better, trendExample)}.` : 'No está mejor en nada importante.'
+  const b = down ? ` Está peor en: ${examples(f.worse, trendExample)}.` : ' No está peor en nada importante.'
   return a + b
 }
 
-/** "Mejor en 3 de 8 métricas: goles 0,32 (ellos 0,09) · … Peor en 1: …" */
+/** "Mejor que ellos en: goles 0,32 (ellos 0,09) · … Peor en: …" */
 export function levelText(l: Tally): string {
   const up = l.better.length, down = l.worse.length
-  if (!up && !down) return `Parecido a ellos en las ${metricas(l.total)} de su puesto.`
-  const a = up ? `Mejor en ${up} de ${metricas(l.total)}: ${examples(l.better, peerExample)}.` : `No los supera claro en ninguna de las ${metricas(l.total)}.`
-  const b = down ? ` Peor en ${down}: ${examples(l.worse, peerExample)}.` : ' No queda abajo en ninguna.'
+  if (!up && !down) return 'Rinde parecido a ellos en lo que importa para su puesto.'
+  const a = up ? `Mejor que ellos en: ${examples(l.better, peerExample)}.` : 'No los supera claramente en nada.'
+  const b = down ? ` Peor en: ${examples(l.worse, peerExample)}.` : ' No queda abajo en nada.'
   return a + b
 }
 
-/** Etiqueta corta para chips: "Mejoró en 4 de 7". */
+/** Etiqueta corta para chips. */
 export function formChip(f: Tally): string {
-  return f.state === 'up' ? `Mejoró en ${f.better.length} de ${f.total}`
-    : f.state === 'down' ? `Bajó en ${f.worse.length} de ${f.total}`
-    : 'Sin cambios claros'
+  return f.state === 'up' ? 'Viene mejorando'
+    : f.state === 'down' ? 'Viene bajando'
+    : 'Igual que antes'
 }
 
 export function levelChip(l: Tally, group: PosGroup | null): string {
-  const who = group ? POS_GROUP_LABEL[group].many : 'sus pares'
-  return l.state === 'up' ? `Mejor que los ${who} en ${l.better.length} de ${l.total}`
-    : l.state === 'down' ? `Peor que los ${who} en ${l.worse.length} de ${l.total}`
-    : `Parecido a los ${who}`
+  const who = group ? POS_GROUP_LABEL[group].many : 'jugadores'
+  return l.state === 'up' ? `Rinde más que los otros ${who}`
+    : l.state === 'down' ? `Rinde menos que los otros ${who}`
+    : `Rinde como los otros ${who}`
 }
 
 // ── Por posición (Inicio) ──────────────────────────────────────────────────

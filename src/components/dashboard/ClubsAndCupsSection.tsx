@@ -107,7 +107,7 @@ function CompetitionFixtures({ teamId, leagueId, season }: { teamId: number; lea
             <img src={opponent.logo} alt="" className="w-6 h-6 object-contain flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-sm text-apple-gray-800 dark:text-white truncate">
-                {f.isHome ? 'vs' : '@'} {opponent.name}
+                vs {opponent.name} {f.isHome ? '(L)' : '(V)'}
               </p>
               <p className="text-xs text-apple-gray-500 truncate">{f.round}</p>
             </div>

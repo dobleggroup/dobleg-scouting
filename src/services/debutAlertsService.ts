@@ -56,8 +56,8 @@ interface DebutAlertRow {
 // una red de seguridad (bien por debajo del corte silencioso de 1000 filas de
 // PostgREST, ver `_shared/fetchAll.ts`) para el caso de que la ventana de
 // fecha por sí sola no alcance a acotarlo.
-const DAYS_WINDOW = 40
-const SAFETY_LIMIT = 300
+const DAYS_WINDOW = 90
+const SAFETY_LIMIT = 900
 // Solo alertas contrastadas con Transfermarkt (edge function verify-debuts): 'pending' todavía
 // no se revisó y 'rejected' es un jugador que ya había debutado antes.
 export const VISIBLE_VERIFICATIONS = ['confirmed', 'adjusted', 'no_tm'] as const
@@ -160,26 +160,40 @@ export async function fetchDebutAlerts(): Promise<DebutAlert[]> {
 // el mismo id que usa debut_alerts.player_id). RLS de scout_players ya scopea
 // por club (current_club_id()) -- esta consulta automáticamente devuelve
 // sólo lo que corresponde a la plataforma que la corre, sin código extra acá.
-export async function fetchSeguimientoStatus(playerIds: number[]): Promise<Map<number, string>> {
+export type SeguimientoList = 'datos' | 'scouts_gg'
+
+/** En qué listas de seguimiento está cada jugador (id de la base -> fila y listas). */
+export interface SeguimientoMembership {
+  scoutPlayerId: string
+  datos: boolean
+  scouts_gg: boolean
+}
+
+export async function fetchSeguimientoStatus(playerIds: number[]): Promise<Map<number, SeguimientoMembership>> {
   if (playerIds.length === 0) return new Map()
 
   const { data, error } = await supabase
     .from('scout_players')
-    .select('id, supabase_player_id')
+    .select('id, supabase_player_id, in_datos_list, in_scouts_gg_list')
     .in('supabase_player_id', playerIds)
-    .eq('in_scouts_gg_list', true)
+    .or('in_datos_list.eq.true,in_scouts_gg_list.eq.true')
 
   if (error) throw error
 
   return new Map(
     (data || [])
-      .filter((r): r is { id: string; supabase_player_id: number } => r.supabase_player_id !== null)
-      .map(r => [r.supabase_player_id, r.id])
+      .filter(r => r.supabase_player_id !== null)
+      .map(r => [r.supabase_player_id as number, {
+        scoutPlayerId: r.id as string,
+        datos: !!r.in_datos_list,
+        scouts_gg: !!r.in_scouts_gg_list,
+      }])
   )
 }
 
 export async function addDebutAlertToSeguimiento(
   alert: DebutAlert,
+  list: SeguimientoList,
   userId: string,
   userName: string
 ): Promise<string | null> {
@@ -192,13 +206,13 @@ export async function addDebutAlertToSeguimiento(
       nacionalidad: alert.nationality ?? undefined,
       agente: alert.agent ?? undefined,
     },
-    'scouts_gg',
+    list,
     userId,
     userName
   )
   return created?.id ?? null
 }
 
-export async function removeDebutAlertFromSeguimiento(scoutPlayerId: string): Promise<boolean> {
-  return removeScoutPlayerFromList(scoutPlayerId, 'scouts_gg')
+export async function removeDebutAlertFromSeguimiento(scoutPlayerId: string, list: SeguimientoList): Promise<boolean> {
+  return removeScoutPlayerFromList(scoutPlayerId, list)
 }

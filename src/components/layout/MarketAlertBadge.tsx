@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchClubNeeds, fetchNegotiations, fetchTeamMembers } from '@/services/marketService'
-import { computeAlerts, type AlertableItem } from '@/utils/marketAlerts'
+import { fetchClubNeeds, fetchNegotiations, fetchTeamMembers, findMe } from '@/services/marketService'
+import { computeAlerts, type AlertableItem, type MarketAlert } from '@/utils/marketAlerts'
 import { NEGOTIATION_STATUS_LABEL_KEY, NEGOTIATION_STATUS_COLOR, NEED_STATUS_LABEL_KEY, NEED_STATUS_COLOR } from '@/components/market/marketLabels'
 import { useAuth } from '@/context/AuthContext'
 import { useLanguage } from '@/context/LanguageContext'
 import type { ClubNeed, Negotiation } from '@/types/market'
 import { fetchNotifications, markAllNotificationsRead, type AppNotification } from '@/services/notificationsService'
+import { fetchCalendarNotes, isNoteForMe, type CalendarNote } from '@/services/marketNotesService'
 
 interface AlertEntry {
-  kind: 'negotiation' | 'need'
+  kind: 'negotiation' | 'need' | 'note'
   id: number
-  urgency: 'vencido' | 'proximo'
+  urgency: MarketAlert['urgency']
   title: string
   subtitle: string
   dueDate: string
@@ -36,6 +37,14 @@ const CACHE_TTL_MS = 60_000
  * sincronice entre el celu y la compu para esto.
  */
 const SEEN_STORAGE_KEY = 'mercado_alertas_vistas'
+
+const URGENCY_LABEL_KEY: Record<MarketAlert['urgency'], string> = {
+  vencido: 'mercado.urgenciaVencido',
+  hoy: 'mercado.urgenciaHoy',
+  manana: 'mercado.urgenciaManana',
+}
+const URGENCY_DOT: Record<MarketAlert['urgency'], string> = { vencido: 'bg-red-500', hoy: 'bg-brand-green', manana: 'bg-amber-500' }
+const URGENCY_TEXT: Record<MarketAlert['urgency'], string> = { vencido: 'text-red-500', hoy: 'text-brand-green', manana: 'text-amber-500' }
 
 function notifTimeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
@@ -71,7 +80,7 @@ function saveSeenKeys(keys: Set<string>) {
 function buildEntries(negotiations: Negotiation[], needs: ClubNeed[], meMemberId: number | null): AlertEntry[] {
   const items: AlertableItem[] = [
     ...needs.map(n => ({ id: n.id, kind: 'need' as const, status: n.status, assigned_to_id: n.assigned_to_id, next_followup_date: n.next_followup_date })),
-    ...negotiations.map(n => ({ id: n.id, kind: 'negotiation' as const, status: n.status, assigned_to_id: n.assigned_to_id, next_followup_date: n.next_followup_date })),
+    ...negotiations.filter(n => !n.hidden_at).map(n => ({ id: n.id, kind: 'negotiation' as const, status: n.status, assigned_to_id: n.assigned_to_id, next_followup_date: n.next_followup_date })),
   ]
   const alerts = computeAlerts(items, new Date())
   const mine = meMemberId != null ? alerts.filter(a => a.assigned_to_id === meMemberId) : alerts
@@ -105,6 +114,32 @@ function buildEntries(negotiations: Negotiation[], needs: ClubNeed[], meMemberId
   })
 }
 
+/** Notas del calendario sin hacer, para quien le toca avisar, desde el día anterior. */
+function buildNoteEntries(notes: CalendarNote[], meMemberId: number | null, userId: string | undefined): AlertEntry[] {
+  if (!userId) return []
+  const today = new Date()
+  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const out: AlertEntry[] = []
+  for (const n of notes) {
+    if (n.done || !isNoteForMe(n, meMemberId, userId)) continue
+    const [y, m, d] = n.note_date.split('-').map(Number)
+    const diff = Math.round((new Date(y, m - 1, d).getTime() - todayMidnight.getTime()) / 86_400_000)
+    if (diff > 1) continue
+    out.push({
+      kind: 'note',
+      id: n.id,
+      urgency: diff < 0 ? 'vencido' : diff === 0 ? 'hoy' : 'manana',
+      title: n.body.length > 60 ? `${n.body.slice(0, 60)}…` : n.body,
+      subtitle: n.assigned_to_name && n.assigned_user_id !== n.created_by ? `Nota de ${n.created_by_name}` : 'Recordatorio',
+      dueDate: n.note_date,
+      statusLabelKey: '',
+      statusColor: '',
+      assignedToName: n.assigned_to_name,
+    })
+  }
+  return out
+}
+
 export default function MarketAlertBadge() {
   const { user, userDisplayName, loading: authLoading } = useAuth()
   const { t } = useLanguage()
@@ -123,11 +158,10 @@ export default function MarketAlertBadge() {
       return
     }
     setLoading(true)
-    Promise.all([fetchClubNeeds(), fetchNegotiations(), fetchTeamMembers()])
-      .then(([needs, negotiations, members]) => {
-        const me = members.find(m => m.user_id === user?.id)
-          ?? members.find(m => m.name.toLowerCase() === (userDisplayName || '').toLowerCase())
-        const result = buildEntries(negotiations, needs, me?.id ?? null)
+    Promise.all([fetchClubNeeds(), fetchNegotiations(), fetchTeamMembers(), fetchCalendarNotes()])
+      .then(([needs, negotiations, members, notes]) => {
+        const me = findMe(members, user?.id, userDisplayName)
+        const result = [...buildNoteEntries(notes, me?.id ?? null, user?.id), ...buildEntries(negotiations, needs, me?.id ?? null)]
         cached = { entries: result, timestamp: Date.now() }
         setEntries(result)
       })
@@ -145,6 +179,23 @@ export default function MarketAlertBadge() {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user?.id, userDisplayName])
+
+  // La campanita se mantiene al día sola mientras la plataforma está abierta:
+  // cada 90 segundos (si la pestaña está a la vista) y al volver a la pestaña.
+  // Sin esto, una asignación hecha por otro recién se veía al recargar.
+  useEffect(() => {
+    if (authLoading || !user) return
+    const refresh = () => { if (document.visibilityState === 'visible') load(true) }
+    const timer = window.setInterval(refresh, 90_000)
+    document.addEventListener('visibilitychange', refresh)
+    window.addEventListener('focus', refresh)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', refresh)
+      window.removeEventListener('focus', refresh)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, user?.id])
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -183,7 +234,7 @@ export default function MarketAlertBadge() {
 
   const handleSelect = (entry: AlertEntry) => {
     setOpen(false)
-    navigate(`/mercado?highlight=${entry.kind}-${entry.id}`)
+    navigate(entry.kind === 'note' ? `/mercado?nota=${entry.id}` : `/mercado?highlight=${entry.kind}-${entry.id}`)
   }
 
   const handleSelectNotif = (n: AppNotification) => {
@@ -248,7 +299,7 @@ export default function MarketAlertBadge() {
                 onClick={() => handleSelect(entry)}
                 className="w-full flex items-start gap-2.5 px-3.5 py-2.5 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/60 transition-colors"
               >
-                <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${entry.urgency === 'vencido' ? 'bg-red-500' : 'bg-amber-500'}`} />
+                <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${URGENCY_DOT[entry.urgency]}`} />
                 <div className="min-w-0 flex-1 space-y-0.5">
                   <div className="flex items-center gap-1.5">
                     <p className={`text-sm truncate ${unread ? 'font-semibold text-apple-gray-900 dark:text-white' : 'font-medium text-apple-gray-500 dark:text-apple-gray-400'}`}>{entry.title}</p>
@@ -263,8 +314,8 @@ export default function MarketAlertBadge() {
                   <p className="text-2xs text-apple-gray-400 truncate">
                     {entry.assignedToName || t('mercado.sinAsignar')}
                     {' · '}
-                    <span className={entry.urgency === 'vencido' ? 'text-red-500 font-medium' : 'text-amber-500 font-medium'}>
-                      {t(entry.urgency === 'vencido' ? 'mercado.urgenciaVencido' : 'mercado.urgenciaProximo')}
+                    <span className={`font-medium ${URGENCY_TEXT[entry.urgency]}`}>
+                      {t(URGENCY_LABEL_KEY[entry.urgency])}
                     </span>
                   </p>
                 </div>

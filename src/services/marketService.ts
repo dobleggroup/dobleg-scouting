@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { dedupeTeamsByName } from './playerStatsService'
 import { DISPLAY_POSITION_MAP } from '@/constants/scoring'
+import { notifyAccounts } from './notificationsService'
 import type { TeamMember, ClubNeed, ClubContact, Negotiation, MarketNote, MarketTeamSearchResult, NeedStatus, NegotiationStatus, NeedCandidate, CandidateStatus } from '@/types/market'
 
 /**
@@ -123,10 +124,22 @@ export function isMarketLinkAdmin(email: string | null | undefined): boolean {
   return !!email && MARKET_LINK_ADMIN_EMAILS.includes(email.toLowerCase())
 }
 
+/** Todas las cuentas de una persona del equipo (la principal y las otras). */
+export function memberAccounts(member: Pick<TeamMember, 'user_id' | 'alt_user_ids'> | null | undefined): string[] {
+  if (!member) return []
+  return [member.user_id, ...(member.alt_user_ids ?? [])].filter((id): id is string => !!id)
+}
+
+/** La persona del equipo que está usando la app: por cualquiera de sus cuentas o, si no, por nombre. */
+export function findMe(members: TeamMember[], userId: string | null | undefined, displayName?: string | null): TeamMember | undefined {
+  return (userId ? members.find(m => memberAccounts(m).includes(userId)) : undefined)
+    ?? (displayName ? members.find(m => m.name.toLowerCase() === displayName.toLowerCase()) : undefined)
+}
+
 export async function fetchTeamMembers(): Promise<TeamMember[]> {
   const { data, error } = await supabase
     .from('market_team_members')
-    .select('id, name, active, user_id')
+    .select('id, name, active, user_id, alt_user_ids')
     .eq('active', true)
     .order('name')
   if (error) throw error
@@ -177,13 +190,28 @@ export async function fetchNegotiations(): Promise<Negotiation[]> {
 }
 
 export interface CreateClubNeedInput {
-  team_id: number
+  team_id: number | null
   team_name: string
   team_logo: string | null
   position_label: string
   assigned_to_id: number | null
   assigned_to_name: string | null
   next_followup_date: string | null
+}
+
+/**
+ * Aviso en la campanita a la persona a la que le asignan algo en Mercado (a
+ * todas sus cuentas), salvo que se lo asigne uno mismo. Si falla el aviso, la
+ * asignación igual queda hecha.
+ */
+async function notifyMarketAssignee(memberId: number | null | undefined, actingUserId: string | null, message: string, link: string) {
+  if (memberId == null) return
+  try {
+    const { data } = await supabase.from('market_team_members').select('user_id, alt_user_ids').eq('id', memberId).single()
+    await notifyAccounts(memberAccounts(data as Pick<TeamMember, 'user_id' | 'alt_user_ids'> | null), 'mercado_asignacion', message, link, actingUserId)
+  } catch (e) {
+    console.error('notifyMarketAssignee error:', e)
+  }
 }
 
 export async function createClubNeed(input: CreateClubNeedInput, createdById: string | null, createdByName: string): Promise<ClubNeed | null> {
@@ -193,6 +221,9 @@ export async function createClubNeed(input: CreateClubNeedInput, createdById: st
     .select()
     .single()
   if (error) { console.error('createClubNeed error:', error); return null }
+  await notifyMarketAssignee(data.assigned_to_id, createdById,
+    `${createdByName} te asignó la búsqueda de ${data.team_name}${data.position_label ? ` (${data.position_label})` : ''}`,
+    `/mercado?highlight=need-${data.id}`)
   return data
 }
 
@@ -223,6 +254,9 @@ export async function createNegotiation(input: CreateNegotiationInput, createdBy
     .select()
     .single()
   if (error) { console.error('createNegotiation error:', error); return null }
+  await notifyMarketAssignee(data.assigned_to_id, createdById,
+    `${createdByName} te asignó la negociación de ${data.player_name}${data.team_name ? ` → ${data.team_name}` : ''}`,
+    `/mercado?highlight=negotiation-${data.id}`)
   const needId = await linkOrCreateNeedForNegotiation(data)
   return { ...data, need_id: needId }
 }
@@ -230,6 +264,16 @@ export async function createNegotiation(input: CreateNegotiationInput, createdBy
 export async function updateNeedStatus(id: number, status: NeedStatus): Promise<boolean> {
   const { error } = await supabase.from('market_club_needs').update({ status, updated_at: new Date().toISOString() }).eq('id', id)
   if (error) { console.error('updateNeedStatus error:', error); return false }
+  return true
+}
+
+/** Oculta (o vuelve a mostrar) una negociación. No se borra: queda para consultarla después. */
+export async function setNegotiationHidden(id: number, hidden: boolean, userName: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('market_negotiations')
+    .update({ hidden_at: hidden ? new Date().toISOString() : null, hidden_by_name: hidden ? userName : null })
+    .eq('id', id)
+  if (error) { console.error('setNegotiationHidden error:', error); return false }
   return true
 }
 
@@ -328,6 +372,10 @@ export async function reassignNeed(id: number, newAssigneeId: number, newAssigne
     if (rollbackError) console.error('reassignNeed rollback error:', rollbackError)
     return false
   }
+  const { data: need } = await supabase.from('market_club_needs').select('team_name, position_label').eq('id', id).single()
+  await notifyMarketAssignee(newAssigneeId, actingUserId,
+    `${actingUserName} te asignó la búsqueda de ${need?.team_name ?? ''}${need?.position_label ? ` (${need.position_label})` : ''}`,
+    `/mercado?highlight=need-${id}`)
   return true
 }
 
@@ -355,6 +403,10 @@ export async function reassignNegotiation(id: number, newAssigneeId: number, new
     if (rollbackError) console.error('reassignNegotiation rollback error:', rollbackError)
     return false
   }
+  const { data: neg } = await supabase.from('market_negotiations').select('player_name, team_name').eq('id', id).single()
+  await notifyMarketAssignee(newAssigneeId, actingUserId,
+    `${actingUserName} te asignó la negociación de ${neg?.player_name ?? ''}${neg?.team_name ? ` → ${neg.team_name}` : ''}`,
+    `/mercado?highlight=negotiation-${id}`)
   return true
 }
 
@@ -436,19 +488,130 @@ export async function fetchCandidatesFor(needId: number): Promise<NeedCandidate[
   return data ?? []
 }
 
-export async function addCandidate(
-  needId: number,
-  playerName: string,
-  addedById: string | null,
-  addedByName: string,
-): Promise<NeedCandidate | null> {
+export async function fetchAllCandidates(): Promise<NeedCandidate[]> {
   const { data, error } = await supabase
     .from('market_need_candidates')
-    .insert({ need_id: needId, player_name: playerName, added_by_id: addedById, added_by_name: addedByName })
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+/**
+ * Crea la negociación de un jugador ofrecido en una búsqueda, con lo poco que
+ * se sabe en ese momento (nombre, club y puesto de la búsqueda, responsable).
+ * Ofrecer un nombre en una búsqueda ES abrir una negociación — así cada
+ * ofrecido tiene su propia fecha para volver a hablar, su contacto en el
+ * club y su responsable, y aparece en Negociaciones, en el calendario y en la
+ * campanita sin cargarlo dos veces. Lo demás (club actual, representante,
+ * vínculo con la API) se completa después desde Negociaciones.
+ */
+async function createNegotiationForCandidate(
+  need: ClubNeed,
+  playerName: string,
+  status: NegotiationStatus,
+  assignee: { id: number; name: string } | null,
+  createdById: string | null,
+  createdByName: string,
+): Promise<Negotiation | null> {
+  const { data, error } = await supabase
+    .from('market_negotiations')
+    .insert({
+      team_id: need.team_id,
+      team_name: need.team_name,
+      team_logo: need.team_logo,
+      player_name: playerName,
+      position_label: need.position_label,
+      need_id: need.id,
+      status,
+      assigned_to_id: assignee?.id ?? null,
+      assigned_to_name: assignee?.name ?? null,
+      created_by_id: createdById,
+      created_by_name: createdByName,
+    })
     .select()
     .single()
-  if (error) { console.error('addCandidate error:', error); return null }
+  if (error) { console.error('createNegotiationForCandidate error:', error); return null }
   return data
+}
+
+export async function addCandidate(
+  need: ClubNeed,
+  playerName: string,
+  assignee: { id: number; name: string } | null,
+  addedById: string | null,
+  addedByName: string,
+): Promise<{ candidate: NeedCandidate; negotiation: Negotiation } | null> {
+  const negotiation = await createNegotiationForCandidate(need, playerName, 'ofrecido', assignee, addedById, addedByName)
+  if (!negotiation) return null
+  const { data, error } = await supabase
+    .from('market_need_candidates')
+    .insert({ need_id: need.id, player_name: playerName, negotiation_id: negotiation.id, added_by_id: addedById, added_by_name: addedByName })
+    .select()
+    .single()
+  if (error) {
+    console.error('addCandidate error:', error)
+    await supabase.from('market_negotiations').delete().eq('id', negotiation.id)
+    return null
+  }
+  return { candidate: data, negotiation }
+}
+
+/**
+ * Ofrecidos cargados antes de que cada uno tuviera su negociación: se la crea
+ * recién cuando alguien le pone fecha, contacto o responsable (no en masa al
+ * abrir la búsqueda, para no llenar Negociaciones de golpe sin que nadie lo pida).
+ */
+export async function ensureCandidateNegotiation(
+  candidate: NeedCandidate,
+  need: ClubNeed,
+  createdById: string | null,
+  createdByName: string,
+): Promise<Negotiation | null> {
+  if (candidate.negotiation_id) {
+    const { data, error } = await supabase.from('market_negotiations').select('*').eq('id', candidate.negotiation_id).single()
+    if (error) { console.error('ensureCandidateNegotiation fetch error:', error); return null }
+    return data
+  }
+  const negotiation = await createNegotiationForCandidate(
+    need,
+    candidate.player_name,
+    CANDIDATE_TO_NEGOTIATION_STATUS[candidate.status],
+    need.assigned_to_id != null && need.assigned_to_name ? { id: need.assigned_to_id, name: need.assigned_to_name } : null,
+    createdById,
+    createdByName,
+  )
+  if (!negotiation) return null
+  const update: Record<string, unknown> = { negotiation_id: negotiation.id }
+  if (candidate.player_api_id) {
+    await supabase.from('market_negotiations')
+      .update({ player_api_id: candidate.player_api_id, player_source: candidate.player_source })
+      .eq('id', negotiation.id)
+  }
+  const { error } = await supabase.from('market_need_candidates').update(update).eq('id', candidate.id)
+  if (error) { console.error('ensureCandidateNegotiation link error:', error); return null }
+  return { ...negotiation, player_api_id: candidate.player_api_id, player_source: candidate.player_source }
+}
+
+/** "Con quién hablamos" del lado del club destino. */
+export async function updateNegotiationTargetContacts(id: number, contacts: ClubContact[]): Promise<boolean> {
+  const { error } = await supabase
+    .from('market_negotiations')
+    .update({ target_club_contacts: contacts, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) { console.error('updateNegotiationTargetContacts error:', error); return false }
+  return true
+}
+
+/** Sacar a un ofrecido de la búsqueda saca también su negociación (se cargó junto con él). */
+export async function removeCandidateAndNegotiation(candidate: NeedCandidate): Promise<boolean> {
+  const ok = await removeCandidate(candidate.id)
+  if (!ok) return false
+  if (candidate.negotiation_id) {
+    const { error } = await supabase.from('market_negotiations').delete().eq('id', candidate.negotiation_id)
+    if (error) console.error('removeCandidateAndNegotiation negotiation error:', error)
+  }
+  return true
 }
 
 export async function updateCandidateStatus(id: number, status: CandidateStatus): Promise<boolean> {

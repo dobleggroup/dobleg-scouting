@@ -88,17 +88,30 @@ function mainLeague(rows: MonthRow[]): string | null {
   return [...count.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
 }
 
-export function playerSnapshot(rows: MonthRow[], byPlayer: Map<string, MonthRow[]>, today = new Date()): Snapshot {
+/**
+ * `play`: sus partidos de API-Football / Sofascore (ver participation.ts). Si
+ * están, los minutos y partidos salen de ahí; el rendimiento, siempre de Wyscout.
+ */
+export function playerSnapshot(rows: MonthRow[], byPlayer: Map<string, MonthRow[]>, today = new Date(), play?: Array<{ date: string; minutes: number }>): Snapshot {
   const group = playerGroup(rows)
+  const played = play?.filter(m => m.minutes > 0)
+  const minutesIn = (m: string) => (played
+    ? played.filter(x => x.date.slice(0, 7) === m).reduce((s, x) => s + x.minutes, 0)
+    : rows.filter(r => r.month.slice(0, 7) === m).reduce((s, r) => s + r.minutes, 0))
   const months = Array.from({ length: 12 }, (_, i) => {
     const m = monthsAgo(11 - i, today)
-    return { month: m, minutes: rows.filter(r => r.month.slice(0, 7) === m).reduce((s, r) => s + r.minutes, 0) }
+    return { month: m, minutes: minutesIn(m) }
   })
-  const recent = totalsBetween(rows, monthsAgo(2, today), monthsAgo(0, today))
+  const wyRecent = totalsBetween(rows, monthsAgo(2, today), monthsAgo(0, today))
+  const recentPlay = played?.filter(x => x.date.slice(0, 7) >= monthsAgo(2, today))
+  const recent = recentPlay
+    ? { matches: recentPlay.length, minutes: recentPlay.reduce((s, x) => s + x.minutes, 0) }
+    : { matches: wyRecent.matches, minutes: wyRecent.minutes }
   const last = rows[rows.length - 1]
+  const lastPlayed = played?.length ? played[played.length - 1].date.slice(0, 7) : last.month.slice(0, 7)
   const trend = playerTrend(rows, today)
   // Sin partidos este mes ni el anterior: puede estar lesionado, sin club o sin carga nueva.
-  const stale = last.month.slice(0, 7) < monthsAgo(1, today)
+  const stale = lastPlayed < monthsAgo(1, today)
   const status: Status = stale ? 'sinPartidos'
     : recent.minutes < LOW_MINUTES_3M ? 'juegaPoco'
     : !trend ? 'sinHistoria'
@@ -111,7 +124,7 @@ export function playerSnapshot(rows: MonthRow[], byPlayer: Map<string, MonthRow[
     months,
     matches3m: recent.matches,
     minutes3m: recent.minutes,
-    lastMonth: last.month.slice(0, 7),
+    lastMonth: lastPlayed,
     competition: mainLeague(rows.slice(-6)),
     trend,
     status,

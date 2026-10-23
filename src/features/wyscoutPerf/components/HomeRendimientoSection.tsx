@@ -85,10 +85,10 @@ export default function HomeRendimientoSection() {
 
       <div className="grid lg:grid-cols-2 gap-5">
         <Card title={`En su mejor momento · ${moments.hot.length}`} to="/rendimiento-individual">
-          <MomentList items={moments.hot.slice(0, 5)} photo={photo} onOpen={open} empty="Nadie se destaca por ahora." />
+          <MomentList kind="hot" items={moments.hot.slice(0, 5)} photo={photo} onOpen={open} empty="Nadie se destaca por ahora." />
         </Card>
         <Card title={`Preocupan · ${moments.concern.length}`} to="/rendimiento-individual">
-          <MomentList items={moments.concern.slice(0, 5)} photo={photo} onOpen={open} empty="Nadie preocupante por ahora." />
+          <MomentList kind="concern" items={moments.concern.slice(0, 5)} photo={photo} onOpen={open} empty="Nadie preocupante por ahora." />
         </Card>
       </div>
 

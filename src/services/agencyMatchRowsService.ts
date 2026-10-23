@@ -25,7 +25,7 @@ const STAT_COLUMNS = `
   player_id, team_id, fixture_id, minutes, goals, assists,
   shots_total, shots_on, passes_total, passes_key, passes_accuracy,
   tackles, interceptions, duels_won, duels_total, dribbles_success, dribbles_attempted,
-  rating, detected_position,
+  rating, detected_position, is_substitute,
   player:players(name),
   fixture:fixtures!inner(date, league_id, home_team_id, away_team_id, score_home, score_away)
 `

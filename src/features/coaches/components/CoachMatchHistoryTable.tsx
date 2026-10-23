@@ -124,7 +124,7 @@ export default function CoachMatchHistoryTable({ rows, fixtures, coachKey }: { r
                       onClick={e => e.stopPropagation()}
                       className="font-medium text-apple-gray-800 dark:text-white truncate hover:text-brand-green focus-visible:outline-none focus-visible:underline"
                     >
-                      {row.isHome ? 'vs' : '@'} {row.opponent}
+                      vs {row.opponent} {row.isHome ? '(L)' : '(V)'}
                     </Link>
                   </div>
                 </td>

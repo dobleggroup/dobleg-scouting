@@ -19,7 +19,26 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login', forc
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState('')
 
-  const { signIn, signUp, signInWithGoogle, signInWithApple } = useAuth()
+  const { signIn, signUp, signInWithGoogle, signInWithApple, sendPasswordReset } = useAuth()
+
+  const handleForgot = async () => {
+    setError('')
+    setSuccess('')
+    if (!email.trim()) { setError(t('auth.escribiTuEmail')); return }
+    setLoading(true)
+    const { error } = await sendPasswordReset(email.trim())
+    setLoading(false)
+    if (error) setError(t('auth.errorConexion'))
+    else setSuccess(t('auth.mailRecuperoEnviado'))
+  }
+
+  const forgotLink = mode === 'login' && (
+    <div className="flex justify-end -mt-2">
+      <button type="button" onClick={handleForgot} className="text-xs font-medium text-apple-gray-500 hover:text-brand-green transition-colors">
+        {t('auth.olvideContrasena')}
+      </button>
+    </div>
+  )
   const [googleLoading, setGoogleLoading] = useState(false)
   const [appleLoading, setAppleLoading] = useState(false)
 
@@ -168,6 +187,8 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login', forc
               />
             </div>
           </div>
+
+          {forgotLink}
 
           {error && (
             <div className="flex items-center gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
@@ -355,6 +376,8 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login', forc
               required
             />
           </div>
+
+          {forgotLink}
 
           {error && (
             <div className="p-3 rounded-apple bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">

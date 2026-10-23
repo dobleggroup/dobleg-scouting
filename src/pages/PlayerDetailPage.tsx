@@ -29,7 +29,7 @@ import { useCurrency } from '@/context/CurrencyContext'
 import { currentClubFromMatches, resolveDisplayClub } from '@/utils/currentClub'
 import { fuzzyMatch } from '@/lib/search'
 import { POSITION_MAP, DISPLAY_POSITION_MAP, DISPLAY_METRICS, RADAR_METRICS, METRIC_ABBREVIATIONS } from '@/constants/scoring'
-import { fetchPlayerEvaluations, fetchEvaluationsByName, type ScoutEvaluation } from '@/services/scoutEvaluationService'
+import { fetchPlayerEvaluations, fetchEvaluationsByName, evaluationComments, type ScoutEvaluation } from '@/services/scoutEvaluationService'
 import { resolveGpsPlayerKey } from '@/services/gpsService'
 import { useApiFootballPlayerId, usePlayerInjuries, usePlayerTransfers } from '@/hooks/usePlayerApiData'
 import TrackingWidget from '@/components/tracking/TrackingWidget'
@@ -44,217 +44,10 @@ import { CLASS_BADGE_COLOR } from '@/constants/agencyClassification'
 import VideosTab from '@/components/videos/VideosTab'
 import type { EnrichedPlayer, SubjectiveMetric } from '@/types'
 
+import PlayerCommentsPanel from '@/components/players/PlayerCommentsPanel'
+
 const SupabasePlayerDetailLazy = lazy(() => import('@/components/players/SupabasePlayerDetail'))
 const PlayerWyscoutTab = lazy(() => import('@/features/wyscoutPerf/components/PlayerWyscoutTab'))
-
-// ─── PLAYER COMMENTS SYSTEM ───────────────────────────────────────────────────
-
-interface PlayerComment {
-  id: string
-  playerKey: string
-  sentiment: 'positive' | 'neutral' | 'negative'
-  text: string
-  author: string
-  createdAt: string
-}
-
-function getCommentsKey(): string {
-  return 'player_comments_v1'
-}
-
-function loadComments(): PlayerComment[] {
-  try {
-    return JSON.parse(localStorage.getItem(getCommentsKey()) || '[]')
-  } catch {
-    return []
-  }
-}
-
-function saveComments(comments: PlayerComment[]): void {
-  localStorage.setItem(getCommentsKey(), JSON.stringify(comments))
-}
-
-function getPlayerKey(player: EnrichedPlayer): string {
-  return `${normalizeName(player.Jugador)}|${normalizeName(player.Equipo)}`
-}
-
-interface CommentsProps {
-  player: EnrichedPlayer
-}
-
-function PlayerComments({ player }: CommentsProps) {
-  const [comments, setComments] = useState<PlayerComment[]>([])
-  const [newComment, setNewComment] = useState('')
-  const [newAuthor, setNewAuthor] = useState(() => {
-    try { return localStorage.getItem('comment_author') || '' } catch { return '' }
-  })
-  const [newSentiment, setNewSentiment] = useState<'positive' | 'neutral' | 'negative'>('neutral')
-  const [isAdding, setIsAdding] = useState(false)
-
-  const playerKey = getPlayerKey(player)
-
-  useEffect(() => {
-    const all = loadComments()
-    setComments(all.filter(c => c.playerKey === playerKey))
-  }, [playerKey])
-
-  const handleAddComment = useCallback(() => {
-    if (!newComment.trim() || !newAuthor.trim()) return
-
-    const comment: PlayerComment = {
-      id: Date.now().toString(),
-      playerKey,
-      sentiment: newSentiment,
-      text: newComment.trim(),
-      author: newAuthor.trim(),
-      createdAt: new Date().toISOString(),
-    }
-
-    const all = loadComments()
-    const updated = [...all, comment]
-    saveComments(updated)
-    setComments(updated.filter(c => c.playerKey === playerKey))
-
-    localStorage.setItem('comment_author', newAuthor.trim())
-    setNewComment('')
-    setNewSentiment('neutral')
-    setIsAdding(false)
-  }, [newComment, newAuthor, newSentiment, playerKey])
-
-  const handleDeleteComment = useCallback((id: string) => {
-    const all = loadComments()
-    const updated = all.filter(c => c.id !== id)
-    saveComments(updated)
-    setComments(updated.filter(c => c.playerKey === playerKey))
-  }, [playerKey])
-
-  const sentimentConfig = {
-    positive: { icon: '👍', label: 'Positivo', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-600 dark:text-emerald-400' },
-    neutral: { icon: '➖', label: 'Neutral', bg: 'bg-amber-500/10', border: 'border-amber-500/30', text: 'text-amber-600 dark:text-amber-400' },
-    negative: { icon: '👎', label: 'Negativo', bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-600 dark:text-red-400' },
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
-          Comentarios ({comments.length})
-        </h3>
-        {!isAdding && (
-          <button
-            onClick={() => setIsAdding(true)}
-            className="btn-apple-secondary text-sm px-3 py-1.5"
-          >
-            + Agregar
-          </button>
-        )}
-      </div>
-
-      {isAdding && (
-        <div className="p-4 bg-apple-gray-50 dark:bg-apple-gray-800/50 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700">
-          <div className="mb-3">
-            <label className="block text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mb-2">
-              Valoración
-            </label>
-            <div className="flex gap-2">
-              {(['positive', 'neutral', 'negative'] as const).map(s => (
-                <button
-                  key={s}
-                  onClick={() => setNewSentiment(s)}
-                  className={`flex-1 py-2 px-3 rounded-lg border-2 transition-all text-sm font-medium ${
-                    newSentiment === s
-                      ? `${sentimentConfig[s].bg} ${sentimentConfig[s].border} ${sentimentConfig[s].text}`
-                      : 'border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-500'
-                  }`}
-                >
-                  <span className="mr-1.5">{sentimentConfig[s].icon}</span>
-                  {sentimentConfig[s].label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="mb-3">
-            <textarea
-              value={newComment}
-              onChange={e => setNewComment(e.target.value)}
-              placeholder="Escribe tu observación..."
-              className="input-apple w-full h-20 resize-none"
-            />
-          </div>
-
-          <div className="mb-4">
-            <input
-              type="text"
-              value={newAuthor}
-              onChange={e => setNewAuthor(e.target.value)}
-              placeholder="Tu nombre..."
-              className="input-apple w-full"
-            />
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => { setIsAdding(false); setNewComment(''); setNewSentiment('neutral') }}
-              className="btn-apple-secondary flex-1"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleAddComment}
-              disabled={!newComment.trim() || !newAuthor.trim()}
-              className="btn-apple-primary flex-1 disabled:opacity-50"
-            >
-              Guardar
-            </button>
-          </div>
-        </div>
-      )}
-
-      {comments.length === 0 && !isAdding ? (
-        <div className="text-center py-6 text-apple-gray-400">
-          <p className="text-sm">Sin comentarios</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {comments
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-            .map(comment => {
-              const config = sentimentConfig[comment.sentiment]
-              const date = new Date(comment.createdAt)
-              return (
-                <div
-                  key={comment.id}
-                  className={`p-3 rounded-xl border ${config.bg} ${config.border}`}
-                >
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <span className={`text-xs font-semibold ${config.text}`}>
-                      {config.icon} {config.label}
-                    </span>
-                    <button
-                      onClick={() => handleDeleteComment(comment.id)}
-                      className="text-apple-gray-400 hover:text-red-500 transition-colors"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                  <p className="text-sm text-apple-gray-700 dark:text-apple-gray-300 leading-relaxed mb-2">
-                    {comment.text}
-                  </p>
-                  <div className="flex items-center justify-between text-2xs text-apple-gray-500">
-                    <span className="font-medium">{comment.author}</span>
-                    <span>{date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}</span>
-                  </div>
-                </div>
-              )
-            })}
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ─── SCORE SCOUT TIMELINE ─────────────────────────────────────────────────────
 
@@ -453,11 +246,12 @@ function ScoreScoutTimeline({ playerId, playerName }: ScoreScoutTimelineProps) {
                     </div>
                   </div>
 
-                  {evaluation.notes && (
-                    <p className="text-sm text-apple-gray-600 dark:text-apple-gray-400 leading-relaxed">
-                      {evaluation.notes}
+                  {evaluationComments(evaluation).map(c => (
+                    <p key={c.label} className="text-sm text-apple-gray-600 dark:text-apple-gray-400 leading-relaxed whitespace-pre-line">
+                      <span className="font-semibold text-apple-gray-700 dark:text-apple-gray-300">{c.label}: </span>
+                      {c.text}
                     </p>
-                  )}
+                  ))}
 
                   <div className="mt-2 flex items-center gap-2 text-2xs text-apple-gray-400">
                     <span>{evaluation.scout_name}</span>
@@ -3104,7 +2898,7 @@ export default function PlayerDetailPage() {
               </button>
             </div>
             <div className="p-5">
-              <PlayerComments player={player} />
+              <PlayerCommentsPanel target={{ name: player.Jugador, supabasePlayerId: rawApiPlayerId }} source="ficha" autoFocus />
             </div>
           </div>
         </div>

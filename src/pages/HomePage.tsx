@@ -33,9 +33,9 @@ const AR_TZ = 'America/Argentina/Buenos_Aires'
 
 // Nombres de día/mes vía Intl según el idioma activo, no arrays fijos en
 // español — evita mantener 9 listas de días/meses a mano por idioma.
-function formatDateLong(date: Date, language: Language): string {
+function formatDateLong(date: Date, language: Language, timeZone: string = AR_TZ): string {
   return new Intl.DateTimeFormat(LANGUAGE_LOCALES[language], {
-    weekday: 'long', day: 'numeric', month: 'long', timeZone: AR_TZ,
+    weekday: 'long', day: 'numeric', month: 'long', timeZone,
   }).format(date)
 }
 
@@ -45,14 +45,47 @@ function formatDateShort(date: Date, language: Language): string {
   }).format(date)
 }
 
-function formatDayShort(date: Date, language: Language): string {
-  return new Intl.DateTimeFormat(LANGUAGE_LOCALES[language], {
-    weekday: 'short', timeZone: AR_TZ,
-  }).format(date).toUpperCase()
+function dateKey(date: Date, timeZone: string = AR_TZ): string {
+  return new Intl.DateTimeFormat('sv-SE', { timeZone }).format(date)
 }
 
-function dateKey(date: Date): string {
-  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' }).format(date)
+// Agenda: horarios en Argentina por defecto; cada uno puede elegir otra zona
+// (se recuerda en este navegador).
+const AGENDA_TZ_KEY = 'dg-agenda-timezone'
+const AGENDA_TIMEZONES: { tz: string; label: string }[] = [
+  { tz: AR_TZ, label: 'Argentina' },
+  { tz: 'America/Montevideo', label: 'Uruguay' },
+  { tz: 'America/Santiago', label: 'Chile' },
+  { tz: 'America/Asuncion', label: 'Paraguay' },
+  { tz: 'America/Sao_Paulo', label: 'Brasil (San Pablo)' },
+  { tz: 'America/La_Paz', label: 'Bolivia' },
+  { tz: 'America/Bogota', label: 'Colombia, Perú y Ecuador' },
+  { tz: 'America/Mexico_City', label: 'México' },
+  { tz: 'America/New_York', label: 'Estados Unidos (Este)' },
+  { tz: 'America/Los_Angeles', label: 'Estados Unidos (Oeste)' },
+  { tz: 'Europe/London', label: 'Inglaterra y Portugal' },
+  { tz: 'Europe/Madrid', label: 'España, Italia, Francia y Alemania' },
+  { tz: 'Europe/Istanbul', label: 'Turquía' },
+  { tz: 'Europe/Moscow', label: 'Rusia' },
+  { tz: 'Asia/Riyadh', label: 'Arabia Saudita' },
+]
+
+function readAgendaTz(): string {
+  try {
+    const saved = localStorage.getItem(AGENDA_TZ_KEY)
+    if (saved && AGENDA_TIMEZONES.some(z => z.tz === saved)) return saved
+  } catch { /* sin storage: queda Argentina */ }
+  return AR_TZ
+}
+
+/** "Ayer", "Hoy", "Mañana" y después el día de la semana + fecha. */
+function agendaDayLabel(offset: number, date: Date, language: Language, timeZone: string, t: (k: string) => string): { title: string; sub: string } {
+  const locale = LANGUAGE_LOCALES[language]
+  const dayMonth = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'numeric', timeZone }).format(date)
+  const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short', timeZone }).format(date).replace('.', '')
+  const named: Record<number, string> = { [-1]: t('home.ayer'), 0: t('home.hoy'), 1: t('home.manana') }
+  if (offset in named) return { title: named[offset], sub: `${weekday} ${dayMonth}` }
+  return { title: weekday.charAt(0).toUpperCase() + weekday.slice(1), sub: dayMonth }
 }
 
 function getGreetingKey(): string {
@@ -65,16 +98,12 @@ function getGreetingKey(): string {
   return 'greeting.evening'
 }
 
-function formatMatchTime(dateStr: string): string {
+function formatMatchTime(dateStr: string, timeZone: string = AR_TZ): string {
   return new Intl.DateTimeFormat('es-AR', {
     hour: '2-digit',
     minute: '2-digit',
-    timeZone: 'America/Argentina/Buenos_Aires',
+    timeZone,
   }).format(new Date(dateStr))
-}
-
-function isSameDay(a: Date, b: Date): boolean {
-  return dateKey(a) === dateKey(b)
 }
 
 function isMatchFinished(status: string): boolean {
@@ -1802,8 +1831,8 @@ function PhysicalHighlightsWidget() {
 
 // ─── Match Card (today/live) ────────────────────────────────────────────────
 
-function MatchCard({ fixture }: { fixture: AgencyFixture }) {
-  const time = formatMatchTime(fixture.date)
+function MatchCard({ fixture, timeZone }: { fixture: AgencyFixture; timeZone: string }) {
+  const time = formatMatchTime(fixture.date, timeZone)
   const finished = isMatchFinished(fixture.statusShort)
   const live = isMatchLive(fixture.statusShort)
   const abroad = isAbroad(fixture)
@@ -1917,7 +1946,13 @@ export default function HomePage() {
   const [fixtures, setFixtures] = useState<AgencyFixture[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedDate, setSelectedDate] = useState(new Date())
+  // Día elegido en la agenda, como distancia a hoy (-1 = ayer ... 5)
+  const [dayOffset, setDayOffset] = useState(0)
+  const [agendaTz, setAgendaTz] = useState(readAgendaTz)
+  const changeAgendaTz = (tz: string) => {
+    setAgendaTz(tz)
+    try { localStorage.setItem(AGENDA_TZ_KEY, tz) } catch { /* no se recuerda, no pasa nada */ }
+  }
   const [refreshing, setRefreshing] = useState(false)
   const [perf, setPerf] = useState<AgencyPerformanceRows | null>(null)
   const perfRows = perf?.rows ?? null
@@ -1976,39 +2011,27 @@ export default function HomePage() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
 
-  const todayFixtures = useMemo(
-    () => getFixturesForDate(fixtures, today),
-    [fixtures, today]
-  )
-
   const fixturesByDate = useMemo(
-    () => groupFixturesByDate(fixtures),
-    [fixtures]
+    () => groupFixturesByDate(fixtures, agendaTz),
+    [fixtures, agendaTz]
   )
 
-  const selectedDayFixtures = useMemo(
-    () => getFixturesForDate(fixtures, selectedDate),
-    [fixtures, selectedDate]
+  // Ayer, hoy y los 5 días siguientes (7 en total)
+  const agendaDays = useMemo(
+    () => [-1, 0, 1, 2, 3, 4, 5].map(offset => {
+      const date = new Date(today.getTime() + offset * 86_400_000)
+      return { offset, date, key: dateKey(date, agendaTz) }
+    }),
+    [today, agendaTz]
   )
+  const selectedDay = agendaDays.find(d => d.offset === dayOffset) ?? agendaDays[1]
+  const selectedDayFixtures = fixturesByDate.get(selectedDay.key) ?? []
 
-  const calendarDays = useMemo(() => {
-    const days: Date[] = []
-    for (let i = 0; i < 14; i++) {
-      const d = new Date(today)
-      d.setDate(today.getDate() + i)
-      days.push(d)
-    }
-    return days
-  }, [today])
-
+  // Si el día elegido no tiene partidos, se avisa cuál es el próximo
   const nextMatchDate = useMemo(() => {
-    for (const day of calendarDays) {
-      if (isSameDay(day, today)) continue
-      const key = dateKey(day)
-      if (fixturesByDate.has(key)) return day
-    }
-    return null
-  }, [calendarDays, today, fixturesByDate])
+    const next = [...fixturesByDate.keys()].sort().find(k => k > selectedDay.key)
+    return next ? fixturesByDate.get(next)![0].date : null
+  }, [fixturesByDate, selectedDay.key])
 
   const mostValuable = useMemo(() =>
     [...internal].filter(p => p.marketValueRaw > 0).sort((a, b) => b.marketValueRaw - a.marketValueRaw).slice(0, 5),
@@ -2062,97 +2085,78 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ── Agenda: partidos de hoy + calendario 14 días (arriba de todo) ── */}
-      <HomeSection title={t('home.agenda')} badge={todayFixtures.length} action={{ label: t('home.verCalendario'), to: '/calendario' }}>
-        {loading ? (
-          <div className="grid grid-cols-1 gap-3">
-            <MatchSkeleton />
-          </div>
-        ) : todayFixtures.length === 0 ? (
-          <div className="text-center py-6">
-            <p className="text-sm text-apple-gray-400 dark:text-apple-gray-500">{t('home.noHayPartidosHoy')}</p>
-            {nextMatchDate && (
-              <p className="text-xs text-apple-gray-300 dark:text-apple-gray-600 mt-1">
-                {t('home.proximo')}: {formatDateLong(nextMatchDate, language)}
-              </p>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 mb-4">
-            {todayFixtures.map(f => (
-              <MatchCard key={f.fixtureId} fixture={f} />
-            ))}
-          </div>
-        )}
-
-        <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-thin [-webkit-overflow-scrolling:touch] border-t border-apple-gray-100 dark:border-apple-gray-700/40 mt-2 pt-2">
-          {calendarDays.map(day => {
-            const key = dateKey(day)
-            const count = fixturesByDate.get(key)?.length || 0
-            const isToday = isSameDay(day, today)
-            const isSelected = isSameDay(day, selectedDate)
-
+      {/* ── Agenda: ayer, hoy y los próximos días (arriba de todo) ── */}
+      <HomeSection title={t('home.agenda')} badge={selectedDayFixtures.length} action={{ label: t('home.verCalendario'), to: '/calendario' }}>
+        <div className="flex gap-1.5 overflow-x-auto snap-x scrollbar-thin [-webkit-overflow-scrolling:touch] -mx-1 px-1 pb-1">
+          {agendaDays.map(day => {
+            const count = fixturesByDate.get(day.key)?.length || 0
+            const selected = day.offset === dayOffset
+            const label = agendaDayLabel(day.offset, day.date, language, agendaTz, t)
             return (
               <button
-                key={key}
-                onClick={() => setSelectedDate(day)}
-                className={`flex-1 min-w-[44px] snap-start flex flex-col items-center py-2 px-1 rounded-lg transition-all ${
-                  isSelected ? 'bg-brand-green/10' : 'hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/30'
+                key={day.offset}
+                type="button"
+                onClick={() => setDayOffset(day.offset)}
+                aria-pressed={selected}
+                className={`snap-start flex-1 min-w-[84px] flex flex-col items-center gap-0.5 px-2 py-2 rounded-xl border transition-all ${
+                  selected
+                    ? 'bg-brand-green text-white border-brand-green shadow-md shadow-brand-green/20'
+                    : 'border-apple-gray-200/70 dark:border-apple-gray-700/60 text-apple-gray-700 dark:text-apple-gray-200 hover:border-brand-green/50 hover:bg-brand-green/5'
                 }`}
               >
-                <span className="text-2xs font-medium text-apple-gray-400 dark:text-apple-gray-500 uppercase">
-                  {formatDayShort(day, language)}
-                </span>
-                <span className={`text-sm font-semibold mt-0.5 w-6 h-6 flex items-center justify-center rounded-full ${
-                  isToday ? 'bg-brand-green text-white' : isSelected ? 'text-brand-green' : 'text-apple-gray-700 dark:text-apple-gray-300'
+                <span className="text-sm font-semibold whitespace-nowrap">{label.title}</span>
+                <span className={`text-2xs whitespace-nowrap ${selected ? 'text-white/80' : 'text-apple-gray-400 dark:text-apple-gray-500'}`}>{label.sub}</span>
+                <span className={`mt-0.5 text-2xs font-semibold tabular-nums px-1.5 rounded-full whitespace-nowrap ${
+                  selected ? 'bg-white/20 text-white' : count > 0 ? 'bg-brand-green/10 text-brand-green' : 'text-apple-gray-300 dark:text-apple-gray-600'
                 }`}>
-                  {day.getDate()}
+                  {count > 0 ? `${count} ${count === 1 ? t('home.partido') : t('home.partidos')}` : '—'}
                 </span>
-                <div className="flex gap-0.5 mt-1 h-1.5">
-                  {count > 0 && Array.from({ length: Math.min(count, 3) }).map((_, i) => (
-                    <span key={i} className={`w-1 h-1 rounded-full ${isSelected ? 'bg-brand-green' : 'bg-apple-gray-300 dark:bg-apple-gray-600'}`} />
-                  ))}
-                </div>
               </button>
             )
           })}
         </div>
 
-        {!loading && !isSameDay(selectedDate, today) && (
-          <div className="border-t border-apple-gray-100 dark:border-apple-gray-700/40 mt-2 pt-2">
-            {selectedDayFixtures.length === 0 ? (
-              <p className="text-sm text-apple-gray-400 dark:text-apple-gray-500 text-center py-4">
-                {t('home.sinPartidosEl')} {formatDateLong(selectedDate, language)}
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {selectedDayFixtures.map(f => (
-                  <div key={f.fixtureId} className="flex items-center gap-3 p-3 rounded-apple bg-apple-gray-50 dark:bg-apple-gray-800/40">
-                    <span className="text-xs font-mono text-apple-gray-400 dark:text-apple-gray-500 w-12 flex-shrink-0 text-center">
-                      {formatMatchTime(f.date)}
-                    </span>
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <img src={f.homeTeam.logo} alt="" className="w-5 h-5 object-contain" />
-                      <span className="text-sm text-apple-gray-700 dark:text-apple-gray-300 truncate">{f.homeTeam.name}</span>
-                      <span className="text-xs text-apple-gray-300 dark:text-apple-gray-600 flex-shrink-0">vs</span>
-                      <span className="text-sm text-apple-gray-700 dark:text-apple-gray-300 truncate">{f.awayTeam.name}</span>
-                      <img src={f.awayTeam.logo} alt="" className="w-5 h-5 object-contain" />
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      {f.players.map(p => (
-                        <span key={p.fullName} className="text-2xs font-medium text-brand-green">{p.shortName}</span>
-                      ))}
-                      {(f.coaches ?? []).map(c => (
-                        <span key={c.fullName} className="text-2xs font-medium text-sky-500">DT {c.fullName}</span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+        <div className="flex items-center justify-end gap-1.5 mt-2 mb-3 text-xs text-apple-gray-500 dark:text-apple-gray-400">
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <label htmlFor="agenda-tz">{t('home.horarioDe')}</label>
+          <select
+            id="agenda-tz"
+            value={agendaTz}
+            onChange={e => changeAgendaTz(e.target.value)}
+            className="bg-white dark:bg-apple-gray-800 font-semibold text-apple-gray-700 dark:text-apple-gray-200 rounded-md border border-apple-gray-200 dark:border-apple-gray-700 px-1.5 py-0.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-green/30"
+          >
+            {AGENDA_TIMEZONES.map(z => <option key={z.tz} value={z.tz}>{z.label}</option>)}
+          </select>
+        </div>
+
+        {loading ? (
+          <div className="grid grid-cols-1 gap-3">
+            <MatchSkeleton />
+          </div>
+        ) : selectedDayFixtures.length === 0 ? (
+          <div className="text-center py-6">
+            <p className="text-sm text-apple-gray-400 dark:text-apple-gray-500">
+              {t('home.sinPartidosEl')} {formatDateLong(selectedDay.date, language, agendaTz)}
+            </p>
+            {nextMatchDate && (() => {
+              const target = agendaDays.find(d => d.key === dateKey(new Date(nextMatchDate), agendaTz))
+              const text = `${t('home.proximo')}: ${formatDateLong(new Date(nextMatchDate), language, agendaTz)}`
+              return target ? (
+                <button type="button" onClick={() => setDayOffset(target.offset)} className="text-xs text-brand-green mt-1 hover:underline">
+                  {text}
+                </button>
+              ) : (
+                <p className="text-xs text-apple-gray-400 dark:text-apple-gray-500 mt-1">{text}</p>
+              )
+            })()}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3">
+            {selectedDayFixtures.map(f => (
+              <MatchCard key={f.fixtureId} fixture={f} timeZone={agendaTz} />
+            ))}
           </div>
         )}
-
       </HomeSection>
 
       {/* ── Accesos rápidos ─────────────────────────────────── */}

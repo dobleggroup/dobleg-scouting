@@ -9,6 +9,7 @@ const PDFAddedToast = lazy(() => import('@/components/pdf/AddToReportButton').th
 
 const HomePage = lazy(() => import('@/pages/HomePage'))
 const MarketPage = lazy(() => import('@/pages/MarketPage'))
+const MarketContactsPage = lazy(() => import('@/pages/MarketContactsPage'))
 const CalendarPage = lazy(() => import('@/pages/CalendarPage'))
 const GpsUploadPage = lazy(() => import('@/pages/GpsUploadPage'))
 const OptaHubPage = lazy(() => import('@/pages/opta/OptaHubPage'))
@@ -24,21 +25,15 @@ const InternalScoutingPage = lazy(() => import('@/pages/InternalScoutingPage'))
 const InternalClassificationPage = lazy(() => import('@/pages/InternalClassificationPage'))
 const MonitoringPage = lazy(() => import('@/pages/MonitoringPage'))
 const PlayerDetailPage = lazy(() => import('@/pages/PlayerDetailPage'))
-const ComparisonPage = lazy(() => import('@/pages/ComparisonPage'))
 const FormationPage = lazy(() => import('@/pages/FormationPage'))
-const SimilarPlayersPage = lazy(() => import('@/pages/SimilarPlayersPage'))
 const OpportunitiesPage = lazy(() => import('@/pages/OpportunitiesPage'))
 const CoachesListPage = lazy(() => import('@/pages/CoachesListPage'))
 const CoachDetailPage = lazy(() => import('@/pages/CoachDetailPage'))
 const CoachOptaTestPage = lazy(() => import('@/pages/CoachOptaTestPage'))
 const CoachMatchDetailPage = lazy(() => import('@/pages/CoachMatchDetailPage'))
-const ScoutingWorksPage = lazy(() => import('@/pages/ScoutingWorksPage'))
-const ScatterChartPage = lazy(() => import('@/pages/ScatterChartPage'))
 const ScoutEvaluationPage = lazy(() => import('@/pages/ScoutEvaluationPage'))
 const EvaluationsAdminPage = lazy(() => import('@/pages/EvaluationsAdminPage'))
-const RadarAnalysisPage = lazy(() => import('@/pages/RadarAnalysisPage'))
 const ScoutTrackingGGPage = lazy(() => import('@/pages/ScoutTrackingGGPage'))
-const BusquedaPage = lazy(() => import('@/pages/BusquedaPage'))
 const DebutantesPage = lazy(() => import('@/pages/DebutantesPage'))
 const InformesPage = lazy(() => import('@/pages/InformesPage'))
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'))
@@ -70,6 +65,7 @@ export default function App() {
             <Route path="/carga-wyscout" element={<WyscoutUploadPage />} />
             <Route path="/carga-gps" element={<GpsUploadPage />} />
             <Route path="/mercado" element={<MarketPage />} />
+            <Route path="/mercado/contactos" element={<MarketContactsPage />} />
             <Route path="/scouting" element={<ExternalScoutingPage />} />
             <Route path="/opta" element={<OptaHubPage />} />
             <Route path="/opta/jugador/:id" element={<OptaPlayerPage />} />
@@ -86,17 +82,18 @@ export default function App() {
             <Route path="/entrenadores/ponzio-opta" element={<CoachOptaTestPage />} />
             <Route path="/entrenadores/:coachKey" element={<CoachDetailPage />} />
             <Route path="/entrenadores/:coachKey/partido/:fixtureId" element={<CoachMatchDetailPage />} />
-            <Route path="/similares" element={<SimilarPlayersPage />} />
+            {/* Páginas ocultas para siempre (sin una buena API no sirven): redirigen a Inicio */}
+            <Route path="/similares" element={<Navigate to="/" replace />} />
             <Route path="/jugador/:id" element={<PlayerDetailPage />} />
-            <Route path="/comparacion" element={<ComparisonPage />} />
+            <Route path="/comparacion" element={<Navigate to="/" replace />} />
             <Route path="/formacion" element={<FormationPage />} />
-            <Route path="/dispersion" element={<ScatterChartPage />} />
+            <Route path="/dispersion" element={<Navigate to="/" replace />} />
             <Route path="/evaluar" element={<ScoutEvaluationPage />} />
             <Route path="/evaluaciones" element={<EvaluationsAdminPage />} />
-            <Route path="/radar" element={<RadarAnalysisPage />} />
-            <Route path="/trabajos-scouting" element={<ScoutingWorksPage />} />
+            <Route path="/radar" element={<Navigate to="/" replace />} />
+            <Route path="/trabajos-scouting" element={<Navigate to="/" replace />} />
             <Route path="/seguimiento-gg" element={<ScoutTrackingGGPage />} />
-            <Route path="/analisis-completo" element={<BusquedaPage />} />
+            <Route path="/analisis-completo" element={<Navigate to="/" replace />} />
             <Route path="/informes" element={<InformesPage />} />
             <Route path="/perfil" element={<ProfilePage />} />
             <Route path="/admin/accesos" element={<AdminRoute><AdminAccesosPage /></AdminRoute>} />

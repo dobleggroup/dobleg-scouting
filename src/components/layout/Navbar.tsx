@@ -39,7 +39,16 @@ const inicioGroup: NavGroup = {
   ],
 }
 
-const mercadoLink: NavItem = { to: '/mercado', labelKey: 'nav.mercado', icon: 'briefcase' }
+const mercadoGroup: NavGroup = {
+  labelKey: 'nav.mercado',
+  icon: 'briefcase',
+  to: '/mercado',
+  items: [
+    { to: '/mercado', labelKey: 'nav.mercado', icon: 'briefcase' },
+    { to: '/mercado/contactos', labelKey: 'nav.contactos', icon: 'contacts' },
+  ],
+  prefixes: ['/mercado/'],
+}
 
 const scoutInternoGroup: NavGroup = {
   labelKey: 'nav.scoutInterno',
@@ -80,15 +89,9 @@ const talentGroup: NavGroup = {
   icon: 'search',
   items: [
     { to: '/informes', labelKey: 'nav.informes', icon: 'clipboard' },
-    { to: '/analisis-completo', labelKey: 'nav.analisisCompleto', icon: 'search' },
     { to: '/oportunidades', labelKey: 'nav.oportunidades', icon: 'star' },
     { to: '/debutantes', labelKey: 'nav.debutantes', icon: 'star' },
-    { to: '/similares', labelKey: 'nav.similares', icon: 'search' },
-    { to: '/comparacion', labelKey: 'nav.comparaciones', icon: 'compare' },
     { to: '/formacion', labelKey: 'nav.formaciones', icon: 'layout' },
-    { to: '/dispersion', labelKey: 'nav.dispersion', icon: 'scatter' },
-    { to: '/trabajos-scouting', labelKey: 'nav.trabajos', icon: 'folder' },
-    { to: '/radar', labelKey: 'nav.detector', icon: 'radar' },
   ],
 }
 
@@ -116,6 +119,7 @@ function NavIcon({ icon, className = "w-5 h-5" }: { icon: string; className?: st
     calendar: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />,
     whistle: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h3m6-13H9a4 4 0 00-4 4v2a7 7 0 007 7h1a7 7 0 007-7v-1a5 5 0 00-5-5zM6 8a2 2 0 11-4 0 2 2 0 014 0z" />,
     tag: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />,
+    contacts: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />,
     briefcase: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7h-3V5a2 2 0 00-2-2H9a2 2 0 00-2 2v2H4a1 1 0 00-1 1v11a2 2 0 002 2h14a2 2 0 002-2V8a1 1 0 00-1-1zM9 5h6v2H9V5z" />,
   }
   return (
@@ -156,7 +160,7 @@ function DesktopDropdown({
           }
           onToggle()
         }}
-        className={`flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+        className={`flex items-center gap-1 lg:px-2.5 xl:px-3.5 py-2 text-sm whitespace-nowrap font-medium rounded-lg transition-all duration-200 ${
           active
             ? 'bg-brand-green text-gray-900 shadow-sm'
             : 'text-apple-gray-600 dark:text-apple-gray-300 hover:text-apple-gray-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-apple-gray-700/50'
@@ -174,7 +178,7 @@ function DesktopDropdown({
             <NavLink
               key={link.to}
               to={link.to}
-              end={link.to === '/opta'}
+              end={link.to === '/opta' || link.to === '/mercado'}
               onClick={onToggle}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
@@ -208,6 +212,7 @@ export default function Navbar() {
 
   const userMenuRef = useRef<HTMLDivElement>(null)
   const inicioRef = useRef<HTMLDivElement>(null)
+  const mercadoRef = useRef<HTMLDivElement>(null)
   const scoutInternoRef = useRef<HTMLDivElement>(null)
   const scoutExternoRef = useRef<HTMLDivElement>(null)
   const seguimientoRef = useRef<HTMLDivElement>(null)
@@ -226,6 +231,7 @@ export default function Navbar() {
       if (userMenuRef.current && !userMenuRef.current.contains(target)) setShowUserMenu(false)
       if (
         inicioRef.current && !inicioRef.current.contains(target) &&
+        mercadoRef.current && !mercadoRef.current.contains(target) &&
         scoutInternoRef.current && !scoutInternoRef.current.contains(target) &&
         scoutExternoRef.current && !scoutExternoRef.current.contains(target) &&
         seguimientoRef.current && !seguimientoRef.current.contains(target) &&
@@ -257,6 +263,7 @@ export default function Navbar() {
   const toggleMobile = (name: string) => setMobileExpanded(prev => prev === name ? null : name)
 
   // Check active routes for groups
+  const isMercadoRoute = location.pathname === '/mercado' || location.pathname.startsWith('/mercado/')
   const isScoutInternoRoute = scoutInternoGroup.items.some(l => location.pathname === l.to)
   const isScoutExternoRoute = scoutExternoGroup.items.some(l => location.pathname === l.to) || location.pathname.startsWith('/opta/')
   const isSeguimientoRoute = seguimientoGroup.items.some(l => location.pathname === l.to)
@@ -278,7 +285,7 @@ export default function Navbar() {
                 className="w-12 h-12 object-contain"
               />
             </div>
-            <div className="hidden sm:flex flex-col">
+            <div className="hidden sm:flex lg:hidden xl:flex flex-col">
               <span className="font-bold text-apple-gray-800 dark:text-white text-base tracking-tight leading-none">
                 Scout Platform
               </span>
@@ -300,18 +307,14 @@ export default function Navbar() {
               t={t}
             />
 
-            <NavLink
-              to={mercadoLink.to}
-              className={({ isActive }) =>
-                `px-3.5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                  isActive
-                    ? 'bg-brand-green text-gray-900 shadow-sm'
-                    : 'text-apple-gray-600 dark:text-apple-gray-300 hover:text-apple-gray-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-apple-gray-700/50'
-                }`
-              }
-            >
-              {t(mercadoLink.labelKey)}
-            </NavLink>
+            <DesktopDropdown
+              group={mercadoGroup}
+              isOpen={openDropdown === 'mercado'}
+              onToggle={() => toggleDropdown('mercado')}
+              dropdownRef={mercadoRef}
+              location={location}
+              t={t}
+            />
 
             {/* Scout Externo (+ Test Opta) */}
             <DesktopDropdown
@@ -356,7 +359,7 @@ export default function Navbar() {
             <NavLink
               to={reportLink.to}
               className={({ isActive }) =>
-                `px-3.5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                `lg:px-2.5 xl:px-3.5 py-2 text-sm whitespace-nowrap font-medium rounded-lg transition-all duration-200 ${
                   isActive
                     ? 'bg-brand-green text-gray-900 shadow-sm'
                     : 'text-apple-gray-600 dark:text-apple-gray-300 hover:text-apple-gray-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-apple-gray-700/50'
@@ -386,7 +389,7 @@ export default function Navbar() {
                     <div className="w-7 h-7 rounded-full bg-gradient-to-br from-brand-green to-emerald-600 flex items-center justify-center text-white text-sm font-semibold">
                       {userDisplayName.charAt(0).toUpperCase()}
                     </div>
-                    <span className="hidden sm:block text-sm font-medium text-apple-gray-700 dark:text-apple-gray-300 max-w-24 truncate">
+                    <span className="hidden sm:block lg:hidden xl:block text-sm font-medium text-apple-gray-700 dark:text-apple-gray-300 max-w-24 truncate">
                       {userDisplayName}
                     </span>
                     <svg className="w-4 h-4 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -603,21 +606,45 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* Mercado */}
+          {/* Mercado (+ Contactos) */}
           <div className="mt-4 pt-4 border-t border-apple-gray-200 dark:border-apple-gray-800">
-            <NavLink
-              to={mercadoLink.to}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                  isActive
-                    ? 'bg-brand-green text-gray-900'
-                    : 'text-apple-gray-700 dark:text-apple-gray-300 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-800'
-                }`
-              }
+            <button
+              onClick={() => toggleMobile('mercado')}
+              className={`flex items-center justify-between w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
+                isMercadoRoute
+                  ? 'bg-brand-green/10 text-brand-green'
+                  : 'text-apple-gray-700 dark:text-apple-gray-300 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-800'
+              }`}
             >
-              <NavIcon icon={mercadoLink.icon} className="w-5 h-5" />
-              {t(mercadoLink.labelKey)}
-            </NavLink>
+              <div className="flex items-center gap-3">
+                <NavIcon icon="briefcase" className="w-5 h-5" />
+                {t('nav.mercado')}
+              </div>
+              <svg className={`w-4 h-4 transition-transform ${mobileExpanded === 'mercado' ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {(mobileExpanded === 'mercado' || isMercadoRoute) && (
+              <div className="ml-4 mt-1 space-y-1">
+                {mercadoGroup.items.map(link => (
+                  <NavLink
+                    key={link.to}
+                    to={link.to}
+                    end={link.to === '/mercado'}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
+                        isActive
+                          ? 'bg-brand-green text-gray-900'
+                          : 'text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-800'
+                      }`
+                    }
+                  >
+                    <NavIcon icon={link.icon} className="w-4 h-4" />
+                    {t(link.labelKey)}
+                  </NavLink>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Seguimiento Section */}

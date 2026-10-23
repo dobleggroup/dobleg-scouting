@@ -207,20 +207,21 @@ export async function fetchSeasonFixtures(teamId: number, season: number, forceR
   return fixtures
 }
 
-export function toArDateKey(date: Date | string): string {
+/** Día (YYYY-MM-DD) en la zona horaria pedida; por defecto, Argentina. */
+export function toArDateKey(date: Date | string, timeZone: string = AR_TZ): string {
   const d = typeof date === 'string' ? new Date(date) : date
-  return new Intl.DateTimeFormat('sv-SE', { timeZone: AR_TZ }).format(d)
+  return new Intl.DateTimeFormat('sv-SE', { timeZone }).format(d)
 }
 
-export function getFixturesForDate(fixtures: AgencyFixture[], date: Date): AgencyFixture[] {
-  const target = toArDateKey(date)
-  return fixtures.filter(f => toArDateKey(f.date) === target)
+export function getFixturesForDate(fixtures: AgencyFixture[], date: Date, timeZone: string = AR_TZ): AgencyFixture[] {
+  const target = toArDateKey(date, timeZone)
+  return fixtures.filter(f => toArDateKey(f.date, timeZone) === target)
 }
 
-export function groupFixturesByDate(fixtures: AgencyFixture[]): Map<string, AgencyFixture[]> {
+export function groupFixturesByDate(fixtures: AgencyFixture[], timeZone: string = AR_TZ): Map<string, AgencyFixture[]> {
   const groups = new Map<string, AgencyFixture[]>()
   for (const f of fixtures) {
-    const key = toArDateKey(f.date)
+    const key = toArDateKey(f.date, timeZone)
     if (!groups.has(key)) groups.set(key, [])
     groups.get(key)!.push(f)
   }

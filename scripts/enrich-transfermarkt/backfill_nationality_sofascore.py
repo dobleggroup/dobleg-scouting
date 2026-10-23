@@ -27,7 +27,8 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 
-from curl_cffi import requests as cffi_requests
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sync-sofascore"))
+import sync as sofa_sync  # noqa: E402  (fetch con fallback a Chrome)
 
 # La consola de Windows no siempre soporta UTF-8 (nombres con tildes/etc.
 # tiraban UnicodeEncodeError y mataban el batch a mitad de camino — el PATCH
@@ -78,15 +79,16 @@ def sb_patch(table, pid, data):
 
 
 def sofa_player_profile(raw_id):
-    global last_fetch
-    elapsed = time.time() - last_fetch
-    if elapsed < FETCH_DELAY:
-        time.sleep(FETCH_DELAY - elapsed)
-    r = cffi_requests.get(f"https://api.sofascore.com/api/v1/player/{raw_id}", impersonate="chrome", timeout=20)
-    last_fetch = time.time()
-    if r.status_code != 200:
+    # Desde 2026-09-24 Sofascore responde 403 a pedidos sin navegador: se usa el
+    # mismo fetch que el sync (sync.py), que pasa a un Chrome real con el perfil
+    # desbloqueado (desbloquear-sofascore.bat) cuando hace falta.
+    try:
+        data = sofa_sync.sofa_fetch(f"/player/{raw_id}")
+    except Exception as e:
+        if "SOFASCORE_BLOCKED" in str(e):
+            print("Sofascore bloqueado: correr scripts/sync-sofascore/desbloquear-sofascore.bat y volver a correr esto")
+            raise SystemExit(1)
         return None
-    data = r.json()
     p = data.get("player", {})
     nationality = (p.get("country") or {}).get("name")
     ts = p.get("dateOfBirthTimestamp")

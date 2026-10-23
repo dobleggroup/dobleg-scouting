@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
+import PlayerCommentsPanel from '@/components/players/PlayerCommentsPanel'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { usePlayerDetail, usePlayerMatchHistory, usePositionAverages, usePositionMetricAverages, useLeagues, useMarketValueHistory, usePreferredPlayerId, useApiFootballTwinId } from '@/hooks/usePlayerStats'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -358,7 +359,8 @@ export default function SupabasePlayerDetail() {
 
           {/* Comments */}
           <div className="card-apple p-5">
-            <PlayerCommentsSection playerKey={`${player.name}|${player.team?.name ?? ''}`} />
+            <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300 mb-3">Comentarios</h3>
+            <PlayerCommentsPanel target={{ name: player.name, supabasePlayerId: player.id }} source="ficha" />
           </div>
         </div>
 
@@ -482,134 +484,6 @@ function StatBox({ label, value }: { label: string; value: string | number }) {
   )
 }
 
-interface CommentItem {
-  id: string
-  playerKey: string
-  sentiment: 'positive' | 'neutral' | 'negative'
-  text: string
-  author: string
-  createdAt: string
-}
-
-const COMMENTS_STORAGE_KEY = 'player_comments_v1'
-
-function loadAllComments(): CommentItem[] {
-  try { return JSON.parse(localStorage.getItem(COMMENTS_STORAGE_KEY) || '[]') } catch { return [] }
-}
-
-function saveAllComments(comments: CommentItem[]) {
-  localStorage.setItem(COMMENTS_STORAGE_KEY, JSON.stringify(comments))
-}
-
-const sentimentCfg = {
-  positive: { icon: '\u{1f44d}', label: 'Positivo', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-600 dark:text-emerald-400' },
-  neutral: { icon: '➖', label: 'Neutral', bg: 'bg-amber-500/10', border: 'border-amber-500/30', text: 'text-amber-600 dark:text-amber-400' },
-  negative: { icon: '\u{1f44e}', label: 'Negativo', bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-600 dark:text-red-400' },
-} as const
-
-function PlayerCommentsSection({ playerKey }: { playerKey: string }) {
-  const normalizedKey = playerKey.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-  const [comments, setComments] = useState<CommentItem[]>([])
-  const [newText, setNewText] = useState('')
-  const [author, setAuthor] = useState(() => {
-    try { return localStorage.getItem('comment_author') || '' } catch { return '' }
-  })
-  const [sentiment, setSentiment] = useState<'positive' | 'neutral' | 'negative'>('neutral')
-  const [isAdding, setIsAdding] = useState(false)
-
-  useEffect(() => {
-    setComments(loadAllComments().filter(c => c.playerKey === normalizedKey))
-  }, [normalizedKey])
-
-  const handleAdd = useCallback(() => {
-    if (!newText.trim() || !author.trim()) return
-    const item: CommentItem = { id: Date.now().toString(), playerKey: normalizedKey, sentiment, text: newText.trim(), author: author.trim(), createdAt: new Date().toISOString() }
-    const all = [...loadAllComments(), item]
-    saveAllComments(all)
-    setComments(all.filter(c => c.playerKey === normalizedKey))
-    localStorage.setItem('comment_author', author.trim())
-    setNewText('')
-    setSentiment('neutral')
-    setIsAdding(false)
-  }, [newText, author, sentiment, normalizedKey])
-
-  const handleDelete = useCallback((id: string) => {
-    const all = loadAllComments().filter(c => c.id !== id)
-    saveAllComments(all)
-    setComments(all.filter(c => c.playerKey === normalizedKey))
-  }, [normalizedKey])
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-300">
-          Comentarios ({comments.length})
-        </h3>
-        {!isAdding && (
-          <button onClick={() => setIsAdding(true)} className="btn-apple-secondary text-sm px-3 py-1.5">
-            + Agregar
-          </button>
-        )}
-      </div>
-
-      {isAdding && (
-        <div className="p-4 bg-apple-gray-50 dark:bg-apple-gray-800/50 rounded-xl border border-apple-gray-200 dark:border-apple-gray-700">
-          <div className="mb-3">
-            <label className="block text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mb-2">Valoración</label>
-            <div className="flex gap-2">
-              {(['positive', 'neutral', 'negative'] as const).map(s => (
-                <button
-                  key={s}
-                  onClick={() => setSentiment(s)}
-                  className={`flex-1 py-2 px-3 rounded-lg border-2 transition-all text-sm font-medium ${
-                    sentiment === s
-                      ? `${sentimentCfg[s].bg} ${sentimentCfg[s].border} ${sentimentCfg[s].text}`
-                      : 'border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-500'
-                  }`}
-                >
-                  <span className="mr-1.5">{sentimentCfg[s].icon}</span>
-                  {sentimentCfg[s].label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <textarea value={newText} onChange={e => setNewText(e.target.value)} placeholder="Escribe tu observación..." className="input-apple w-full h-20 resize-none mb-3" />
-          <input type="text" value={author} onChange={e => setAuthor(e.target.value)} placeholder="Tu nombre..." className="input-apple w-full mb-4" />
-          <div className="flex gap-2">
-            <button onClick={() => { setIsAdding(false); setNewText(''); setSentiment('neutral') }} className="btn-apple-secondary flex-1">Cancelar</button>
-            <button onClick={handleAdd} disabled={!newText.trim() || !author.trim()} className="btn-apple-primary flex-1 disabled:opacity-50">Guardar</button>
-          </div>
-        </div>
-      )}
-
-      {comments.length === 0 && !isAdding ? (
-        <div className="text-center py-6 text-apple-gray-400"><p className="text-sm">Sin comentarios</p></div>
-      ) : (
-        <div className="space-y-2">
-          {comments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map(c => {
-            const cfg = sentimentCfg[c.sentiment]
-            return (
-              <div key={c.id} className={`p-3 rounded-xl border ${cfg.bg} ${cfg.border}`}>
-                <div className="flex items-start justify-between gap-2 mb-1">
-                  <span className={`text-xs font-semibold ${cfg.text}`}>{cfg.icon} {cfg.label}</span>
-                  <button onClick={() => handleDelete(c.id)} className="text-apple-gray-400 hover:text-red-500 transition-colors">
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                  </button>
-                </div>
-                <p className="text-sm text-apple-gray-700 dark:text-apple-gray-300 leading-relaxed mb-2">{c.text}</p>
-                <div className="flex items-center justify-between text-2xs text-apple-gray-500">
-                  <span className="font-medium">{c.author}</span>
-                  <span>{new Date(c.createdAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}</span>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
 function MatchRow({ match }: { match: PlayerMatchStat }) {
   const fixture = match.fixture
   if (!fixture) return null
@@ -623,7 +497,7 @@ function MatchRow({ match }: { match: PlayerMatchStat }) {
     <tr className="hover:bg-apple-gray-50 dark:hover:bg-apple-gray-800/30 transition-colors">
       <td className="py-2 px-4 text-xs text-apple-gray-600 dark:text-apple-gray-300">{date}</td>
       <td className="py-2 px-3 text-xs text-apple-gray-800 dark:text-white font-medium truncate max-w-[150px]">
-        {isHome ? 'vs' : '@'} {rival ?? '—'}
+        vs {rival ?? '—'} {isHome ? '(L)' : '(V)'}
       </td>
       <td className="py-2 px-3 text-center text-xs text-apple-gray-600 dark:text-apple-gray-300 tabular-nums">{result}</td>
       <td className="py-2 px-3 text-center text-xs text-apple-gray-600 dark:text-apple-gray-300 tabular-nums">{match.minutes}'</td>

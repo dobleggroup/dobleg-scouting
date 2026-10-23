@@ -6,6 +6,8 @@ export interface TeamMember {
    * la campanita de alertas sepa "esto es mío" sin depender de que el nombre
    * coincida exactamente con el de la cuenta logueada. */
   user_id: string | null
+  /** Otras cuentas de la misma persona (ej. entra con dos mails): los avisos llegan a todas. */
+  alt_user_ids?: string[]
 }
 
 export type NeedStatus = 'abierto' | 'cerrado'
@@ -14,7 +16,8 @@ export type CandidateStatus = 'propuesto' | 'en_negociacion' | 'descartado' | 'f
 
 export interface ClubNeed {
   id: number
-  team_id: number
+  /** Null cuando el club se escribió a mano (no estaba en la lista). */
+  team_id: number | null
   team_name: string
   team_logo: string | null
   position_label: string
@@ -49,6 +52,9 @@ export interface ClubContact {
  */
 export interface Negotiation {
   id: number
+  /** Oculta de la lista ("eliminada"): sigue guardada para consultarla después. */
+  hidden_at?: string | null
+  hidden_by_name?: string | null
   team_id: number | null
   team_name: string | null
   team_logo: string | null
@@ -116,6 +122,14 @@ export interface NeedCandidate {
 
 export interface MarketTeamSearchResult {
   id: number
+  name: string
+  logo: string | null
+}
+
+/** Club elegido en un formulario de Mercado: de la lista (con id) o escrito a
+ * mano cuando no aparece (id null, sin escudo). */
+export interface MarketTeamChoice {
+  id: number | null
   name: string
   logo: string | null
 }

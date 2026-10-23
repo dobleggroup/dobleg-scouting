@@ -180,7 +180,8 @@ export function isUploadWindow(today = new Date()) {
   return today.getDate() <= 10
 }
 
-export interface MatchMinutes { date: string; minutes: number }
+/** `starter`: si fue titular (lo dice API-Football / Sofascore); sin el dato se estima por los minutos. */
+export interface MatchMinutes { date: string; minutes: number; starter?: boolean }
 
 let minutesCache: { at: number; rows: Promise<Map<string, MatchMinutes[]>> } | null = null
 

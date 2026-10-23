@@ -56,7 +56,7 @@ export const NEED_STATUS_LABEL_KEY: Record<NeedStatus, string> = {
 
 export const NEED_STATUS_COLOR: Record<NeedStatus, string> = {
   abierto: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
-  cerrado: 'bg-apple-gray-100 text-apple-gray-600 dark:bg-apple-gray-700 dark:text-apple-gray-300',
+  cerrado: 'bg-apple-gray-200 text-apple-gray-600 ring-1 ring-inset ring-apple-gray-300 dark:bg-apple-gray-700 dark:text-apple-gray-300 dark:ring-apple-gray-600',
 }
 
 export const NEED_STATUS_ACCENT: Record<NeedStatus, string> = {
@@ -76,6 +76,6 @@ export const CANDIDATE_STATUS_LABEL_KEY: Record<CandidateStatus, string> = {
 export const CANDIDATE_STATUS_COLOR: Record<CandidateStatus, string> = {
   propuesto: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
   en_negociacion: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-  descartado: 'bg-apple-gray-100 text-apple-gray-500 dark:bg-apple-gray-700 dark:text-apple-gray-400 line-through',
+  descartado: 'bg-red-50 text-red-600 ring-1 ring-inset ring-red-200 dark:bg-red-900/20 dark:text-red-400 dark:ring-red-800/60',
   fichado: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
 }

@@ -6,6 +6,8 @@ import { excludeAgencyPlayers } from '@/utils/agencyFilter'
 import { marketTagsFor, topByPosition, OPPORTUNITY_POSITIONS } from '@/utils/opportunities'
 import { displayPosition, type Position } from '@/types/scoring'
 import Sparkline from '@/components/ui/Sparkline'
+import { AgentBadge } from '@/components/ui/AgentBadge'
+import { groupNationalities, nationalityEs } from '@/utils/nationalities'
 
 const CHEAP_MAX = 5_000_000, CONTRACT_MAX = 12
 const TAG_LABEL = { contract: 'Fin de contrato', cheap: 'Precio bajo' } as const
@@ -49,13 +51,23 @@ export default function OpportunityHero() {
     [allPlayers, agencyPlayers],
   )
   const [ageFilter, setAgeFilter] = useState<AgeFilter>('all')
-  // El filtro de edad se aplica ANTES de recortar a top-8 por posición — si se
-  // aplicara después, un candidato bueno pero fuera del top-8 sin filtrar
-  // (por ejemplo puesto 12) desaparecería aunque cumpliera la edad pedida.
-  const ageFilteredPlayers = useMemo(
-    () => ageFilter === 'all' ? players : players.filter(p => matchesAgeFilter(ageFromBirthDate(p.birth_date), ageFilter)),
-    [players, ageFilter],
-  )
+  const [nationality, setNationality] = useState('')
+  // Nacionalidades presentes (en castellano, las más comunes primero)
+  const nationalityOptions = useMemo(() => {
+    const freq = new Map<string, number>()
+    players.forEach(p => { if (p.nationality) freq.set(p.nationality, (freq.get(p.nationality) ?? 0) + 1) })
+    return groupNationalities([...freq.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n))
+  }, [players])
+  // Edad y nacionalidad se aplican ANTES de recortar a top-8 por posición — si se
+  // aplicaran después, un candidato bueno pero fuera del top-8 sin filtrar
+  // (por ejemplo puesto 12) desaparecería aunque cumpliera lo pedido.
+  const ageFilteredPlayers = useMemo(() => {
+    const natValues = new Set(nationalityOptions.find(o => o.label === nationality)?.values ?? [])
+    return players.filter(p =>
+      (ageFilter === 'all' || matchesAgeFilter(ageFromBirthDate(p.birth_date), ageFilter)) &&
+      (!nationality || (p.nationality != null && natValues.has(p.nationality))),
+    )
+  }, [players, ageFilter, nationality, nationalityOptions])
   const grouped = useMemo(() => topByPosition(ageFilteredPlayers, OPPORTUNITY_POSITIONS, 8), [ageFilteredPlayers])
 
   const [activePos, setActivePos] = useState<Position>(OPPORTUNITY_POSITIONS[0])
@@ -133,7 +145,19 @@ export default function OpportunityHero() {
             </button>
           ))}
         </div>
-        <div className="flex gap-1.5 overflow-x-auto scrollbar-thin">
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin">
+          <select
+            value={nationality}
+            onChange={e => setNationality(e.target.value)}
+            aria-label="Nacionalidad"
+            className={`px-2.5 py-1 rounded-full text-2xs font-semibold border bg-transparent cursor-pointer transition-all duration-200 focus:outline-none ${
+              nationality
+                ? 'border-brand-green text-brand-green bg-brand-green/10'
+                : 'border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-400 dark:text-apple-gray-500 hover:border-brand-green/40 hover:text-brand-green'}`}
+          >
+            <option value="">Todas las nacionalidades</option>
+            {nationalityOptions.map(o => <option key={o.label} value={o.label}>{o.label}</option>)}
+          </select>
           {AGE_FILTERS.map(f => (
             <button
               key={f.id}
@@ -151,7 +175,7 @@ export default function OpportunityHero() {
 
       {activePlayers.length === 0 ? (
         <div className="bg-white dark:bg-apple-gray-800/60 rounded-apple-lg border border-apple-gray-200/60 dark:border-apple-gray-700/40 p-5 text-sm text-apple-gray-400">
-          Sin oportunidades por ahora en {displayPosition(activePos)}.
+          Sin oportunidades por ahora en {displayPosition(activePos)}{nationality ? ` de ${nationality}` : ''}.
         </div>
       ) : (
         <div className="relative group/carousel">
@@ -192,6 +216,10 @@ export default function OpportunityHero() {
                       </div>
                       <p className="text-xs text-apple-gray-500 truncate">
                         {[p.team?.name, p.league_name].filter(Boolean).join(' · ')}
+                      </p>
+                      <p className="text-2xs text-apple-gray-400 truncate flex items-center gap-1 min-w-0">
+                        {p.nationality && <span className="flex-shrink-0">{nationalityEs(p.nationality)} ·</span>}
+                        <AgentBadge agent={p.agent} className="min-w-0 truncate !text-2xs" />
                       </p>
                     </div>
                   </div>

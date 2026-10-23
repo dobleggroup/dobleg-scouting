@@ -34,6 +34,7 @@ export interface TableroStatRow {
   duels_total: number | null
   dribbles_success: number | null
   rating: number | null
+  is_substitute?: boolean | null
   player?: { name: string } | null
   fixture?: {
     date: string
@@ -77,6 +78,8 @@ export interface Appearance {
   duelsTotal: number
   dribblesSuccess: number
   rating: number | null
+  /** Empezó en el banco (null = la fuente no lo dice). */
+  isSub?: boolean | null
 }
 
 /** Fecha 'YYYY-MM-DD' en hora argentina (un partido de las 22 h no se pasa al día siguiente). */
@@ -179,6 +182,7 @@ export function ownedRows<T extends TableroStatRow>(
       duelsTotal: row.duels_total ?? 0,
       dribblesSuccess: row.dribbles_success ?? 0,
       rating: row.rating != null && row.rating > 0 ? row.rating : null,
+      isSub: row.is_substitute ?? null,
     } })
   }
 

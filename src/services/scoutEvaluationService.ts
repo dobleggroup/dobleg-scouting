@@ -26,6 +26,12 @@ export interface ScoutEvaluation {
   notes: string | null
   recommendation: 'fichar' | 'seguir_observando' | 'descartar' | null
 
+  // Un comentario por valoración (reportes nuevos; los viejos usan `notes`)
+  match_comment?: string | null
+  tactical_comment?: string | null
+  mental_comment?: string | null
+  physical_comment?: string | null
+
   scout_id: string
   scout_name: string
   created_at: string
@@ -49,6 +55,26 @@ export interface NewEvaluation {
   weaknesses?: string
   notes?: string
   recommendation?: 'fichar' | 'seguir_observando' | 'descartar'
+  match_comment?: string
+  tactical_comment?: string
+  mental_comment?: string
+  physical_comment?: string
+}
+
+const COMMENT_FIELDS = [
+  { key: 'match_comment', label: 'Partido' },
+  { key: 'tactical_comment', label: 'Táctica' },
+  { key: 'mental_comment', label: 'Mental' },
+  { key: 'physical_comment', label: 'Físico' },
+] as const
+
+/** Los comentarios de un reporte, con su título, listos para mostrar. */
+export function evaluationComments(ev: ScoutEvaluation): { label: string; text: string }[] {
+  const comments: { label: string; text: string }[] = COMMENT_FIELDS
+    .map(({ key, label }) => ({ label, text: ev[key]?.trim() ?? '' }))
+    .filter(c => c.text)
+  if (ev.notes?.trim()) comments.push({ label: 'Notas', text: ev.notes.trim() })
+  return comments
 }
 
 // Create a new evaluation
@@ -57,15 +83,30 @@ export async function createEvaluation(
   scoutId: string,
   scoutName: string
 ): Promise<ScoutEvaluation | null> {
-  const { data, error } = await supabase
+  const insert = (row: NewEvaluation) => supabase
     .from('scout_evaluations')
     .insert({
-      ...evaluation,
+      ...row,
       scout_id: scoutId,
       scout_name: scoutName,
     })
     .select()
     .single()
+
+  let { data, error } = await insert(evaluation)
+
+  // Si la base todavía no tiene las columnas de comentarios, se guardan juntos
+  // en `notes` (con su título) para no perder lo que escribió el scout.
+  if (error?.code === 'PGRST204') {
+    const fallback: NewEvaluation = { ...evaluation }
+    const lines: string[] = []
+    for (const { key, label } of COMMENT_FIELDS) {
+      if (fallback[key]) lines.push(`${label}: ${fallback[key]}`)
+      delete fallback[key]
+    }
+    if (lines.length) fallback.notes = [fallback.notes, ...lines].filter(Boolean).join('\n')
+    ;({ data, error } = await insert(fallback))
+  }
 
   if (error) {
     console.error('Error creating evaluation:', error)

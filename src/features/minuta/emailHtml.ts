@@ -4,10 +4,11 @@
  * (grises "apple", verde de marca). Tiene que pesar menos de ~100 KB: más que
  * eso Gmail lo corta con "Ver mensaje completo".
  */
+import { lowerFirst } from '@/features/wyscoutPerf/metrics'
 import { fmtEur, fmtDate, monthName, shiftMonth, type ActionItem, type MinutaReport, type PlayerMonth, type Quadrant } from './analyze'
 
 export const PLATFORM_URL = 'https://dobleg-scouting.netlify.app'
-export const RENDIMIENTO_URL = `${PLATFORM_URL}/rendimiento-individual?vista=mes`
+export const RENDIMIENTO_URL = `${PLATFORM_URL}/rendimiento-individual`
 
 const C = {
   bg: '#F6F6F8', card: '#FFFFFF', line: '#E2E3E8', soft: '#EEEFF2',
@@ -110,8 +111,8 @@ function formList(list: PlayerMonth[], up: boolean) {
   return list.map((p, i) => {
     const note = p.rating != null && p.baseRating != null
       ? `Nota ${fmt1(p.rating)} <span style="color:${C.faint}">(venía ${fmt1(p.baseRating)})</span>` : p.rating != null ? `Nota ${fmt1(p.rating)}` : ''
-    const nWy = p.wy ? (up ? p.wy.better.length : p.wy.worse.length) : 0
-    const wy = p.wy && p.wy.total >= 4 && nWy ? `Wyscout: ${up ? 'mejor' : 'peor'} en ${nWy} de ${p.wy.total}` : ''
+    const items = p.wy && p.wy.total >= 4 ? (up ? p.wy.better : p.wy.worse) : []
+    const wy = items.length ? `Wyscout: ${up ? 'mejoró' : 'empeoró'} en ${esc(items.slice(0, 2).map(i => lowerFirst(i.metric.label)).join(' y '))}` : ''
     return `<tr><td style="padding:9px 0;border-top:${i ? `1px solid ${C.soft}` : '0'};vertical-align:top">
 <div style="font:600 14px/1.3 ${FONT};color:${C.ink}">${esc(p.name)}</div>
 <div style="font:400 12px/1.4 ${FONT};color:${C.muted};margin-top:2px">${esc(p.club)}</div>

@@ -18,6 +18,11 @@ interface AuthState {
   /** Elimina la cuenta del usuario y su sesión (requisito de Apple/Google). */
   deleteAccount: () => Promise<{ error: Error | null }>
   userDisplayName: string
+  /** Mail para elegir una contraseña nueva (quien entra con usuario y contraseña). */
+  sendPasswordReset: (email: string) => Promise<{ error: Error | null }>
+  /** true al volver del link del mail: hay que pedir la contraseña nueva. */
+  passwordRecovery: boolean
+  updatePassword: (password: string) => Promise<{ error: Error | null }>
 }
 
 const AuthContext = createContext<AuthState | null>(null)
@@ -27,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [clubId, setClubId] = useState<string | null | undefined>(undefined)
+  const [passwordRecovery, setPasswordRecovery] = useState(false)
 
   useEffect(() => {
     // `onAuthStateChange` ya dispara un evento inicial con la sesión vigente
@@ -49,7 +55,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true)
       setSession(session)
       setUser(session?.user ?? null)
       setLoading(false)
@@ -107,6 +114,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error as Error | null }
   }
 
+  const sendPasswordReset = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin })
+    return { error: error as Error | null }
+  }
+
+  const updatePassword = async (password: string) => {
+    const { error } = await supabase.auth.updateUser({ password })
+    if (!error) setPasswordRecovery(false)
+    return { error: error as Error | null }
+  }
+
   const signOut = async () => {
     await supabase.auth.signOut()
   }
@@ -143,7 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const userDisplayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || ''
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, clubId, signIn, signUp, signInWithGoogle, signInWithApple, signOut, deleteAccount, userDisplayName }}>
+    <AuthContext.Provider value={{ user, session, loading, clubId, signIn, signUp, signInWithGoogle, signInWithApple, signOut, deleteAccount, userDisplayName, sendPasswordReset, passwordRecovery, updatePassword }}>
       {children}
     </AuthContext.Provider>
   )

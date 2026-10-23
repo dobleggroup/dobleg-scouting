@@ -10,6 +10,7 @@ import { AuthProvider } from './context/AuthContext.tsx'
 import { ErrorBoundary } from './components/ErrorBoundary.tsx'
 import { ScoutsGGProvider } from './context/ScoutsGGContext.tsx'
 import { initNative } from './lib/nativeInit'
+import NewPasswordModal from '@/components/auth/NewPasswordModal'
 
 // Init nativo (Capacitor): oculta el splash y ajusta status bar. No-op en web.
 initNative()
@@ -24,6 +25,7 @@ createRoot(document.getElementById('root')!).render(
               <DataProvider>
                 <ScoutsGGProvider>
                   <App />
+                  <NewPasswordModal />
                 </ScoutsGGProvider>
               </DataProvider>
             </AuthProvider>

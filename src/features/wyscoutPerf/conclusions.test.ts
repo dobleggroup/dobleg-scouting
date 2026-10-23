@@ -80,8 +80,8 @@ describe('playerConclusions', () => {
 describe('playerTrend', () => {
   it('índice positivo si viene mejorando', () => {
     const today = new Date(2026, 9, 15)
-    const old = ['2025-06', '2025-09', '2025-12'].map(m => row(m, MEX, { regates: 20, regates_ok: 6, duelos: 40, duelos_ok: 16, balones_perdidos: 40 }))
-    const recent = ['2026-06', '2026-08', '2026-09'].map(m => row(m, MEX, { regates: 20, regates_ok: 12, duelos: 40, duelos_ok: 24, balones_perdidos: 30 }))
+    const old = ['2025-06', '2025-09', '2025-12'].map(m => row(m, MEX, { regates: 20, regates_ok: 6, duelos_ofensivos: 40, duelos_ofensivos_ok: 16, balones_perdidos: 40 }))
+    const recent = ['2026-06', '2026-08', '2026-09'].map(m => row(m, MEX, { regates: 20, regates_ok: 12, duelos_ofensivos: 40, duelos_ofensivos_ok: 24, balones_perdidos: 30 }))
     const t = playerTrend([...old, ...recent], today)
     expect(t?.index).toBeGreaterThan(0)
     expect(t?.best).not.toBeNull()

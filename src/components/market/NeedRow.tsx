@@ -7,9 +7,17 @@ import MarketNotesPanel from './MarketNotesPanel'
 import NeedCandidatesPanel from './NeedCandidatesPanel'
 import StatusPill from './StatusPill'
 import FollowupDateField from './FollowupDateField'
-import { NEED_STATUS_LABEL_KEY, NEED_STATUS_COLOR, NEED_STATUS_ORDER, NEED_STATUS_ACCENT } from './marketLabels'
+import { NEED_STATUS_LABEL_KEY, NEED_STATUS_COLOR, NEED_STATUS_ORDER, NEED_STATUS_ACCENT, CANDIDATE_STATUS_ORDER, CANDIDATE_STATUS_LABEL_KEY } from './marketLabels'
 import { updateNeedStatus, updateFollowupDate, reassignNeed } from '@/services/marketService'
-import type { ClubNeed, NeedStatus } from '@/types/market'
+import type { ClubNeed, NeedStatus, NeedCandidate, Negotiation, TeamMember, CandidateStatus } from '@/types/market'
+
+/** Punto de color por estado del ofrecido, para el resumen de la fila cerrada. */
+const CANDIDATE_DOT: Record<CandidateStatus, string> = {
+  propuesto: 'bg-sky-500',
+  en_negociacion: 'bg-amber-500',
+  fichado: 'bg-emerald-500',
+  descartado: 'bg-red-400',
+}
 
 export default function NeedRow({
   need,
@@ -18,9 +26,25 @@ export default function NeedRow({
   overdue = false,
   flash = false,
   onNegotiationMightHaveChanged,
+  candidates,
+  negotiationsById,
+  overdueNegotiationIds,
+  members,
+  onCandidatesChange,
+  onNegotiationUpserted,
+  onNegotiationRemoved,
+  onOpenNegotiation,
 }: {
   need: ClubNeed
   onUpdated: (n: ClubNeed) => void
+  candidates: NeedCandidate[]
+  negotiationsById: Map<number, Negotiation>
+  overdueNegotiationIds: Set<number>
+  members: TeamMember[]
+  onCandidatesChange: (update: (prev: NeedCandidate[]) => NeedCandidate[]) => void
+  onNegotiationUpserted: (n: Negotiation) => void
+  onNegotiationRemoved: (id: number) => void
+  onOpenNegotiation: (id: number) => void
   defaultExpanded?: boolean
   overdue?: boolean
   /** Resalte momentáneo al llegar desde el calendario semanal, para ubicar
@@ -50,6 +74,14 @@ export default function NeedRow({
   const [reassigning, setReassigning] = useState(false)
   const [notesRefreshSignal, setNotesRefreshSignal] = useState(0)
 
+  const closed = need.status === 'cerrado'
+  // Activos primero (en negociación > ofrecido > fichado), descartados al final.
+  const summary = [...candidates].sort((a, b) =>
+    ['en_negociacion', 'propuesto', 'fichado', 'descartado'].indexOf(a.status) - ['en_negociacion', 'propuesto', 'fichado', 'descartado'].indexOf(b.status))
+  const candidateLabels = Object.fromEntries(
+    CANDIDATE_STATUS_ORDER.map(s => [s, t(CANDIDATE_STATUS_LABEL_KEY[s])]),
+  ) as Record<CandidateStatus, string>
+
   const handleStatusChange = async (status: NeedStatus) => {
     const ok = await updateNeedStatus(need.id, status)
     if (ok) onUpdated({ ...need, status })
@@ -77,7 +109,9 @@ export default function NeedRow({
     <div
       ref={rowRef}
       id={`market-need-${need.id}`}
-      className={`bg-white dark:bg-apple-gray-800 rounded-xl border overflow-hidden transition-all ${defaultExpanded || flash ? 'border-brand-green ring-1 ring-brand-green/30' : 'border-apple-gray-200 dark:border-apple-gray-700'}`}
+      className={`rounded-xl border overflow-hidden transition-all ${
+        closed ? 'bg-apple-gray-50 dark:bg-apple-gray-800/40' : 'bg-white dark:bg-apple-gray-800'
+      } ${defaultExpanded || flash ? 'border-brand-green ring-1 ring-brand-green/30' : closed ? 'border-dashed border-apple-gray-300 dark:border-apple-gray-700' : 'border-apple-gray-200 dark:border-apple-gray-700'}`}
     >
       <div
         role="button"
@@ -87,13 +121,39 @@ export default function NeedRow({
         className="w-full flex flex-col gap-2 sm:grid sm:grid-cols-[auto_minmax(0,2fr)_7rem_7rem_5.5rem] sm:items-center sm:gap-3 px-4 py-3 sm:py-3.5 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/40 transition-colors font-sans cursor-pointer"
       >
         <div className="flex items-center gap-3 min-w-0 sm:contents">
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className={`flex items-center gap-2 flex-shrink-0 ${closed ? 'opacity-50 grayscale' : ''}`}>
             <TeamLogo src={need.team_logo} className="w-8 h-8 drop-shadow-md flex-shrink-0" />
           </div>
 
           <div className="min-w-0 flex-1 sm:flex-none">
-            <p className="font-semibold text-sm text-apple-gray-800 dark:text-white truncate">{need.team_name}</p>
+            <p className={`font-semibold text-sm truncate flex items-center gap-1.5 ${closed ? 'text-apple-gray-500 dark:text-apple-gray-400' : 'text-apple-gray-800 dark:text-white'}`}>
+              {closed && (
+                <svg className="w-3.5 h-3.5 flex-shrink-0 text-apple-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-label={t('mercado.busquedaCerrada')}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              )}
+              <span className="truncate">{need.team_name}</span>
+            </p>
             <p className="text-2xs text-apple-gray-400 truncate">{need.position_label}</p>
+            {summary.length > 0 && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                {summary.slice(0, 4).map(c => (
+                  <span
+                    key={c.id}
+                    title={candidateLabels[c.status]}
+                    className={`inline-flex items-center gap-1 max-w-[10rem] pl-1.5 pr-2 py-0.5 rounded-full text-2xs ${
+                      c.status === 'descartado'
+                        ? 'text-apple-gray-400 line-through decoration-apple-gray-300 bg-transparent'
+                        : 'text-apple-gray-600 dark:text-apple-gray-300 bg-apple-gray-100 dark:bg-apple-gray-700/70'
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${CANDIDATE_DOT[c.status]}`} />
+                    <span className="truncate">{c.player_name}</span>
+                  </span>
+                ))}
+                {summary.length > 4 && <span className="text-2xs text-apple-gray-400">+{summary.length - 4}</span>}
+              </div>
+            )}
           </div>
         </div>
 
@@ -108,7 +168,9 @@ export default function NeedRow({
           />
           <span className="text-xs text-apple-gray-500 dark:text-apple-gray-400 truncate min-w-0">{need.assigned_to_name || '—'}</span>
           <div className="ml-auto sm:ml-0 sm:text-right">
-            <FollowupDateField value={need.next_followup_date} overdue={overdue} onChange={handleFollowupChange} />
+            {closed
+              ? <span className="text-2xs text-apple-gray-400">{t('mercado.busquedaCerrada')}</span>
+              : <FollowupDateField value={need.next_followup_date} overdue={overdue} onChange={handleFollowupChange} />}
           </div>
         </div>
       </div>
@@ -141,7 +203,19 @@ export default function NeedRow({
           </div>
 
           <div className="pt-2 border-t border-apple-gray-100 dark:border-apple-gray-700">
-            <NeedCandidatesPanel needId={need.id} onNegotiationMightHaveChanged={onNegotiationMightHaveChanged} />
+            <NeedCandidatesPanel
+              need={need}
+              readOnly={closed}
+              candidates={candidates}
+              negotiationsById={negotiationsById}
+              overdueNegotiationIds={overdueNegotiationIds}
+              members={members}
+              onCandidatesChange={onCandidatesChange}
+              onNegotiationUpserted={onNegotiationUpserted}
+              onNegotiationRemoved={onNegotiationRemoved}
+              onNegotiationMightHaveChanged={onNegotiationMightHaveChanged}
+              onOpenNegotiation={onOpenNegotiation}
+            />
           </div>
 
           <div className="pt-2 border-t border-apple-gray-100 dark:border-apple-gray-700">

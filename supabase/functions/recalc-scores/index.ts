@@ -149,10 +149,6 @@ serve(async (req) => {
       // nivel GLOBAL (contra todos los de su puesto en la plataforma, sin importar
       // la liga), no liga por liga.
       const allSeasonRows: any[] = [];
-      // Ultimo equipo de cada jugador en la temporada, armado con las filas que ya se
-      // leyeron para el calculo (antes se volvia a leer toda la temporada y esa consulta
-      // se pasaba de tiempo: cortaba el recalculo antes de los percentiles).
-      const latestTeam = new Map<number, { team_id: number; date: string }>();
       const seasonPosCounts = new Map<number, Map<string, number>>();
       // deno-lint-ignore no-explicit-any
       const unplaced: { row: any; leagueId: number }[] = [];
@@ -179,12 +175,6 @@ serve(async (req) => {
             .order('id')
             .range(from, to)
         );
-
-        for (const r of rawStats) {
-          const fdate = r.fixtures?.date ?? '';
-          const cur = latestTeam.get(r.player_id);
-          if (!cur || fdate > cur.date) latestTeam.set(r.player_id, { team_id: r.team_id, date: fdate });
-        }
 
         // Un partido cuenta si el jugador tuvo minutos o puntaje (antes solo el puntaje).
         const allStats = rawStats.filter((s: any) => (s.minutes ?? 0) > 0 || s.rating !== null);
@@ -339,23 +329,19 @@ serve(async (req) => {
         totalUpserted += primaryRows.length;
       }
 
-      // Club actual = el del partido mas reciente. Si falla, se avisa y se sigue: no puede
-      // dejar la temporada sin percentiles.
+      // Club actual: ya NO se calcula acá. Recalcular una temporada vieja (job de la
+      // temporada anterior) pisaba el club vigente con el de esa temporada — Del
+      // Blanco seguía en Unión con 2 partidos en Strasbourg. Lo hace la función
+      // refresh_current_teams() con el último partido de CUALQUIER temporada (y el
+      // cron refresh-current-teams). Si falla, se avisa y se sigue.
       {
-        const teamUpdates = Array.from(latestTeam.entries()).map(([pid, v]) => ({
-          id: pid,
-          current_team_id: v.team_id,
-        }));
-        for (let i = 0; i < teamUpdates.length; i += 500) {
-          const { error: teamError } = await supabase.from('players').upsert(teamUpdates.slice(i, i + 500), { onConflict: 'id' });
-          if (teamError) {
-            await supabase.from('sync_log').insert({
-              function_name: 'recalc-scores',
-              status: 'warning',
-              error_message: `current_team_id (se siguio igual): ${teamError.message}`,
-            });
-            break;
-          }
+        const { error: teamError } = await supabase.rpc('refresh_current_teams')
+        if (teamError) {
+          await supabase.from('sync_log').insert({
+            function_name: 'recalc-scores',
+            status: 'warning',
+            error_message: `refresh_current_teams (se siguio igual): ${teamError.message}`,
+          });
         }
       }
 

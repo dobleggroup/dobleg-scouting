@@ -8,11 +8,12 @@ import PlayerLinkField from './PlayerLinkField'
 import MarketNotesPanel from './MarketNotesPanel'
 import StatusPill from './StatusPill'
 import FollowupDateField from './FollowupDateField'
+import ClubContactsField from './ClubContactsField'
 import { NEGOTIATION_STATUS_LABEL_KEY, NEGOTIATION_STATUS_COLOR, NEGOTIATION_STATUS_ORDER, NEGOTIATION_STATUS_ACCENT } from './marketLabels'
 import { buildPlayerPhotoUrl } from '@/utils/marketAlerts'
 import { useLinkedPlayerAge } from '@/hooks/useLinkedPlayerAge'
-import { updateNegotiationStatus, updateFollowupDate, reassignNegotiation, linkNegotiationPlayer, isMarketLinkAdmin } from '@/services/marketService'
-import type { Negotiation, NegotiationStatus } from '@/types/market'
+import { updateNegotiationStatus, updateFollowupDate, reassignNegotiation, linkNegotiationPlayer, updateNegotiationTargetContacts, isMarketLinkAdmin, setNegotiationHidden } from '@/services/marketService'
+import type { ClubContact, Negotiation, NegotiationStatus } from '@/types/market'
 
 export default function NegotiationRow({
   negotiation,
@@ -55,6 +56,8 @@ export default function NegotiationRow({
   const [pendingApiId, setPendingApiId] = useState<number | null>(null)
   const [pendingIdentity, setPendingIdentity] = useState<{ name: string; age: number | null } | null>(null)
   const [notesRefreshSignal, setNotesRefreshSignal] = useState(0)
+  const [editingContacts, setEditingContacts] = useState(false)
+  const [contactsDraft, setContactsDraft] = useState<ClubContact[]>([])
 
   const canLink = isMarketLinkAdmin(user?.email)
   const age = useLinkedPlayerAge(negotiation.player_api_id)
@@ -71,6 +74,16 @@ export default function NegotiationRow({
     }
   }
 
+  const isHidden = !!negotiation.hidden_at
+  const handleToggleHidden = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!isHidden && !confirm(t('mercado.confirmarOcultar').replace('{jugador}', negotiation.player_name))) return
+    const name = userDisplayName || 'Usuario'
+    if (await setNegotiationHidden(negotiation.id, !isHidden, name)) {
+      onUpdated({ ...negotiation, hidden_at: isHidden ? null : new Date().toISOString(), hidden_by_name: isHidden ? null : name })
+    }
+  }
+
   const handleFollowupChange = async (date: string | null) => {
     const ok = await updateFollowupDate({ negotiationId: negotiation.id }, date)
     if (ok) onUpdated({ ...negotiation, next_followup_date: date })
@@ -82,6 +95,16 @@ export default function NegotiationRow({
       onUpdated({ ...negotiation, assigned_to_id: id, assigned_to_name: name })
       setReassigning(false)
       setNotesRefreshSignal(s => s + 1)
+    }
+  }
+
+  const handleSaveContacts = async () => {
+    const cleaned = contactsDraft
+      .map(c => ({ name: c.name.trim(), role: c.role?.trim() || null }))
+      .filter(c => c.name)
+    if (await updateNegotiationTargetContacts(negotiation.id, cleaned)) {
+      onUpdated({ ...negotiation, target_club_contacts: cleaned })
+      setEditingContacts(false)
     }
   }
 
@@ -109,14 +132,16 @@ export default function NegotiationRow({
     <div
       ref={rowRef}
       id={`market-negotiation-${negotiation.id}`}
-      className={`bg-white dark:bg-apple-gray-800 rounded-xl border overflow-hidden transition-all ${defaultExpanded || flash ? 'border-brand-green ring-1 ring-brand-green/30' : 'border-apple-gray-200 dark:border-apple-gray-700'}`}
+      className={`rounded-xl border overflow-hidden transition-all ${
+        negotiation.status === 'cerrado_caido' ? 'bg-apple-gray-50 dark:bg-apple-gray-800/40 border-dashed' : 'bg-white dark:bg-apple-gray-800'
+      } ${defaultExpanded || flash ? 'border-brand-green ring-1 ring-brand-green/30' : 'border-apple-gray-200 dark:border-apple-gray-700'} ${negotiation.hidden_at ? 'opacity-60' : ''}`}
     >
       <div
         role="button"
         tabIndex={0}
         onClick={() => setExpanded(e => !e)}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(x => !x) } }}
-        className="w-full flex flex-col gap-2 sm:grid sm:grid-cols-[auto_minmax(0,2fr)_7rem_7rem_5.5rem] sm:items-center sm:gap-3 px-4 py-3 sm:py-3.5 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/40 transition-colors font-sans cursor-pointer"
+        className="w-full flex flex-col gap-2 sm:grid sm:grid-cols-[auto_minmax(0,2fr)_7rem_7rem_5.5rem_2rem] sm:items-center sm:gap-3 px-4 py-3 sm:py-3.5 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/40 transition-colors font-sans cursor-pointer"
       >
         <div className="flex items-center gap-3 min-w-0 sm:contents">
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -131,7 +156,7 @@ export default function NegotiationRow({
           <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-none">
             <PlayerPhoto src={photoUrl} name={negotiation.player_name} size="sm" />
             <div className="min-w-0">
-              <p className="font-semibold text-sm text-apple-gray-800 dark:text-white truncate">
+              <p className={`font-semibold text-sm truncate ${negotiation.status === 'cerrado_caido' ? 'text-apple-gray-400 line-through decoration-apple-gray-300' : 'text-apple-gray-800 dark:text-white'}`}>
                 {negotiation.player_name}
                 {age != null && <span className="font-normal text-apple-gray-400">, {age} {t('externo.anios')}</span>}
               </p>
@@ -155,6 +180,21 @@ export default function NegotiationRow({
           <div className="ml-auto sm:ml-0 sm:text-right">
             <FollowupDateField value={negotiation.next_followup_date} overdue={overdue} onChange={handleFollowupChange} />
           </div>
+          <button
+            type="button"
+            onClick={handleToggleHidden}
+            title={isHidden ? t('mercado.volverAMostrar') : t('mercado.ocultarNegociacion')}
+            aria-label={isHidden ? t('mercado.volverAMostrar') : t('mercado.ocultarNegociacion')}
+            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${isHidden
+              ? 'text-brand-green hover:bg-brand-green/10'
+              : 'text-apple-gray-300 dark:text-apple-gray-600 hover:text-red-500 hover:bg-red-500/10'}`}
+          >
+            {isHidden ? (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            )}
+          </button>
         </div>
       </div>
 
@@ -209,7 +249,17 @@ export default function NegotiationRow({
               ))}
             </div>
             <div>
-              <p className="text-2xs font-medium text-apple-gray-400 mb-0.5">{t('mercado.contactoClubDestino')}</p>
+              <p className="text-2xs font-medium text-apple-gray-400 mb-0.5 flex items-center gap-2">
+                {t('mercado.hablamosCon')}{negotiation.team_name ? ` (${negotiation.team_name})` : ''}
+                {!editingContacts && (
+                  <button
+                    onClick={() => { setContactsDraft(negotiation.target_club_contacts); setEditingContacts(true) }}
+                    className="font-medium text-brand-green hover:text-emerald-600"
+                  >
+                    {t('mercado.editar')}
+                  </button>
+                )}
+              </p>
               {negotiation.target_club_contacts.length === 0 ? (
                 <p className="text-apple-gray-700 dark:text-apple-gray-200">—</p>
               ) : negotiation.target_club_contacts.map((c, i) => (
@@ -217,6 +267,20 @@ export default function NegotiationRow({
               ))}
             </div>
           </div>
+
+          {editingContacts && (
+            <div className="space-y-2 rounded-lg bg-apple-gray-50 dark:bg-apple-gray-800/50 p-3">
+              <ClubContactsField value={contactsDraft} onChange={setContactsDraft} />
+              <div className="flex items-center gap-3">
+                <button onClick={handleSaveContacts} className="text-xs font-semibold text-white bg-brand-green px-3 py-1.5 rounded-lg hover:bg-emerald-600">
+                  {t('mercado.guardar')}
+                </button>
+                <button onClick={() => setEditingContacts(false)} className="text-xs text-apple-gray-400 hover:text-apple-gray-700 dark:hover:text-white">
+                  {t('mercado.cancelar')}
+                </button>
+              </div>
+            </div>
+          )}
 
           {canLink && (
             <div className="space-y-2">

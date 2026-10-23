@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/context/AuthContext'
-import { fetchEvaluationsByName } from '@/services/scoutEvaluationService'
+import { fetchEvaluationsByName, evaluationComments } from '@/services/scoutEvaluationService'
 import type { ScoutEvaluation } from '@/services/scoutEvaluationService'
 import type { ScoutPlayer } from '@/types'
 import LinkPlayerModal from './LinkPlayerModal'
@@ -336,12 +336,12 @@ export default function FichaManualModal({ player, onClose, onLinked }: Props) {
                               <p className="text-xs text-apple-gray-600 dark:text-apple-gray-300 leading-relaxed">{ev.weaknesses}</p>
                             </div>
                           )}
-                          {ev.notes && (
-                            <div>
-                              <p className="text-2xs font-semibold text-apple-gray-400 mb-0.5">Notas</p>
-                              <p className="text-xs text-apple-gray-600 dark:text-apple-gray-300 leading-relaxed">{ev.notes}</p>
+                          {evaluationComments(ev).map(c => (
+                            <div key={c.label}>
+                              <p className="text-2xs font-semibold text-apple-gray-400 mb-0.5">{c.label}</p>
+                              <p className="text-xs text-apple-gray-600 dark:text-apple-gray-300 leading-relaxed whitespace-pre-line">{c.text}</p>
                             </div>
-                          )}
+                          ))}
                         </div>
                       )
                     })}

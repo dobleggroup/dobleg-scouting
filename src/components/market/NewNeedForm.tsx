@@ -6,12 +6,12 @@ import { createClubNeed, MARKET_POSITION_OPTIONS } from '@/services/marketServic
 import { isValidFollowupDate } from '@/utils/marketAlerts'
 import { useAuth } from '@/context/AuthContext'
 import { useLanguage } from '@/context/LanguageContext'
-import type { ClubNeed, MarketTeamSearchResult } from '@/types/market'
+import type { ClubNeed, MarketTeamChoice } from '@/types/market'
 
 export default function NewNeedForm({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (need: ClubNeed) => void }) {
   const { user, userDisplayName } = useAuth()
   const { t } = useLanguage()
-  const [team, setTeam] = useState<MarketTeamSearchResult | null>(null)
+  const [team, setTeam] = useState<MarketTeamChoice | null>(null)
   const [positionLabel, setPositionLabel] = useState('')
   const [assigneeId, setAssigneeId] = useState<number | null>(null)
   const [assigneeName, setAssigneeName] = useState('')
@@ -69,7 +69,7 @@ export default function NewNeedForm({ open, onClose, onCreated }: { open: boolea
       <div className="space-y-4 p-4">
         <div>
           <label className="block text-xs font-medium text-apple-gray-500 mb-1.5">{t('mercado.club')} *</label>
-          <TeamSearchSelect value={team} onChange={setTeam} />
+          <TeamSearchSelect value={team} onChange={setTeam} onCustom={name => setTeam({ id: null, name, logo: null })} />
         </div>
         <div>
           <label className="block text-xs font-medium text-apple-gray-500 mb-1.5">{t('mercado.queBusca')} *</label>
