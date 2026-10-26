@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import MobileSheet from '@/components/ui/MobileSheet'
 import PitchPositionPicker from './PitchPositionPicker'
-import { createClubNeed, addNoteTo, needGroupKey, pitchOrder } from '@/services/marketService'
+import { createClubNeed, addNoteTo, needGroupKey, mergePitchSelection, pitchSpotsTaken } from '@/services/marketService'
 import { useAuth } from '@/context/AuthContext'
 import { useLanguage } from '@/context/LanguageContext'
 import type { ClubNeed } from '@/types/market'
@@ -42,7 +42,8 @@ export default function NewNeedForm({ open, onClose, onCreated, existingNeeds }:
   const clubKey = clubName.trim() ? needGroupKey({ team_name: clubName, hidden_at: null }) : null
   const sameClub = clubKey ? existingNeeds.filter(n => needGroupKey(n) === clubKey) : []
   const alreadyIn = sameClub.map(n => n.position_label)
-  const toSave = positions.filter(p => !alreadyIn.includes(p)).sort((a, b) => pitchOrder(a) - pitchOrder(b))
+  // Los dos extremos marcados = una búsqueda de "Extremo" (ídem interiores).
+  const toSave = mergePitchSelection(positions).filter(p => !alreadyIn.includes(p))
   const canSave = clubName.trim().length > 0 && toSave.length > 0
 
   const handleSave = async () => {
@@ -72,7 +73,7 @@ export default function NewNeedForm({ open, onClose, onCreated, existingNeeds }:
     }
     if (created.length < toSave.length) {
       setSaving(false)
-      setPositions(toSave.slice(created.length))
+      setPositions(pitchSpotsTaken(toSave.slice(created.length)))
       setError(t('mercado.errorGuardar'))
       return
     }
@@ -101,7 +102,7 @@ export default function NewNeedForm({ open, onClose, onCreated, existingNeeds }:
         </div>
         <div>
           <label className="block text-sm font-medium text-apple-gray-700 dark:text-apple-gray-200 mb-2">{t('mercado.queBuscaCancha')}</label>
-          <PitchPositionPicker value={positions} onChange={setPositions} disabled={alreadyIn} />
+          <PitchPositionPicker value={positions} onChange={setPositions} disabled={pitchSpotsTaken(alreadyIn)} />
           <p className="mt-2 text-sm text-center text-apple-gray-700 dark:text-apple-gray-200 min-h-[1.25rem]">
             {toSave.length > 0 ? toSave.join(' · ') : <span className="text-apple-gray-500 dark:text-apple-gray-400">{t('mercado.tocaPosiciones')}</span>}
           </p>

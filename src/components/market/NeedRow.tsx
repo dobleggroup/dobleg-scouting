@@ -15,6 +15,8 @@ import {
   updateNeedDetails,
   createClubNeed,
   pitchOrder,
+  mergePitchSelection,
+  pitchSpotsTaken,
 } from '@/services/marketService'
 import type { ClubNeed, NeedStatus, NeedCandidate, Negotiation, TeamMember } from '@/types/market'
 
@@ -173,7 +175,7 @@ export default function NeedRow({
     if (newPositions.length === 0) return
     setSavingPositions(true)
     setError('')
-    const ordered = [...newPositions].sort((a, b) => pitchOrder(a) - pitchOrder(b))
+    const ordered = mergePitchSelection(newPositions)
     for (const position of ordered) {
       const created = await createClubNeed(
         {
@@ -304,7 +306,7 @@ export default function NeedRow({
 
             {addingPositions && (
               <div className="rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 p-3 space-y-3">
-                <PitchPositionPicker value={newPositions} onChange={setNewPositions} disabled={needs.map(n => n.position_label)} />
+                <PitchPositionPicker value={newPositions} onChange={setNewPositions} disabled={pitchSpotsTaken(needs.map(n => n.position_label))} />
                 <button
                   type="button"
                   onClick={handleAddPositions}
@@ -313,8 +315,8 @@ export default function NeedRow({
                 >
                   {savingPositions
                     ? t('mercado.guardando')
-                    : newPositions.length > 1
-                      ? t('mercado.agregarPosiciones').replace('{n}', String(newPositions.length))
+                    : mergePitchSelection(newPositions).length > 1
+                      ? t('mercado.agregarPosiciones').replace('{n}', String(mergePitchSelection(newPositions).length))
                       : t('mercado.agregarPosicion')}
                 </button>
               </div>

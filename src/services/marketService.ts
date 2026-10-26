@@ -36,20 +36,24 @@ function normalizePosition(label: string): string {
     // La canchita de búsquedas distingue lado ("Extremo derecho", "Defensor
     // central zurdo"); las negociaciones no. Para engancharlas, el lado no cuenta.
     .replace(/\s+(derecho|izquierdo|zurdo)$/, '')
+    // "Interior" de la canchita = "Volante interno" de las negociaciones.
+    .replace(/^interior$/, 'volante interno')
 }
 
 /**
  * Los lugares de la canchita de "Nueva búsqueda", con su ubicación en una
  * cancha vertical (ataque arriba): x e y en % del ancho/alto. Los dos
- * extremos comparten etiqueta: tocar uno marca los dos y se guarda "Extremo".
+ * extremos (y los dos interiores) se marcan por separado; si se marcan los
+ * dos, se guarda la posición sin lado (ver `mergePitchSelection`).
  */
 export const PITCH_SPOTS = [
-  { label: 'Delantero', name: 'Delantero', x: 50, y: 11 },
-  { label: 'Extremo', name: 'Extremo', x: 18, y: 22 },
-  { label: 'Extremo', name: 'Extremo', x: 82, y: 22 },
-  { label: 'Volante interno izquierdo', name: 'Interno izq.', x: 28, y: 40 },
-  { label: 'Volante interno derecho', name: 'Interno der.', x: 72, y: 40 },
-  { label: 'Volante central', name: 'Volante central', x: 50, y: 60 },
+  { label: 'Delantero', name: 'Delantero', x: 50, y: 10 },
+  { label: 'Extremo izquierdo', name: 'Extremo izq.', x: 18, y: 20 },
+  { label: 'Extremo derecho', name: 'Extremo der.', x: 82, y: 20 },
+  { label: 'Enganche', name: 'Enganche', x: 50, y: 30 },
+  { label: 'Interior izquierdo', name: 'Interior izq.', x: 26, y: 40 },
+  { label: 'Interior derecho', name: 'Interior der.', x: 74, y: 40 },
+  { label: 'Volante central', name: 'Volante central', x: 50, y: 59 },
   { label: 'Lateral izquierdo', name: 'Lateral izq.', x: 18, y: 70 },
   { label: 'Lateral derecho', name: 'Lateral der.', x: 82, y: 70 },
   { label: 'Defensor central zurdo', name: 'Central zurdo', x: 32, y: 80 },
@@ -57,9 +61,31 @@ export const PITCH_SPOTS = [
   { label: 'Arquero', name: 'Arquero', x: 50, y: 92 },
 ] as const
 
+/** Si se marcan los dos lados, la búsqueda es de la posición sin lado. */
+const PITCH_PAIRS = [
+  { sides: ['Extremo izquierdo', 'Extremo derecho'], merged: 'Extremo' },
+  { sides: ['Interior izquierdo', 'Interior derecho'], merged: 'Interior' },
+]
+
+/** Lo marcado en la canchita → las posiciones que se guardan (los dos extremos = "Extremo"). */
+export function mergePitchSelection(selected: string[]): string[] {
+  let out = [...selected]
+  for (const pair of PITCH_PAIRS) {
+    if (pair.sides.every(side => out.includes(side))) {
+      out = [...out.filter(l => !pair.sides.includes(l)), pair.merged]
+    }
+  }
+  return out.sort((a, b) => pitchOrder(a) - pitchOrder(b))
+}
+
+/** Posiciones ya guardadas → los lugares de la canchita que ocupan ("Extremo" ocupa los dos). */
+export function pitchSpotsTaken(saved: string[]): string[] {
+  return saved.flatMap(label => PITCH_PAIRS.find(p => p.merged === label)?.sides ?? [label])
+}
+
 /** Orden de arquero a delantero, para listar las posiciones de una búsqueda. */
 export function pitchOrder(label: string): number {
-  const order = ['arquero', 'defensor central', 'lateral', 'volante central', 'volante interno', 'extremo', 'delantero']
+  const order = ['arquero', 'defensor central', 'lateral', 'volante central', 'volante interno', 'enganche', 'extremo', 'delantero']
   const norm = normalizePosition(label)
   const i = order.findIndex(o => norm.startsWith(o))
   return i === -1 ? order.length : i
