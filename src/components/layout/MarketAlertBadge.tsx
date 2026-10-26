@@ -79,7 +79,7 @@ function saveSeenKeys(keys: Set<string>) {
 
 function buildEntries(negotiations: Negotiation[], needs: ClubNeed[], meMemberId: number | null): AlertEntry[] {
   const items: AlertableItem[] = [
-    ...needs.map(n => ({ id: n.id, kind: 'need' as const, status: n.status, assigned_to_id: n.assigned_to_id, next_followup_date: n.next_followup_date })),
+    ...needs.filter(n => !n.hidden_at).map(n => ({ id: n.id, kind: 'need' as const, status: n.status, assigned_to_id: n.assigned_to_id, next_followup_date: n.next_followup_date })),
     ...negotiations.filter(n => !n.hidden_at).map(n => ({ id: n.id, kind: 'negotiation' as const, status: n.status, assigned_to_id: n.assigned_to_id, next_followup_date: n.next_followup_date })),
   ]
   const alerts = computeAlerts(items, new Date())

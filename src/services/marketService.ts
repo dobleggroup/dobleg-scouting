@@ -70,6 +70,7 @@ async function linkOrCreateNeedForNegotiation(negotiation: Negotiation): Promise
     .select('*')
     .eq('team_id', negotiation.team_id)
     .eq('status', 'abierto')
+    .is('hidden_at', null)
   if (fetchErr) { console.error('linkOrCreateNeedForNegotiation fetch error:', fetchErr); return null }
 
   let need = (openNeeds ?? []).find(n => normalizePosition(n.position_label) === targetNorm) ?? null
@@ -264,6 +265,16 @@ export async function createNegotiation(input: CreateNegotiationInput, createdBy
 export async function updateNeedStatus(id: number, status: NeedStatus): Promise<boolean> {
   const { error } = await supabase.from('market_club_needs').update({ status, updated_at: new Date().toISOString() }).eq('id', id)
   if (error) { console.error('updateNeedStatus error:', error); return false }
+  return true
+}
+
+/** Oculta (o vuelve a mostrar) una búsqueda de club. No se borra: queda archivada. */
+export async function setNeedHidden(id: number, hidden: boolean, userName: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('market_club_needs')
+    .update({ hidden_at: hidden ? new Date().toISOString() : null, hidden_by_name: hidden ? userName : null })
+    .eq('id', id)
+  if (error) { console.error('setNeedHidden error:', error); return false }
   return true
 }
 

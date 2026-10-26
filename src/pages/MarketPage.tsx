@@ -53,6 +53,7 @@ export default function MarketPage() {
   const [negotiationView, setNegotiationView] = useState<'lista' | 'tablero'>('lista')
   // Las ocultadas a mano y las caídas no se ven por defecto; quedan guardadas.
   const [showArchived, setShowArchived] = useState(false)
+  const [showArchivedNeeds, setShowArchivedNeeds] = useState(false)
   const [notes, setNotes] = useState<CalendarNote[]>([])
   const [openDay, setOpenDay] = useState<string | null>(null)
 
@@ -125,7 +126,7 @@ export default function MarketPage() {
   const overdueIds = useMemo(() => {
     const items: AlertableItem[] = [
       ...negotiations.map(n => ({ id: n.id, kind: 'negotiation' as const, status: n.status, assigned_to_id: n.assigned_to_id, next_followup_date: n.next_followup_date })),
-      ...needs.map(n => ({ id: n.id, kind: 'need' as const, status: n.status, assigned_to_id: n.assigned_to_id, next_followup_date: n.next_followup_date })),
+      ...needs.filter(n => !n.hidden_at).map(n => ({ id: n.id, kind: 'need' as const, status: n.status, assigned_to_id: n.assigned_to_id, next_followup_date: n.next_followup_date })),
     ]
     const alerts = computeAlerts(items, new Date())
     return {
@@ -173,9 +174,14 @@ export default function MarketPage() {
     return true
   }), [needs, clubFilter, assigneeFilter, needStatusFilter])
 
-  // Las búsquedas cerradas van aparte, al final: ya no piden acción.
-  const openNeeds = visibleNeeds.filter(n => n.status !== 'cerrado')
-  const closedNeeds = visibleNeeds.filter(n => n.status === 'cerrado')
+  // Las búsquedas cerradas van aparte, al final: ya no piden acción. Las
+  // archivadas (sacadas a mano con la ×) no se ven salvo que se pidan.
+  const activeNeeds = needs.filter(n => !n.hidden_at)
+  const archivedNeedsCount = needs.length - activeNeeds.length
+  const openNeeds = visibleNeeds.filter(n => !n.hidden_at && n.status !== 'cerrado')
+  const closedNeeds = visibleNeeds.filter(n => !n.hidden_at && n.status === 'cerrado')
+  const hiddenNeeds = showArchivedNeeds ? visibleNeeds.filter(n => n.hidden_at) : []
+  const shownNeedsCount = openNeeds.length + closedNeeds.length + hiddenNeeds.length
 
   // Un solo calendario para las dos pestañas: "a quién tengo que llamar" no
   // depende de en qué pestaña se cargó. Respeta el filtro de responsable (el
@@ -193,7 +199,7 @@ export default function MarketPage() {
         assignee: n.assigned_to_name,
       })),
     ...needs
-      .filter(n => n.next_followup_date && n.status !== 'cerrado')
+      .filter(n => n.next_followup_date && !n.hidden_at && n.status !== 'cerrado')
       .filter(n => assigneeFilter === 'all' || n.assigned_to_id === assigneeFilter)
       .map(n => ({
         kind: 'need' as const,
@@ -263,7 +269,7 @@ export default function MarketPage() {
             onClick={() => setTab('objetivos')}
             className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${tab === 'objetivos' ? 'bg-white dark:bg-apple-gray-700 text-apple-gray-800 dark:text-white shadow-sm' : 'text-apple-gray-500 dark:text-apple-gray-400'}`}
           >
-            {t('mercado.tabObjetivos')} ({needs.length})
+            {t('mercado.tabObjetivos')} ({activeNeeds.length})
           </button>
         </div>
 
@@ -428,19 +434,29 @@ export default function MarketPage() {
             />
           </div>
         )
-      ) : visibleNeeds.length === 0 ? (
-        <EmptyState
-          title={t('mercado.sinObjetivosTitulo')}
-          description={needs.length === 0 ? t('mercado.sinObjetivosVacio') : t('mercado.sinObjetivosFiltro')}
-        />
+      ) : shownNeedsCount === 0 ? (
+        <div>
+          <EmptyState
+            title={t('mercado.sinObjetivosTitulo')}
+            description={activeNeeds.length === 0 ? t('mercado.sinObjetivosVacio') : t('mercado.sinObjetivosFiltro')}
+          />
+          {archivedNeedsCount > 0 && (
+            <div className="flex justify-center">
+              <button type="button" onClick={() => setShowArchivedNeeds(true)} className="text-xs text-apple-gray-500 hover:text-apple-gray-800 dark:text-apple-gray-400 dark:hover:text-apple-gray-200 transition-colors">
+                {t('mercado.verBusquedasArchivadas').replace('{n}', String(archivedNeedsCount))}
+              </button>
+            </div>
+          )}
+        </div>
       ) : (
         <div className="space-y-2">
-          <div className="hidden sm:grid grid-cols-[auto_minmax(0,2fr)_7rem_7rem_5.5rem] items-center gap-3 px-4 text-2xs font-semibold uppercase tracking-wide text-apple-gray-400">
+          <div className="hidden sm:grid grid-cols-[auto_minmax(0,2fr)_7rem_7rem_5.5rem_2rem] items-center gap-3 px-4 text-2xs font-semibold uppercase tracking-wide text-apple-gray-400">
             <span />
             <span>{t('mercado.club')}</span>
             <span>{t('mercado.estado')}</span>
             <span>{t('mercado.responsable')}</span>
             <span className="text-right">{t('mercado.columnaSeguimiento')}</span>
+            <span />
           </div>
           {openNeeds.map(renderNeed)}
           {closedNeeds.length > 0 && (
@@ -451,6 +467,27 @@ export default function MarketPage() {
               </p>
               {closedNeeds.map(renderNeed)}
             </>
+          )}
+          {hiddenNeeds.length > 0 && (
+            <>
+              <p className="pt-4 pb-1 px-1 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                {t('mercado.busquedasArchivadas')} ({hiddenNeeds.length})
+              </p>
+              {hiddenNeeds.map(renderNeed)}
+            </>
+          )}
+          {archivedNeedsCount > 0 && (
+            <div className="flex justify-center pt-1">
+              <button
+                type="button"
+                onClick={() => setShowArchivedNeeds(v => !v)}
+                className="inline-flex items-center gap-1.5 text-xs text-apple-gray-500 hover:text-apple-gray-800 dark:text-apple-gray-400 dark:hover:text-apple-gray-200 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                {showArchivedNeeds ? t('mercado.ocultarBusquedasArchivadas') : t('mercado.verBusquedasArchivadas').replace('{n}', String(archivedNeedsCount))}
+              </button>
+            </div>
           )}
           <MarketWeekCalendar
             entries={calendarEntries}

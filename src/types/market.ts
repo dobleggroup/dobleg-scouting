@@ -29,6 +29,9 @@ export interface ClubNeed {
   created_by_name: string | null
   created_at: string
   updated_at: string
+  /** Sacada de la lista a mano: no se borra, queda archivada. */
+  hidden_at?: string | null
+  hidden_by_name?: string | null
 }
 
 /** Una persona de contacto en un club — no siempre es "el" director

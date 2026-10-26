@@ -8,7 +8,7 @@ import NeedCandidatesPanel from './NeedCandidatesPanel'
 import StatusPill from './StatusPill'
 import FollowupDateField from './FollowupDateField'
 import { NEED_STATUS_LABEL_KEY, NEED_STATUS_COLOR, NEED_STATUS_ORDER, NEED_STATUS_ACCENT, CANDIDATE_STATUS_ORDER, CANDIDATE_STATUS_LABEL_KEY } from './marketLabels'
-import { updateNeedStatus, updateFollowupDate, reassignNeed } from '@/services/marketService'
+import { updateNeedStatus, updateFollowupDate, reassignNeed, setNeedHidden } from '@/services/marketService'
 import type { ClubNeed, NeedStatus, NeedCandidate, Negotiation, TeamMember, CandidateStatus } from '@/types/market'
 
 /** Punto de color por estado del ofrecido, para el resumen de la fila cerrada. */
@@ -91,6 +91,16 @@ export default function NeedRow({
     NEED_STATUS_ORDER.map(s => [s, t(NEED_STATUS_LABEL_KEY[s])]),
   ) as Record<NeedStatus, string>
 
+  const isHidden = !!need.hidden_at
+  const handleToggleHidden = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!isHidden && !confirm(t('mercado.confirmarOcultarBusqueda').replace('{club}', need.team_name))) return
+    const name = userDisplayName || 'Usuario'
+    if (await setNeedHidden(need.id, !isHidden, name)) {
+      onUpdated({ ...need, hidden_at: isHidden ? null : new Date().toISOString(), hidden_by_name: isHidden ? null : name })
+    }
+  }
+
   const handleFollowupChange = async (date: string | null) => {
     const ok = await updateFollowupDate({ needId: need.id }, date)
     if (ok) onUpdated({ ...need, next_followup_date: date })
@@ -111,14 +121,14 @@ export default function NeedRow({
       id={`market-need-${need.id}`}
       className={`rounded-xl border overflow-hidden transition-all ${
         closed ? 'bg-apple-gray-50 dark:bg-apple-gray-800/40' : 'bg-white dark:bg-apple-gray-800'
-      } ${defaultExpanded || flash ? 'border-brand-green ring-1 ring-brand-green/30' : closed ? 'border-dashed border-apple-gray-300 dark:border-apple-gray-700' : 'border-apple-gray-200 dark:border-apple-gray-700'}`}
+      } ${defaultExpanded || flash ? 'border-brand-green ring-1 ring-brand-green/30' : closed ? 'border-dashed border-apple-gray-300 dark:border-apple-gray-700' : 'border-apple-gray-200 dark:border-apple-gray-700'} ${isHidden ? 'opacity-60' : ''}`}
     >
       <div
         role="button"
         tabIndex={0}
         onClick={() => setExpanded(e => !e)}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(x => !x) } }}
-        className="w-full flex flex-col gap-2 sm:grid sm:grid-cols-[auto_minmax(0,2fr)_7rem_7rem_5.5rem] sm:items-center sm:gap-3 px-4 py-3 sm:py-3.5 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/40 transition-colors font-sans cursor-pointer"
+        className="w-full flex flex-col gap-2 sm:grid sm:grid-cols-[auto_minmax(0,2fr)_7rem_7rem_5.5rem_2rem] sm:items-center sm:gap-3 px-4 py-3 sm:py-3.5 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/40 transition-colors font-sans cursor-pointer"
       >
         <div className="flex items-center gap-3 min-w-0 sm:contents">
           <div className={`flex items-center gap-2 flex-shrink-0 ${closed ? 'opacity-50 grayscale' : ''}`}>
@@ -172,6 +182,21 @@ export default function NeedRow({
               ? <span className="text-2xs text-apple-gray-400">{t('mercado.busquedaCerrada')}</span>
               : <FollowupDateField value={need.next_followup_date} overdue={overdue} onChange={handleFollowupChange} />}
           </div>
+          <button
+            type="button"
+            onClick={handleToggleHidden}
+            title={isHidden ? t('mercado.volverAMostrar') : t('mercado.ocultarBusqueda')}
+            aria-label={isHidden ? t('mercado.volverAMostrar') : t('mercado.ocultarBusqueda')}
+            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${isHidden
+              ? 'text-brand-green hover:bg-brand-green/10'
+              : 'text-apple-gray-400 dark:text-apple-gray-500 hover:text-red-500 hover:bg-red-500/10'}`}
+          >
+            {isHidden ? (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            )}
+          </button>
         </div>
       </div>
 
