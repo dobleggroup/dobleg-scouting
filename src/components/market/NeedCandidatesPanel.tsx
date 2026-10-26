@@ -142,7 +142,7 @@ function CandidateRow({
           ? 'bg-apple-gray-50/70 dark:bg-apple-gray-800/30 border border-dashed border-apple-gray-200 dark:border-apple-gray-700'
           : signed
             ? 'bg-emerald-50/70 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800/50'
-            : 'bg-apple-gray-50 dark:bg-apple-gray-800/50 border border-transparent'
+            : 'bg-white dark:bg-apple-gray-800 border border-apple-gray-200/70 dark:border-apple-gray-700'
       }`}
     >
       <div className="flex items-center gap-2.5">
@@ -389,12 +389,18 @@ export default function NeedCandidatesPanel({
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">
-          {t('mercado.jugadoresPropuestos')} ({active.length})
-        </p>
-        {!readOnly && <p className="text-2xs text-apple-gray-400 hidden sm:block">{t('mercado.ofrecidoSeCreaNegociacion')}</p>}
+    <div className="rounded-xl border border-brand-green/15 bg-brand-green/[0.04] dark:bg-brand-green/[0.06] p-3 space-y-3">
+      <div className="flex items-start gap-2.5">
+        <span className="w-7 h-7 rounded-lg bg-brand-green/10 text-brand-green flex items-center justify-center flex-shrink-0">
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.36-1.86M17 20H7m10 0v-2c0-.66-.13-1.28-.36-1.86M7 20H2v-2a3 3 0 015.36-1.86M7 20v-2c0-.66.13-1.28.36-1.86m0 0a5 5 0 019.28 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-apple-gray-800 dark:text-white flex items-center gap-1.5">
+            {t('mercado.jugadoresPropuestos')}
+            <span className="px-1.5 py-px rounded-full text-2xs font-semibold tabular-nums bg-brand-green/10 text-brand-green">{active.length}</span>
+          </p>
+          {!readOnly && <p className="text-xs text-apple-gray-600 dark:text-apple-gray-300 mt-0.5">{t('mercado.ofrecidosAyuda')}</p>}
+        </div>
       </div>
 
       {!readOnly && <div className="flex items-center gap-2">
@@ -415,9 +421,7 @@ export default function NeedCandidatesPanel({
         </button>
       </div>}
 
-      {candidates.length === 0 ? (
-        <p className="text-xs text-apple-gray-400">{t('mercado.sinCandidatos')}</p>
-      ) : (
+      {candidates.length > 0 && (
         <div className="space-y-2">
           {active.map(renderRow)}
           {discarded.length > 0 && (
