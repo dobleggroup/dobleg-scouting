@@ -17,47 +17,98 @@ import {
   pitchOrder,
   mergePitchSelection,
   pitchSpotsTaken,
+  linkNeedsTeam,
+  isMarketLinkAdmin,
 } from '@/services/marketService'
+import TeamSearchSelect from './TeamSearchSelect'
 import type { ClubNeed, NeedStatus, NeedCandidate, Negotiation, TeamMember } from '@/types/market'
 
 /** Detalle de una posición: se escribe y se guarda solo al salir del campo. */
+// Las características de un puesto se guardan juntas en `details`, separadas por " · ".
+const DETAIL_SEPARATOR = ' · '
+const splitDetails = (details: string | null | undefined) =>
+  (details ?? '').split(/\s*[·,\n]\s*/).map(d => d.trim()).filter(Boolean)
+
+/**
+ * Características del puesto ("segunda punta", "zurdo"...): se escribe una,
+ * se toca Agregar (o Enter) y queda como etiqueta guardada; el campo se vacía
+ * para escribir la siguiente. Cada etiqueta se borra con su ×.
+ */
 function PositionDetails({ need, readOnly, onSaved }: { need: ClubNeed; readOnly: boolean; onSaved: (details: string | null) => void }) {
   const { t } = useLanguage()
-  const [draft, setDraft] = useState(need.details ?? '')
-  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [draft, setDraft] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(false)
+  const items = splitDetails(need.details)
 
-  useEffect(() => { setDraft(need.details ?? '') }, [need.details])
-
-  const save = async () => {
-    const next = draft.trim() || null
-    if (next === (need.details ?? null)) return
-    setState('saving')
-    if (await updateNeedDetails(need.id, next)) {
-      onSaved(next)
-      setState('saved')
-      setTimeout(() => setState(s => s === 'saved' ? 'idle' : s), 1800)
-    } else {
-      setState('error')
-    }
+  const persist = async (next: string[]) => {
+    setSaving(true)
+    setError(false)
+    const value = next.length ? next.join(DETAIL_SEPARATOR) : null
+    const ok = await updateNeedDetails(need.id, value)
+    setSaving(false)
+    if (ok) onSaved(value)
+    else setError(true)
+    return ok
   }
 
+  const add = async () => {
+    const text = draft.trim()
+    if (!text || saving) return
+    const fresh = splitDetails(text).filter(x => !items.some(i => i.toLowerCase() === x.toLowerCase()))
+    if (fresh.length === 0) { setDraft(''); return }
+    if (await persist([...items, ...fresh])) setDraft('')
+  }
+
+  const remove = (item: string) => persist(items.filter(i => i !== item))
+
   if (readOnly) {
-    return need.details ? <p className="text-sm text-apple-gray-700 dark:text-apple-gray-200">{need.details}</p> : null
+    return items.length ? <p className="text-sm text-apple-gray-700 dark:text-apple-gray-200">{items.join(DETAIL_SEPARATOR)}</p> : null
   }
 
   return (
-    <div>
-      <input
-        type="text"
-        value={draft}
-        onChange={e => { setDraft(e.target.value); if (state === 'error') setState('idle') }}
-        onBlur={save}
-        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-        placeholder={t('mercado.detallePosicionPlaceholder')}
-        className="input-apple text-sm w-full"
-      />
-      {state === 'saved' && <p className="mt-1 text-xs text-brand-green">✓ {t('mercado.guardado')}</p>}
-      {state === 'error' && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{t('mercado.errorGuardar')}</p>}
+    <div className="space-y-2">
+      <p className="text-xs font-semibold text-apple-gray-600 dark:text-apple-gray-300">{t('mercado.comoLoBuscan')}</p>
+      {items.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {items.map(item => (
+            <span key={item} className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full text-sm font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800/70">
+              {item}
+              <button
+                type="button"
+                onClick={() => remove(item)}
+                disabled={saving}
+                title={t('mercado.quitar')}
+                aria-label={`${t('mercado.quitar')} ${item}`}
+                className="w-5 h-5 rounded-full flex items-center justify-center text-emerald-700/70 hover:text-red-600 hover:bg-red-500/10 dark:text-emerald-300/70"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={draft}
+          onChange={e => { setDraft(e.target.value); setError(false) }}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
+          onBlur={add}
+          placeholder={items.length ? t('mercado.otraCaracteristica') : t('mercado.detallePosicionPlaceholder')}
+          className="input-apple text-sm flex-1 min-w-0"
+        />
+        <button
+          type="button"
+          onMouseDown={e => e.preventDefault()}
+          onClick={add}
+          disabled={!draft.trim() || saving}
+          className="px-4 rounded-apple text-sm font-semibold text-white bg-brand-green hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+        >
+          {saving ? t('mercado.guardando') : `+ ${t('mercado.agregar')}`}
+        </button>
+      </div>
+      {error && <p className="text-xs text-red-600 dark:text-red-400">{t('mercado.errorGuardar')}</p>}
     </div>
   )
 }
@@ -110,6 +161,7 @@ export default function NeedRow({
   const [newPositions, setNewPositions] = useState<string[]>([])
   const [savingPositions, setSavingPositions] = useState(false)
   const [error, setError] = useState('')
+  const [linkingTeam, setLinkingTeam] = useState(false)
   const rowRef = useRef<HTMLDivElement>(null)
 
   // Reacciona a `defaultExpanded` (no solo al montaje): tocar otra
@@ -158,6 +210,18 @@ export default function NeedRow({
     const name = userDisplayName || 'Usuario'
     if (await setNeedHidden(ids, !isHidden, name)) {
       updateAll({ hidden_at: isHidden ? null : new Date().toISOString(), hidden_by_name: isHidden ? null : name })
+    }
+  }
+
+  // Solo Marcos y Matías vinculan el club escrito a mano con uno de la base (por el escudo).
+  const canLink = isMarketLinkAdmin(user?.email)
+  const handleLinkTeam = async (team: { id: number; name: string; logo: string | null }) => {
+    setError('')
+    if (await linkNeedsTeam(ids, team)) {
+      updateAll({ team_id: team.id, team_name: team.name, team_logo: team.logo })
+      setLinkingTeam(false)
+    } else {
+      setError(t('mercado.errorGuardar'))
     }
   }
 
@@ -289,6 +353,41 @@ export default function NeedRow({
       {expanded && (
         <div className="px-4 pb-4 pt-4 border-t border-apple-gray-100 dark:border-apple-gray-700 space-y-4">
           {error && <p className="text-xs text-red-600 dark:text-red-400 bg-red-500/10 px-3 py-2 rounded-lg">{error}</p>}
+
+          {canLink && (
+            <div className="rounded-xl bg-apple-gray-50 dark:bg-apple-gray-900/40 border border-apple-gray-200 dark:border-apple-gray-700 px-3 py-2.5">
+              {linkingTeam ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <TeamSearchSelect value={null} onChange={handleLinkTeam} />
+                  </div>
+                  <button type="button" onClick={() => setLinkingTeam(false)} className="text-sm text-apple-gray-500 hover:text-apple-gray-700 dark:text-apple-gray-400 dark:hover:text-apple-gray-200">
+                    {t('mercado.cancelar')}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-2">
+                  {primary.team_id ? (
+                    <span className="inline-flex items-center gap-2 min-w-0 text-sm text-apple-gray-700 dark:text-apple-gray-200">
+                      <TeamLogo src={logo} className="w-5 h-5 drop-shadow-md flex-shrink-0" />
+                      <span className="truncate">{t('mercado.clubVinculado')}: <span className="font-semibold">{primary.team_name}</span></span>
+                    </span>
+                  ) : (
+                    <span className="text-sm text-apple-gray-600 dark:text-apple-gray-300">{t('mercado.clubSinVincular')}</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setLinkingTeam(true)}
+                    className={primary.team_id
+                      ? 'text-sm font-medium text-brand-green hover:text-emerald-600 flex-shrink-0'
+                      : 'px-3 py-1.5 rounded-lg text-sm font-semibold text-white bg-brand-green hover:bg-emerald-600 flex-shrink-0'}
+                  >
+                    {primary.team_id ? t('mercado.cambiarClub') : t('mercado.vincularClub')}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-2">

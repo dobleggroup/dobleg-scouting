@@ -346,6 +346,16 @@ export async function setNeedHidden(ids: number[], hidden: boolean, userName: st
   return true
 }
 
+/** Vincula una búsqueda (todas sus posiciones) a un club de la base: nombre y escudo pasan a ser los del club. */
+export async function linkNeedsTeam(ids: number[], team: { id: number; name: string; logo: string | null }): Promise<boolean> {
+  const { error } = await supabase
+    .from('market_club_needs')
+    .update({ team_id: team.id, team_name: team.name, team_logo: team.logo, updated_at: new Date().toISOString() })
+    .in('id', ids)
+  if (error) { console.error('linkNeedsTeam error:', error); return false }
+  return true
+}
+
 /** Cambia el estado de todas las posiciones de una búsqueda de club. */
 export async function updateNeedsStatus(ids: number[], status: NeedStatus): Promise<boolean> {
   const { error } = await supabase.from('market_club_needs').update({ status, updated_at: new Date().toISOString() }).in('id', ids)
