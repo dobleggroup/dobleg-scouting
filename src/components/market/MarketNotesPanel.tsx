@@ -14,7 +14,9 @@ export default function MarketNotesPanel({
   target,
   refreshSignal,
 }: {
-  target: { negotiationId?: number; needId?: number }
+  /** `needIds`: búsqueda de club con varias posiciones — muestra las notas de
+   * todas y las nuevas se guardan en `needId` (la posición principal). */
+  target: { negotiationId?: number; needId?: number; needIds?: number[] }
   /** Incrementar desde el padre para forzar un refetch (ej. después de una
    * reasignación, que inserta una nota de sistema fuera de este componente). */
   refreshSignal?: number
@@ -25,8 +27,9 @@ export default function MarketNotesPanel({
   const [loading, setLoading] = useState(true)
   const [body, setBody] = useState('')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(false)
 
-  const targetKey = target.negotiationId ?? target.needId
+  const targetKey = target.negotiationId ?? target.needIds?.join(',') ?? target.needId
 
   useEffect(() => {
     let active = true
@@ -39,12 +42,14 @@ export default function MarketNotesPanel({
   const handleAdd = async () => {
     if (!body.trim()) return
     setSaving(true)
-    const note = await addNoteTo(target, body.trim(), false, null, user?.id ?? null, userDisplayName || 'Usuario')
+    setError(false)
+    const note = await addNoteTo({ negotiationId: target.negotiationId, needId: target.needId }, body.trim(), false, null, user?.id ?? null, userDisplayName || 'Usuario')
     setSaving(false)
-    if (note) {
-      setNotes(prev => [note, ...prev])
-      setBody('')
-    }
+    // Si falla, el texto queda escrito y se avisa: antes no pasaba nada y
+    // parecía que no se podía escribir.
+    if (!note) { setError(true); return }
+    setNotes(prev => [note, ...prev])
+    setBody('')
   }
 
   const locale = LANGUAGE_LOCALES[language]
@@ -78,6 +83,8 @@ export default function MarketNotesPanel({
           {saving ? t('mercado.guardando') : t('mercado.agregar')}
         </button>
       </div>
+
+      {error && <p className="text-xs text-red-600 dark:text-red-400 bg-red-500/10 px-3 py-2 rounded-lg">{t('mercado.errorGuardarNota')}</p>}
 
       <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
         {loading ? (

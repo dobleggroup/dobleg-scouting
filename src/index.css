@@ -117,7 +117,9 @@
   .input-apple {
     @apply w-full px-3.5 py-2.5 text-sm bg-apple-gray-50 dark:bg-apple-gray-800 rounded-apple;
     @apply border border-apple-gray-200 dark:border-apple-gray-700;
-    @apply text-apple-gray-800 dark:text-apple-gray-100 placeholder:text-apple-gray-400;
+    /* Los ejemplos (placeholder) van tenues: que se vean, pero que no compitan
+       con lo que ya está escrito. */
+    @apply text-apple-gray-800 dark:text-apple-gray-100 placeholder:text-apple-gray-400/70 dark:placeholder:text-apple-gray-500/80;
     @apply transition-all duration-200 ease-apple;
     @apply focus:outline-none focus:ring-2 focus:ring-brand-green/30 focus:border-brand-green;
   }

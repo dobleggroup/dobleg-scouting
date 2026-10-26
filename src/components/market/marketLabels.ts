@@ -55,7 +55,7 @@ export const NEED_STATUS_LABEL_KEY: Record<NeedStatus, string> = {
 }
 
 export const NEED_STATUS_COLOR: Record<NeedStatus, string> = {
-  abierto: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+  abierto: 'bg-emerald-100 text-emerald-800 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-800/70',
   cerrado: 'bg-apple-gray-200 text-apple-gray-600 ring-1 ring-inset ring-apple-gray-300 dark:bg-apple-gray-700 dark:text-apple-gray-300 dark:ring-apple-gray-600',
 }
 

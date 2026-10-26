@@ -29,6 +29,8 @@ export interface ClubNeed {
   created_by_name: string | null
   created_at: string
   updated_at: string
+  /** Detalle corto de la posición, escrito a mano ("móvil, de área"). */
+  details?: string | null
   /** Sacada de la lista a mano: no se borra, queda archivada. */
   hidden_at?: string | null
   hidden_by_name?: string | null

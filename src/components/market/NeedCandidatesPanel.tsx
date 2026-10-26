@@ -5,7 +5,6 @@ import { PlayerPhoto } from '@/components/ui/PlayerPhoto'
 import PlayerLinkField from './PlayerLinkField'
 import StatusPill from './StatusPill'
 import FollowupDateField from './FollowupDateField'
-import AssigneeSelect from './AssigneeSelect'
 import { CANDIDATE_STATUS_ORDER, CANDIDATE_STATUS_LABEL_KEY, CANDIDATE_STATUS_COLOR } from './marketLabels'
 import { buildPlayerPhotoUrl } from '@/utils/marketAlerts'
 import { useLinkedPlayerAge } from '@/hooks/useLinkedPlayerAge'
@@ -17,7 +16,6 @@ import {
   linkCandidatePlayer,
   ensureCandidateNegotiation,
   updateFollowupDate,
-  reassignNegotiation,
   updateNegotiationTargetContacts,
   isMarketLinkAdmin,
   findMe,
@@ -42,9 +40,6 @@ function DetailChip({ icon, filled, label, onClick }: { icon: React.ReactNode; f
   )
 }
 
-const ICON_PERSON = (
-  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-)
 const ICON_CHAT = (
   <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8M8 14h5m-9 6l2.5-3H19a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v9a2 2 0 002 2h.5" /></svg>
 )
@@ -54,7 +49,6 @@ function CandidateRow({
   negotiation,
   overdue,
   canLink,
-  members,
   onStatusChange,
   onRemove,
   onLinked,
@@ -66,7 +60,6 @@ function CandidateRow({
   negotiation: Negotiation | null
   overdue: boolean
   canLink: boolean
-  members: TeamMember[]
   onStatusChange: (status: CandidateStatus) => void
   onRemove: (alsoNegotiation: boolean) => void
   onLinked: (apiId: number, name: string | null) => void
@@ -77,7 +70,7 @@ function CandidateRow({
   const { user, userDisplayName } = useAuth()
   const { t } = useLanguage()
   const age = useLinkedPlayerAge(candidate.player_api_id)
-  const [editing, setEditing] = useState<null | 'assignee' | 'contact' | 'link'>(null)
+  const [editing, setEditing] = useState<null | 'contact' | 'link'>(null)
   const [confirmingRemove, setConfirmingRemove] = useState(false)
   const [contactDraft, setContactDraft] = useState<ClubContact>({ name: '', role: null })
   const [pendingApiId, setPendingApiId] = useState<number | null>(null)
@@ -108,15 +101,6 @@ function CandidateRow({
     const next = cleaned.name ? [cleaned, ...contacts.slice(1)] : contacts.slice(1)
     if (await updateNegotiationTargetContacts(n.id, next)) {
       onNegotiationUpdated({ ...n, target_club_contacts: next })
-      setEditing(null)
-    }
-  }
-
-  const saveAssignee = async (id: number, name: string) => {
-    const n = negotiation ?? await onEnsureNegotiation()
-    if (!n) return
-    if (await reassignNegotiation(n.id, id, name, user?.id ?? null, userDisplayName || 'Usuario')) {
-      onNegotiationUpdated({ ...n, assigned_to_id: id, assigned_to_name: name })
       setEditing(null)
     }
   }
@@ -191,12 +175,6 @@ function CandidateRow({
       {!discarded && (
         <div className="mt-2 flex flex-wrap items-center gap-2 pl-9">
           <DetailChip
-            icon={ICON_PERSON}
-            filled={!!negotiation?.assigned_to_name}
-            label={negotiation?.assigned_to_name ?? t('mercado.agregarResponsable')}
-            onClick={() => setEditing(e => e === 'assignee' ? null : 'assignee')}
-          />
-          <DetailChip
             icon={ICON_CHAT}
             filled={!!firstContact}
             label={firstContact
@@ -225,12 +203,6 @@ function CandidateRow({
               <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
             </button>
           )}
-        </div>
-      )}
-
-      {editing === 'assignee' && (
-        <div className="mt-2 pl-9 max-w-xs">
-          <AssigneeSelect value={negotiation?.assigned_to_id ?? null} onChange={saveAssignee} members={members} />
         </div>
       )}
 
@@ -290,6 +262,7 @@ function CandidateRow({
 export default function NeedCandidatesPanel({
   need,
   readOnly = false,
+  compact = false,
   candidates,
   negotiationsById,
   overdueNegotiationIds,
@@ -303,6 +276,8 @@ export default function NeedCandidatesPanel({
   need: ClubNeed
   /** Búsqueda cerrada: se ve lo que se ofreció, pero no se cargan nombres nuevos. */
   readOnly?: boolean
+  /** Dentro de una posición de la búsqueda: sin caja ni texto de ayuda. */
+  compact?: boolean
   candidates: NeedCandidate[]
   negotiationsById: Map<number, Negotiation>
   overdueNegotiationIds: Set<number>
@@ -320,6 +295,7 @@ export default function NeedCandidatesPanel({
   const canLink = isMarketLinkAdmin(user?.email)
   const [newName, setNewName] = useState('')
   const [adding, setAdding] = useState(false)
+  const [addError, setAddError] = useState(false)
 
   // Lo ofrecido por uno queda a su nombre; si quien carga no está en la lista
   // de responsables, hereda el responsable de la búsqueda.
@@ -334,8 +310,10 @@ export default function NeedCandidatesPanel({
   const handleAdd = async () => {
     if (!newName.trim()) return
     setAdding(true)
+    setAddError(false)
     const result = await addCandidate(need, newName.trim(), defaultAssignee, user?.id ?? null, userDisplayName || 'Usuario')
     setAdding(false)
+    if (!result) setAddError(true)
     if (result) {
       onCandidatesChange(prev => [result.candidate, ...prev])
       onNegotiationUpserted(result.negotiation)
@@ -375,7 +353,6 @@ export default function NeedCandidatesPanel({
         negotiation={negotiation}
         overdue={negotiation != null && overdueNegotiationIds.has(negotiation.id)}
         canLink={canLink}
-        members={members}
         onStatusChange={status => handleStatusChange(candidate, status)}
         onRemove={also => handleRemove(candidate, also)}
         onLinked={(apiId, name) => onCandidatesChange(prev => prev.map(c => c.id === candidate.id
@@ -389,8 +366,12 @@ export default function NeedCandidatesPanel({
   }
 
   return (
-    <div className="rounded-xl border border-brand-green/15 bg-brand-green/[0.04] dark:bg-brand-green/[0.06] p-3 space-y-3">
-      <div className="flex items-start gap-2.5">
+    <div className={compact ? 'space-y-2.5' : 'rounded-xl border border-brand-green/15 bg-brand-green/[0.04] dark:bg-brand-green/[0.06] p-3 space-y-3'}>
+      {compact ? (
+        <p className="text-xs font-semibold text-apple-gray-600 dark:text-apple-gray-300">
+          {t('mercado.jugadoresPropuestos')} ({active.length})
+        </p>
+      ) : <div className="flex items-start gap-2.5">
         <span className="w-7 h-7 rounded-lg bg-brand-green/10 text-brand-green flex items-center justify-center flex-shrink-0">
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.36-1.86M17 20H7m10 0v-2c0-.66-.13-1.28-.36-1.86M7 20H2v-2a3 3 0 015.36-1.86M7 20v-2c0-.66.13-1.28.36-1.86m0 0a5 5 0 019.28 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
         </span>
@@ -401,7 +382,7 @@ export default function NeedCandidatesPanel({
           </p>
           {!readOnly && <p className="text-xs text-apple-gray-600 dark:text-apple-gray-300 mt-0.5">{t('mercado.ofrecidosAyuda')}</p>}
         </div>
-      </div>
+      </div>}
 
       {!readOnly && <div className="flex items-center gap-2">
         <input
@@ -420,6 +401,7 @@ export default function NeedCandidatesPanel({
           {t('mercado.ofrecer')}
         </button>
       </div>}
+      {addError && <p className="text-xs text-red-600 dark:text-red-400 bg-red-500/10 px-3 py-2 rounded-lg">{t('mercado.errorGuardar')}</p>}
 
       {candidates.length > 0 && (
         <div className="space-y-2">

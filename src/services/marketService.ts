@@ -33,6 +33,45 @@ function normalizePosition(label: string): string {
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .trim()
+    // La canchita de búsquedas distingue lado ("Extremo derecho", "Defensor
+    // central zurdo"); las negociaciones no. Para engancharlas, el lado no cuenta.
+    .replace(/\s+(derecho|izquierdo|zurdo)$/, '')
+}
+
+/**
+ * Los lugares de la canchita de "Nueva búsqueda", con su ubicación en una
+ * cancha vertical (ataque arriba): x e y en % del ancho/alto. Los dos
+ * extremos comparten etiqueta: tocar uno marca los dos y se guarda "Extremo".
+ */
+export const PITCH_SPOTS = [
+  { label: 'Delantero', name: 'Delantero', x: 50, y: 11 },
+  { label: 'Extremo', name: 'Extremo', x: 18, y: 22 },
+  { label: 'Extremo', name: 'Extremo', x: 82, y: 22 },
+  { label: 'Volante interno izquierdo', name: 'Interno izq.', x: 28, y: 40 },
+  { label: 'Volante interno derecho', name: 'Interno der.', x: 72, y: 40 },
+  { label: 'Volante central', name: 'Volante central', x: 50, y: 60 },
+  { label: 'Lateral izquierdo', name: 'Lateral izq.', x: 18, y: 70 },
+  { label: 'Lateral derecho', name: 'Lateral der.', x: 82, y: 70 },
+  { label: 'Defensor central zurdo', name: 'Central zurdo', x: 32, y: 80 },
+  { label: 'Defensor central derecho', name: 'Central der.', x: 68, y: 80 },
+  { label: 'Arquero', name: 'Arquero', x: 50, y: 92 },
+] as const
+
+/** Orden de arquero a delantero, para listar las posiciones de una búsqueda. */
+export function pitchOrder(label: string): number {
+  const order = ['arquero', 'defensor central', 'lateral', 'volante central', 'volante interno', 'extremo', 'delantero']
+  const norm = normalizePosition(label)
+  const i = order.findIndex(o => norm.startsWith(o))
+  return i === -1 ? order.length : i
+}
+
+/**
+ * Una búsqueda de club en pantalla = todas las filas de `market_club_needs`
+ * del mismo club (una por posición). Las archivadas van en un grupo aparte.
+ */
+export function needGroupKey(need: Pick<ClubNeed, 'team_name' | 'hidden_at'>): string {
+  const club = need.team_name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+  return `${need.hidden_at ? 'archivada:' : ''}${club}`
 }
 
 /** Etiqueta canónica en español para una posición, a partir de un código interno
@@ -68,12 +107,15 @@ async function linkOrCreateNeedForNegotiation(negotiation: Negotiation): Promise
   const { data: openNeeds, error: fetchErr } = await supabase
     .from('market_club_needs')
     .select('*')
-    .eq('team_id', negotiation.team_id)
     .eq('status', 'abierto')
     .is('hidden_at', null)
   if (fetchErr) { console.error('linkOrCreateNeedForNegotiation fetch error:', fetchErr); return null }
 
-  let need = (openNeeds ?? []).find(n => normalizePosition(n.position_label) === targetNorm) ?? null
+  // Las búsquedas nuevas tienen el club escrito a mano (sin team_id): también
+  // cuenta como el mismo club si coincide el nombre.
+  const clubKey = negotiation.team_name ? needGroupKey({ team_name: negotiation.team_name, hidden_at: null }) : null
+  const sameClub = (openNeeds ?? []).filter(n => n.team_id === negotiation.team_id || (clubKey != null && needGroupKey(n) === clubKey))
+  let need = sameClub.find(n => normalizePosition(n.position_label) === targetNorm) ?? null
 
   if (!need) {
     const { data: created, error: createErr } = await supabase
@@ -268,13 +310,43 @@ export async function updateNeedStatus(id: number, status: NeedStatus): Promise<
   return true
 }
 
-/** Oculta (o vuelve a mostrar) una búsqueda de club. No se borra: queda archivada. */
-export async function setNeedHidden(id: number, hidden: boolean, userName: string): Promise<boolean> {
+/** Oculta (o vuelve a mostrar) una búsqueda de club (todas sus posiciones). No se borra: queda archivada. */
+export async function setNeedHidden(ids: number[], hidden: boolean, userName: string): Promise<boolean> {
   const { error } = await supabase
     .from('market_club_needs')
     .update({ hidden_at: hidden ? new Date().toISOString() : null, hidden_by_name: hidden ? userName : null })
-    .eq('id', id)
+    .in('id', ids)
   if (error) { console.error('setNeedHidden error:', error); return false }
+  return true
+}
+
+/** Cambia el estado de todas las posiciones de una búsqueda de club. */
+export async function updateNeedsStatus(ids: number[], status: NeedStatus): Promise<boolean> {
+  const { error } = await supabase.from('market_club_needs').update({ status, updated_at: new Date().toISOString() }).in('id', ids)
+  if (error) { console.error('updateNeedsStatus error:', error); return false }
+  return true
+}
+
+/** Detalle corto de una posición ("móvil, de área"). */
+export async function updateNeedDetails(id: number, details: string | null): Promise<boolean> {
+  const { error } = await supabase.from('market_club_needs').update({ details, updated_at: new Date().toISOString() }).eq('id', id)
+  if (error) { console.error('updateNeedDetails error:', error); return false }
+  return true
+}
+
+/**
+ * Reasigna toda la búsqueda: la nota de sistema queda una sola vez (en la
+ * posición principal) y el resto de las posiciones toma el mismo responsable.
+ */
+export async function reassignNeedGroup(ids: number[], newAssigneeId: number, newAssigneeName: string, actingUserId: string | null, actingUserName: string): Promise<boolean> {
+  const [primary, ...rest] = ids
+  if (!(await reassignNeed(primary, newAssigneeId, newAssigneeName, actingUserId, actingUserName))) return false
+  if (rest.length === 0) return true
+  const { error } = await supabase
+    .from('market_club_needs')
+    .update({ assigned_to_id: newAssigneeId, assigned_to_name: newAssigneeName, updated_at: new Date().toISOString() })
+    .in('id', rest)
+  if (error) { console.error('reassignNeedGroup error:', error); return false }
   return true
 }
 
@@ -421,9 +493,11 @@ export async function reassignNegotiation(id: number, newAssigneeId: number, new
   return true
 }
 
-export async function fetchNotesFor(target: { negotiationId?: number; needId?: number }): Promise<MarketNote[]> {
+export async function fetchNotesFor(target: { negotiationId?: number; needId?: number; needIds?: number[] }): Promise<MarketNote[]> {
   let query = supabase.from('market_negotiation_notes').select('*')
-  query = target.negotiationId != null ? query.eq('negotiation_id', target.negotiationId) : query.eq('need_id', target.needId!)
+  query = target.negotiationId != null
+    ? query.eq('negotiation_id', target.negotiationId)
+    : target.needIds ? query.in('need_id', target.needIds) : query.eq('need_id', target.needId!)
   const { data, error } = await query.order('created_at', { ascending: false })
   if (error) throw error
   return data ?? []

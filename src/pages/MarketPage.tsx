@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { fetchClubNeeds, fetchNegotiations, fetchTeamMembers, fetchAllCandidates } from '@/services/marketService'
+import { fetchClubNeeds, fetchNegotiations, fetchTeamMembers, fetchAllCandidates, needGroupKey } from '@/services/marketService'
 import { computeAlerts, type AlertableItem } from '@/utils/marketAlerts'
 import { NEGOTIATION_STATUS_LABEL_KEY, NEGOTIATION_STATUS_ACCENT, NEED_STATUS_ACCENT } from '@/components/market/marketLabels'
 import NegotiationRow from '@/components/market/NegotiationRow'
@@ -167,21 +167,34 @@ export default function MarketPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [negotiations, clubFilter, assigneeFilter, agentFilter, negotiationStatusFilter, ownershipFilter, showArchived])
 
-  const visibleNeeds = useMemo(() => needs.filter(n => {
-    if (clubFilter.trim() && !n.team_name.toLowerCase().includes(clubFilter.trim().toLowerCase())) return false
-    if (assigneeFilter !== 'all' && n.assigned_to_id !== assigneeFilter) return false
-    if (needStatusFilter !== 'all' && n.status !== needStatusFilter) return false
+  // Una búsqueda en pantalla = un club con todas sus posiciones (cada posición
+  // es una fila de market_club_needs). Las más nuevas primero.
+  const needGroups = useMemo(() => {
+    const map = new Map<string, ClubNeed[]>()
+    for (const n of needs) {
+      const key = needGroupKey(n)
+      map.set(key, [...(map.get(key) ?? []), n])
+    }
+    return [...map.values()].sort((a, b) => Math.max(...b.map(n => n.id)) - Math.max(...a.map(n => n.id)))
+  }, [needs])
+  const groupStatus = (g: ClubNeed[]): NeedStatus => (g.some(n => n.status === 'abierto') ? 'abierto' : 'cerrado')
+  const groupPrimary = (g: ClubNeed[]) => g.reduce((a, b) => (a.id < b.id ? a : b))
+
+  const visibleGroups = useMemo(() => needGroups.filter(g => {
+    if (clubFilter.trim() && !g[0].team_name.toLowerCase().includes(clubFilter.trim().toLowerCase())) return false
+    if (assigneeFilter !== 'all' && !g.some(n => n.assigned_to_id === assigneeFilter)) return false
+    if (needStatusFilter !== 'all' && groupStatus(g) !== needStatusFilter) return false
     return true
-  }), [needs, clubFilter, assigneeFilter, needStatusFilter])
+  }), [needGroups, clubFilter, assigneeFilter, needStatusFilter])
 
   // Las búsquedas cerradas van aparte, al final: ya no piden acción. Las
   // archivadas (sacadas a mano con la ×) no se ven salvo que se pidan.
-  const activeNeeds = needs.filter(n => !n.hidden_at)
-  const archivedNeedsCount = needs.length - activeNeeds.length
-  const openNeeds = visibleNeeds.filter(n => !n.hidden_at && n.status !== 'cerrado')
-  const closedNeeds = visibleNeeds.filter(n => !n.hidden_at && n.status === 'cerrado')
-  const hiddenNeeds = showArchivedNeeds ? visibleNeeds.filter(n => n.hidden_at) : []
-  const shownNeedsCount = openNeeds.length + closedNeeds.length + hiddenNeeds.length
+  const activeGroups = needGroups.filter(g => !g[0].hidden_at)
+  const archivedNeedsCount = needGroups.length - activeGroups.length
+  const openGroups = visibleGroups.filter(g => !g[0].hidden_at && groupStatus(g) === 'abierto')
+  const closedGroups = visibleGroups.filter(g => !g[0].hidden_at && groupStatus(g) === 'cerrado')
+  const hiddenGroups = showArchivedNeeds ? visibleGroups.filter(g => g[0].hidden_at) : []
+  const shownNeedsCount = openGroups.length + closedGroups.length + hiddenGroups.length
 
   // Un solo calendario para las dos pestañas: "a quién tengo que llamar" no
   // depende de en qué pestaña se cargó. Respeta el filtro de responsable (el
@@ -198,40 +211,47 @@ export default function MarketPage() {
         subtitle: n.team_name ? `→ ${n.team_name}` : (n.current_team_name ?? ''),
         assignee: n.assigned_to_name,
       })),
-    ...needs
-      .filter(n => n.next_followup_date && !n.hidden_at && n.status !== 'cerrado')
-      .filter(n => assigneeFilter === 'all' || n.assigned_to_id === assigneeFilter)
-      .map(n => ({
-        kind: 'need' as const,
-        id: n.id,
-        date: n.next_followup_date as string,
-        title: n.team_name,
-        subtitle: n.position_label,
-        assignee: n.assigned_to_name,
-      })),
-  ], [negotiations, needs, assigneeFilter])
+    // Una entrada por búsqueda (no por posición).
+    ...needGroups
+      .filter(g => !g[0].hidden_at && groupStatus(g) === 'abierto')
+      .filter(g => assigneeFilter === 'all' || g.some(n => n.assigned_to_id === assigneeFilter))
+      .flatMap(g => {
+        const primary = groupPrimary(g)
+        const date = primary.next_followup_date ?? g.find(n => n.next_followup_date)?.next_followup_date
+        if (!date) return []
+        return [{
+          kind: 'need' as const,
+          id: primary.id,
+          date,
+          title: primary.team_name,
+          subtitle: g.map(n => n.position_label).join(', '),
+          assignee: primary.assigned_to_name,
+        }]
+      }),
+  ], [negotiations, needGroups, assigneeFilter])
 
   // Las notas respetan el filtro de responsable (las sin asignar, de quien las escribió)
   const visibleNotes = useMemo(() => notes.filter(n =>
     assigneeFilter === 'all' || n.assigned_to_id === assigneeFilter
   ), [notes, assigneeFilter])
 
-  const renderNeed = (n: ClubNeed) => (
+  const renderNeed = (g: ClubNeed[]) => (
     <NeedRow
-      key={n.id}
-      need={n}
-      overdue={overdueIds.needs.has(n.id)}
-      defaultExpanded={highlightKind === 'need' && n.id === highlightId}
-      flash={flashId === n.id}
-      onUpdated={updated => setNeeds(prev => prev.map(x => x.id === updated.id ? updated : x))}
+      key={needGroupKey(g[0])}
+      needs={g}
+      overdue={g.some(n => overdueIds.needs.has(n.id))}
+      defaultExpanded={highlightKind === 'need' && g.some(n => n.id === highlightId)}
+      flash={g.some(n => n.id === flashId)}
+      onNeedsUpdated={updated => setNeeds(prev => prev.map(x => updated.find(u => u.id === x.id) ?? x))}
+      onNeedCreated={n => setNeeds(prev => [n, ...prev])}
       onNegotiationMightHaveChanged={refreshNegotiations}
-      candidates={candidatesByNeed.get(n.id) ?? []}
+      candidatesByNeed={candidatesByNeed}
       negotiationsById={negotiationsById}
       overdueNegotiationIds={overdueIds.negotiations}
       members={members}
-      onCandidatesChange={update => setCandidates(prev => [
-        ...update(prev.filter(c => c.need_id === n.id)),
-        ...prev.filter(c => c.need_id !== n.id),
+      onCandidatesChange={(needId, update) => setCandidates(prev => [
+        ...update(prev.filter(c => c.need_id === needId)),
+        ...prev.filter(c => c.need_id !== needId),
       ])}
       onNegotiationUpserted={upsertNegotiation}
       onNegotiationRemoved={removeNegotiation}
@@ -266,10 +286,10 @@ export default function MarketPage() {
             {t('mercado.tabNegociaciones')} ({activeNegotiations.length})
           </button>
           <button
-            onClick={() => setTab('objetivos')}
+            onClick={() => { setTab('objetivos'); setAssigneeFilter('all') }}
             className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${tab === 'objetivos' ? 'bg-white dark:bg-apple-gray-700 text-apple-gray-800 dark:text-white shadow-sm' : 'text-apple-gray-500 dark:text-apple-gray-400'}`}
           >
-            {t('mercado.tabObjetivos')} ({activeNeeds.length})
+            {t('mercado.tabObjetivos')} ({activeGroups.length})
           </button>
         </div>
 
@@ -299,7 +319,8 @@ export default function MarketPage() {
           placeholder={tab === 'negociaciones' ? t('mercado.filtrarJugador') : t('mercado.filtrarClub')}
           className="input-apple text-sm w-full sm:w-48"
         />
-        <select
+        {/* Las búsquedas de clubes no tienen responsable: el filtro es solo de Negociaciones. */}
+        {tab === 'negociaciones' && <select
           value={assigneeFilter}
           onChange={e => setAssigneeFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
           className="input-apple text-sm w-auto min-w-0"
@@ -308,7 +329,7 @@ export default function MarketPage() {
           {members.map(m => (
             <option key={m.id} value={m.id}>{m.name}</option>
           ))}
-        </select>
+        </select>}
         {tab === 'negociaciones' && agentOptions.length > 0 && (
           <select
             value={agentFilter}
@@ -438,7 +459,7 @@ export default function MarketPage() {
         <div>
           <EmptyState
             title={t('mercado.sinObjetivosTitulo')}
-            description={activeNeeds.length === 0 ? t('mercado.sinObjetivosVacio') : t('mercado.sinObjetivosFiltro')}
+            description={activeGroups.length === 0 ? t('mercado.sinObjetivosVacio') : t('mercado.sinObjetivosFiltro')}
           />
           {archivedNeedsCount > 0 && (
             <div className="flex justify-center">
@@ -450,31 +471,30 @@ export default function MarketPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          <div className="hidden sm:grid grid-cols-[auto_minmax(0,2fr)_7rem_7rem_5.5rem_2rem] items-center gap-3 px-4 text-2xs font-semibold uppercase tracking-wide text-apple-gray-400">
+          <div className="hidden sm:grid grid-cols-[auto_minmax(0,2fr)_7rem_5.5rem_2rem] items-center gap-3 px-4 text-2xs font-semibold uppercase tracking-wide text-apple-gray-400">
             <span />
             <span>{t('mercado.club')}</span>
             <span>{t('mercado.estado')}</span>
-            <span>{t('mercado.responsable')}</span>
             <span className="text-right">{t('mercado.columnaSeguimiento')}</span>
             <span />
           </div>
-          {openNeeds.map(renderNeed)}
-          {closedNeeds.length > 0 && (
+          {openGroups.map(renderNeed)}
+          {closedGroups.length > 0 && (
             <>
               <p className="pt-4 pb-1 px-1 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-apple-gray-400">
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                {t('mercado.busquedasCerradas')} ({closedNeeds.length})
+                {t('mercado.busquedasCerradas')} ({closedGroups.length})
               </p>
-              {closedNeeds.map(renderNeed)}
+              {closedGroups.map(renderNeed)}
             </>
           )}
-          {hiddenNeeds.length > 0 && (
+          {hiddenGroups.length > 0 && (
             <>
               <p className="pt-4 pb-1 px-1 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-apple-gray-500 dark:text-apple-gray-400">
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
-                {t('mercado.busquedasArchivadas')} ({hiddenNeeds.length})
+                {t('mercado.busquedasArchivadas')} ({hiddenGroups.length})
               </p>
-              {hiddenNeeds.map(renderNeed)}
+              {hiddenGroups.map(renderNeed)}
             </>
           )}
           {archivedNeedsCount > 0 && (
@@ -521,6 +541,7 @@ export default function MarketPage() {
         open={showNewNeed}
         onClose={() => setShowNewNeed(false)}
         onCreated={n => setNeeds(prev => [n, ...prev])}
+        existingNeeds={needs}
       />
     </div>
   )

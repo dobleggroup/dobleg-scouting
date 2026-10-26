@@ -4,8 +4,7 @@ import { fetchEvaluationsByName, evaluationComments } from '@/services/scoutEval
 import type { ScoutEvaluation } from '@/services/scoutEvaluationService'
 import type { ScoutPlayer } from '@/types'
 import LinkPlayerModal from './LinkPlayerModal'
-
-const ADMIN_EMAIL = 'marcoscucho99@gmail.com'
+import { isMarketLinkAdmin } from '@/services/marketService'
 
 const RECOMMENDATION_CONFIG = {
   fichar:            { label: 'Fichar',            color: 'text-green-600 dark:text-green-400',  bg: 'bg-green-500/10 border-green-500/20' },
@@ -39,7 +38,8 @@ interface Props {
 
 export default function FichaManualModal({ player, onClose, onLinked }: Props) {
   const { user } = useAuth()
-  const isAdmin = user?.email === ADMIN_EMAIL
+  // Vincular es solo para Marcos y Matías (la misma lista que en Mercado y Seguimiento).
+  const isAdmin = isMarketLinkAdmin(user?.email)
 
   const [evaluations, setEvaluations] = useState<ScoutEvaluation[]>([])
   const [loadingEvals, setLoadingEvals] = useState(true)
