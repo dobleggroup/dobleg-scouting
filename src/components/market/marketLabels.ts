@@ -1,7 +1,9 @@
 import type { NegotiationStatus, NeedStatus, CandidateStatus } from '@/types/market'
 
 export const NEGOTIATION_STATUS_ORDER: NegotiationStatus[] = [
-  'ofrecido', 'en_negociacion', 'avanzado', 'pausado', 'cerrado_exito', 'cerrado_caido',
+  // "Avanzado" y "Pausado" siguen existiendo en la base pero ya no se ofrecen:
+  // 4 estados con las mismas palabras que los ofrecidos de una búsqueda.
+  'ofrecido', 'en_negociacion', 'cerrado_exito', 'cerrado_caido',
 ]
 
 export const NEGOTIATION_STATUS_LABEL_KEY: Record<NegotiationStatus, string> = {
@@ -34,17 +36,6 @@ export const NEGOTIATION_STATUS_ACCENT: Record<NegotiationStatus, string> = {
   avanzado: 'border-l-4 border-l-purple-400 bg-purple-50/60 dark:bg-purple-900/10',
   cerrado_exito: 'border-l-4 border-l-emerald-400 bg-emerald-50/60 dark:bg-emerald-900/10',
   cerrado_caido: 'border-l-4 border-l-red-400 bg-red-50/60 dark:bg-red-900/10',
-}
-
-/** Misma idea que `NEGOTIATION_STATUS_ACCENT` pero con la franja arriba en
- * vez de a la izquierda — para las columnas del tablero. */
-export const NEGOTIATION_STATUS_ACCENT_TOP: Record<NegotiationStatus, string> = {
-  ofrecido: 'border-t-4 border-t-sky-400 bg-sky-50/40 dark:bg-sky-900/10',
-  pausado: 'border-t-4 border-t-apple-gray-300 dark:border-t-apple-gray-600 bg-apple-gray-50/60 dark:bg-apple-gray-800/40',
-  en_negociacion: 'border-t-4 border-t-amber-400 bg-amber-50/40 dark:bg-amber-900/10',
-  avanzado: 'border-t-4 border-t-purple-400 bg-purple-50/40 dark:bg-purple-900/10',
-  cerrado_exito: 'border-t-4 border-t-emerald-400 bg-emerald-50/40 dark:bg-emerald-900/10',
-  cerrado_caido: 'border-t-4 border-t-red-400 bg-red-50/40 dark:bg-red-900/10',
 }
 
 export const NEED_STATUS_ORDER: NeedStatus[] = ['abierto', 'cerrado']

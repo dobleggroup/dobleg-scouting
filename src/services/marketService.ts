@@ -715,6 +715,19 @@ export async function ensureCandidateNegotiation(
 }
 
 /** "Con quién hablamos" del lado del club destino. */
+/** Datos que se completan después de crear la negociación (club actual, posición, con quién se habló). */
+export async function updateNegotiationFields(
+  id: number,
+  patch: Partial<Pick<Negotiation, 'current_team_id' | 'current_team_name' | 'current_team_logo' | 'position_label' | 'target_club_contacts'>>,
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('market_negotiations')
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) { console.error('updateNegotiationFields error:', error); return false }
+  return true
+}
+
 export async function updateNegotiationTargetContacts(id: number, contacts: ClubContact[]): Promise<boolean> {
   const { error } = await supabase
     .from('market_negotiations')

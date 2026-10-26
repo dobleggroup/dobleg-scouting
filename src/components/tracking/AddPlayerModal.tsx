@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { addScoutPlayer, uploadScoutPlayerFile, type NewScoutPlayer } from '@/services/scoutPlayersService'
 import { useAuth } from '@/context/AuthContext'
+import RequiredMark from '@/components/ui/RequiredMark'
 
 const POSITIONS = [
   'Arquero', 'Lateral derecho', 'Defensor central', 'Lateral izquierdo',
@@ -38,7 +39,7 @@ function Field({ label, required, children }: { label: string; required?: boolea
   return (
     <div>
       <label className="block text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-1.5">
-        {label} {required && <span className="text-brand-green normal-case font-normal">*</span>}
+        {label}{required && <RequiredMark />}
       </label>
       {children}
     </div>

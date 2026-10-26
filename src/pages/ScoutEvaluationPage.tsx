@@ -8,6 +8,7 @@ import { createEvaluation, fetchRecentEvaluations, type ScoutEvaluation, type Pl
 import { setPlayerStatus, fetchAllStatuses } from '@/services/monitoringService'
 import { addScoutPlayer } from '@/services/scoutPlayersService'
 import { smartSearch } from '@/lib/search'
+import RequiredMark from '@/components/ui/RequiredMark'
 
 // Position options — value stays in Spanish (stored in DB, matched elsewhere e.g.
 // EvaluationsAdminPage's sharedMatchScore against player.position); only the
@@ -62,7 +63,7 @@ function ScoreSelector({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-apple-gray-600 dark:text-apple-gray-400">
-          {label} {required && <span className="text-brand-green">*</span>}
+          {label}{required && <RequiredMark />}
         </span>
         {value && (
           <span className={`text-2xl font-bold ${
@@ -153,7 +154,7 @@ function Select({
   return (
     <div>
       <label className="block text-sm font-medium text-apple-gray-600 dark:text-apple-gray-400 mb-2">
-        {label} {required && <span className="text-brand-green">*</span>}
+        {label}{required && <RequiredMark />}
       </label>
       <select
         value={value}
@@ -195,7 +196,7 @@ function Input({
   return (
     <div>
       <label className="block text-sm font-medium text-apple-gray-600 dark:text-apple-gray-400 mb-2">
-        {label} {required && <span className="text-brand-green">*</span>}
+        {label}{required && <RequiredMark />}
       </label>
       <input
         type={type}
@@ -549,7 +550,7 @@ export default function ScoutEvaluationPage() {
             {/* Player search/input */}
             <div className="relative">
               <label className="block text-sm font-medium text-apple-gray-600 dark:text-apple-gray-400 mb-2">
-                {t('evaluar.nombre')} <span className="text-brand-green">*</span>
+                {t('evaluar.nombre')}<RequiredMark />
               </label>
               <input
                 type="text"

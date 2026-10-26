@@ -8,12 +8,66 @@ import PlayerLinkField from './PlayerLinkField'
 import MarketNotesPanel from './MarketNotesPanel'
 import StatusPill from './StatusPill'
 import FollowupDateField from './FollowupDateField'
-import ClubContactsField from './ClubContactsField'
-import { NEGOTIATION_STATUS_LABEL_KEY, NEGOTIATION_STATUS_COLOR, NEGOTIATION_STATUS_ORDER, NEGOTIATION_STATUS_ACCENT } from './marketLabels'
+import { NEGOTIATION_STATUS_LABEL_KEY, NEGOTIATION_STATUS_COLOR, NEGOTIATION_STATUS_ORDER } from './marketLabels'
 import { buildPlayerPhotoUrl } from '@/utils/marketAlerts'
 import { useLinkedPlayerAge } from '@/hooks/useLinkedPlayerAge'
-import { updateNegotiationStatus, updateFollowupDate, reassignNegotiation, linkNegotiationPlayer, updateNegotiationTargetContacts, isMarketLinkAdmin, setNegotiationHidden } from '@/services/marketService'
-import type { ClubContact, Negotiation, NegotiationStatus } from '@/types/market'
+import { updateNegotiationStatus, updateFollowupDate, reassignNegotiation, linkNegotiationPlayer, updateNegotiationFields, isMarketLinkAdmin, setNegotiationHidden } from '@/services/marketService'
+import type { Negotiation, NegotiationStatus } from '@/types/market'
+
+/**
+ * Un dato que se completa después de crear la negociación. Siempre se ve si
+ * está guardado: botón "Guardar" mientras hay cambios y "✓ Guardado" después
+ * (también guarda con Enter).
+ */
+function SavedTextField({ label, value, placeholder, onSave }: {
+  label: string
+  value: string
+  placeholder: string
+  onSave: (next: string) => Promise<boolean>
+}) {
+  const { t } = useLanguage()
+  const [draft, setDraft] = useState(value)
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  useEffect(() => { setDraft(value) }, [value])
+  const dirty = draft.trim() !== value.trim()
+
+  const save = async () => {
+    if (!dirty || state === 'saving') return
+    setState('saving')
+    setState(await onSave(draft.trim()) ? 'saved' : 'error')
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-xs font-semibold text-apple-gray-600 dark:text-apple-gray-300">{label}</label>
+        {state === 'error'
+          ? <span className="text-xs font-medium text-red-600 dark:text-red-400">{t('mercado.errorGuardar')}</span>
+          : !dirty && state === 'saved' && <span className="text-xs font-medium text-brand-green">✓ {t('mercado.guardado')}</span>}
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={draft}
+          onChange={e => { setDraft(e.target.value); if (state !== 'saving') setState('idle') }}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); save() } }}
+          placeholder={placeholder}
+          className="input-apple text-sm flex-1 min-w-0"
+        />
+        {dirty && (
+          <button
+            type="button"
+            onClick={save}
+            disabled={state === 'saving'}
+            className="px-4 rounded-apple text-sm font-semibold text-white bg-brand-green hover:bg-emerald-600 disabled:opacity-60 transition-colors flex-shrink-0"
+          >
+            {state === 'saving' ? t('mercado.guardando') : t('mercado.guardar')}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export default function NegotiationRow({
   negotiation,
@@ -56,8 +110,6 @@ export default function NegotiationRow({
   const [pendingApiId, setPendingApiId] = useState<number | null>(null)
   const [pendingIdentity, setPendingIdentity] = useState<{ name: string; age: number | null } | null>(null)
   const [notesRefreshSignal, setNotesRefreshSignal] = useState(0)
-  const [editingContacts, setEditingContacts] = useState(false)
-  const [contactsDraft, setContactsDraft] = useState<ClubContact[]>([])
 
   const canLink = isMarketLinkAdmin(user?.email)
   const age = useLinkedPlayerAge(negotiation.player_api_id)
@@ -98,15 +150,12 @@ export default function NegotiationRow({
     }
   }
 
-  const handleSaveContacts = async () => {
-    const cleaned = contactsDraft
-      .map(c => ({ name: c.name.trim(), role: c.role?.trim() || null }))
-      .filter(c => c.name)
-    if (await updateNegotiationTargetContacts(negotiation.id, cleaned)) {
-      onUpdated({ ...negotiation, target_club_contacts: cleaned })
-      setEditingContacts(false)
-    }
+  const saveFields = async (patch: Parameters<typeof updateNegotiationFields>[1]) => {
+    const ok = await updateNegotiationFields(negotiation.id, patch)
+    if (ok) onUpdated({ ...negotiation, ...patch })
+    return ok
   }
+  const contactsText = negotiation.target_club_contacts.map(c => (c.role ? `${c.name}, ${c.role}` : c.name)).join(' · ')
 
   const openLinking = () => {
     setPendingApiId(negotiation.player_api_id)
@@ -161,7 +210,7 @@ export default function NegotiationRow({
                 {age != null && <span className="font-normal text-apple-gray-400">, {age} {t('externo.anios')}</span>}
               </p>
               <p className="text-2xs text-apple-gray-400 truncate">
-                {negotiation.current_team_name ?? t('mercado.jugadorLibre')} → {negotiation.team_name ?? t('mercado.quedaLibre')}
+                {[negotiation.current_team_name, negotiation.team_name].filter(Boolean).join(' → ')}
               </p>
             </div>
           </div>
@@ -209,76 +258,46 @@ export default function NegotiationRow({
             </p>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">
+            <SavedTextField
+              label={t('mercado.clubActual')}
+              value={negotiation.current_team_name ?? ''}
+              placeholder={t('mercado.clubActualPlaceholder')}
+              onSave={next => saveFields({ current_team_name: next || null, current_team_id: null, current_team_logo: null })}
+            />
+            <SavedTextField
+              label={t('mercado.posicionLibre')}
+              value={negotiation.position_label ?? ''}
+              placeholder={t('mercado.posicionPlaceholderLibre')}
+              onSave={next => saveFields({ position_label: next || null })}
+            />
+            <SavedTextField
+              label={`${t('mercado.hablamosCon')}${negotiation.team_name ? ` (${negotiation.team_name})` : ''}`}
+              value={contactsText}
+              placeholder={t('mercado.hablamosConPlaceholder')}
+              onSave={next => saveFields({ target_club_contacts: next ? [{ name: next, role: null }] : [] })}
+            />
             <div>
-              <label className="block text-2xs font-medium text-apple-gray-400 mb-1">{t('mercado.estado')}</label>
-              <select
-                value={negotiation.status}
-                onChange={e => handleStatusChange(e.target.value as NegotiationStatus)}
-                className={`input-apple text-sm w-full ${NEGOTIATION_STATUS_ACCENT[negotiation.status]}`}
-              >
-                {(Object.keys(NEGOTIATION_STATUS_LABEL_KEY) as NegotiationStatus[]).map(s => (
-                  <option key={s} value={s}>{t(NEGOTIATION_STATUS_LABEL_KEY[s])}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-end justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-2xs font-medium text-apple-gray-400 mb-1">{t('mercado.responsableNegociacion')}</p>
-                <p className="text-sm text-apple-gray-700 dark:text-apple-gray-200 truncate">{negotiation.assigned_to_name || t('mercado.sinAsignar')}</p>
-              </div>
-              <button onClick={() => setReassigning(r => !r)} className="text-xs font-medium text-brand-green hover:text-emerald-600 flex-shrink-0">
-                {t('mercado.reasignar')}
-              </button>
-            </div>
-            {reassigning && <div className="sm:col-span-2"><AssigneeSelect value={negotiation.assigned_to_id} onChange={handleReassign} /></div>}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-            <div>
-              <p className="text-2xs font-medium text-apple-gray-400 mb-0.5">{t('mercado.perteneceDobleG')}</p>
-              <p className="text-apple-gray-700 dark:text-apple-gray-200">
-                {negotiation.belongs_to_agency == null ? '—' : negotiation.belongs_to_agency ? t('mercado.si') : (negotiation.agent_name || t('mercado.no'))}
+              <p className="text-xs font-semibold text-apple-gray-600 dark:text-apple-gray-300 mb-1">{t('mercado.perteneceDobleG')}</p>
+              <p className="text-sm text-apple-gray-800 dark:text-apple-gray-100 py-2">
+                {negotiation.belongs_to_agency == null ? '—' : negotiation.belongs_to_agency ? t('mercado.si') : (negotiation.agent_name ? `${t('mercado.no')} · ${negotiation.agent_name}` : t('mercado.no'))}
               </p>
-            </div>
-            <div>
-              <p className="text-2xs font-medium text-apple-gray-400 mb-0.5">{t('mercado.contactoClubActual')}</p>
-              {negotiation.current_club_contacts.length === 0 ? (
-                <p className="text-apple-gray-700 dark:text-apple-gray-200">—</p>
-              ) : negotiation.current_club_contacts.map((c, i) => (
-                <p key={i} className="text-apple-gray-700 dark:text-apple-gray-200">{c.name}{c.role ? ` · ${c.role}` : ''}</p>
-              ))}
-            </div>
-            <div>
-              <p className="text-2xs font-medium text-apple-gray-400 mb-0.5 flex items-center gap-2">
-                {t('mercado.hablamosCon')}{negotiation.team_name ? ` (${negotiation.team_name})` : ''}
-                {!editingContacts && (
-                  <button
-                    onClick={() => { setContactsDraft(negotiation.target_club_contacts); setEditingContacts(true) }}
-                    className="font-medium text-brand-green hover:text-emerald-600"
-                  >
-                    {t('mercado.editar')}
-                  </button>
-                )}
-              </p>
-              {negotiation.target_club_contacts.length === 0 ? (
-                <p className="text-apple-gray-700 dark:text-apple-gray-200">—</p>
-              ) : negotiation.target_club_contacts.map((c, i) => (
-                <p key={i} className="text-apple-gray-700 dark:text-apple-gray-200">{c.name}{c.role ? ` · ${c.role}` : ''}</p>
-              ))}
             </div>
           </div>
 
-          {editingContacts && (
-            <div className="space-y-2 rounded-lg bg-apple-gray-50 dark:bg-apple-gray-800/50 p-3">
-              <ClubContactsField value={contactsDraft} onChange={setContactsDraft} />
-              <div className="flex items-center gap-3">
-                <button onClick={handleSaveContacts} className="text-xs font-semibold text-white bg-brand-green px-3 py-1.5 rounded-lg hover:bg-emerald-600">
-                  {t('mercado.guardar')}
-                </button>
-                <button onClick={() => setEditingContacts(false)} className="text-xs text-apple-gray-400 hover:text-apple-gray-700 dark:hover:text-white">
-                  {t('mercado.cancelar')}
+          {/* Quién la lleva: solo en las que se armaron desde Negociaciones (las
+              que salen de una búsqueda no tienen responsable). */}
+          {(!negotiation.need_id || negotiation.assigned_to_id) && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm text-apple-gray-700 dark:text-apple-gray-200 min-w-0 truncate">
+                  <span className="text-xs font-semibold text-apple-gray-600 dark:text-apple-gray-300">{t('mercado.quienLaLlevaCorto')}: </span>
+                  {negotiation.assigned_to_name || t('mercado.sinAsignar')}
+                </p>
+                <button onClick={() => setReassigning(r => !r)} className="text-sm font-medium text-brand-green hover:text-emerald-600 flex-shrink-0">
+                  {reassigning ? t('mercado.cancelar') : negotiation.assigned_to_id ? t('mercado.reasignar') : t('mercado.asignar')}
                 </button>
               </div>
+              {reassigning && <AssigneeSelect value={negotiation.assigned_to_id} onChange={handleReassign} />}
             </div>
           )}
 

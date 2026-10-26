@@ -5,6 +5,7 @@ import { createClubNeed, addNoteTo, needGroupKey, mergePitchSelection, pitchSpot
 import { useAuth } from '@/context/AuthContext'
 import { useLanguage } from '@/context/LanguageContext'
 import type { ClubNeed } from '@/types/market'
+import RequiredMark from '@/components/ui/RequiredMark'
 
 // Formulario corto a propósito: se escribe el club y se marcan en la canchita
 // las posiciones que busca. Queda UNA búsqueda por club en la lista (por
@@ -87,7 +88,7 @@ export default function NewNeedForm({ open, onClose, onCreated, existingNeeds }:
     <MobileSheet open={open} onClose={onClose} title={t('mercado.nuevoObjetivo')}>
       <div className="space-y-4 p-4">
         <div>
-          <label className="block text-sm font-medium text-apple-gray-700 dark:text-apple-gray-200 mb-1.5">{t('mercado.club')}</label>
+          <label className="block text-sm font-medium text-apple-gray-700 dark:text-apple-gray-200 mb-1.5">{t('mercado.club')}<RequiredMark /></label>
           <input
             type="text"
             value={clubName}
@@ -101,7 +102,7 @@ export default function NewNeedForm({ open, onClose, onCreated, existingNeeds }:
           )}
         </div>
         <div>
-          <label className="block text-sm font-medium text-apple-gray-700 dark:text-apple-gray-200 mb-2">{t('mercado.queBuscaCancha')}</label>
+          <label className="block text-sm font-medium text-apple-gray-700 dark:text-apple-gray-200 mb-2">{t('mercado.queBuscaCancha')}<RequiredMark /></label>
           <PitchPositionPicker value={positions} onChange={setPositions} disabled={pitchSpotsTaken(alreadyIn)} />
           <p className="mt-2 text-sm text-center text-apple-gray-700 dark:text-apple-gray-200 min-h-[1.25rem]">
             {toSave.length > 0 ? toSave.join(' · ') : <span className="text-apple-gray-500 dark:text-apple-gray-400">{t('mercado.tocaPosiciones')}</span>}

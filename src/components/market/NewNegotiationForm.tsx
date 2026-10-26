@@ -1,74 +1,50 @@
 import { useEffect, useState } from 'react'
 import MobileSheet from '@/components/ui/MobileSheet'
-import TeamSearchSelect from './TeamSearchSelect'
 import AssigneeSelect from './AssigneeSelect'
-import ClubContactsField from './ClubContactsField'
-import { NEGOTIATION_STATUS_ORDER, NEGOTIATION_STATUS_LABEL_KEY } from './marketLabels'
-import { createNegotiation, addNoteTo, MARKET_POSITION_OPTIONS } from '@/services/marketService'
+import { createNegotiation, addNoteTo } from '@/services/marketService'
 import { useAuth } from '@/context/AuthContext'
 import { useLanguage } from '@/context/LanguageContext'
-import type { Negotiation, NegotiationStatus, MarketTeamChoice, ClubContact } from '@/types/market'
+import type { Negotiation } from '@/types/market'
+import RequiredMark from '@/components/ui/RequiredMark'
 
-const EMPTY_CONTACTS: ClubContact[] = [{ name: '', role: null }]
-
+// Formulario corto a propósito (como el de Búsquedas): jugador, a qué club se
+// ofrece (escrito a mano), si es nuestro y quién la lleva. Club actual,
+// posición y con quién se habló se completan después, al abrir la negociación;
+// el vínculo con el jugador y el club real lo hacen Marcos o Mati.
 export default function NewNegotiationForm({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (negotiation: Negotiation) => void }) {
   const { user, userDisplayName } = useAuth()
   const { t } = useLanguage()
 
   const [playerName, setPlayerName] = useState('')
-  const [positionLabel, setPositionLabel] = useState('')
-
-  const [isFreeAgent, setIsFreeAgent] = useState(false)
-  const [currentTeam, setCurrentTeam] = useState<MarketTeamChoice | null>(null)
-  const [currentContacts, setCurrentContacts] = useState<ClubContact[]>(EMPTY_CONTACTS)
-
-  const [noTargetYet, setNoTargetYet] = useState(false)
-  const [targetTeam, setTargetTeam] = useState<MarketTeamChoice | null>(null)
-  const [targetContacts, setTargetContacts] = useState<ClubContact[]>(EMPTY_CONTACTS)
-
+  const [clubName, setClubName] = useState('')
+  const [contactName, setContactName] = useState('')
+  const [contactRole, setContactRole] = useState('')
   const [belongsToAgency, setBelongsToAgency] = useState<boolean | null>(null)
   const [agentName, setAgentName] = useState('')
-
-  const [status, setStatus] = useState<NegotiationStatus>('ofrecido')
   const [assigneeId, setAssigneeId] = useState<number | null>(null)
   const [assigneeName, setAssigneeName] = useState('')
-  const [notes, setNotes] = useState('')
+  const [comment, setComment] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const canSave = playerName.trim().length > 0
-    && positionLabel.trim().length > 0
-    && (isFreeAgent || currentTeam != null || noTargetYet || targetTeam != null)
-    && belongsToAgency != null
+  const canSave = playerName.trim().length > 0 && clubName.trim().length > 0 && belongsToAgency != null
 
-  // Reiniciar el formulario cada vez que se abre la hoja: MobileSheet no desmonta
-  // sus hijos al cerrar (retorna null visualmente pero mantiene el árbol montado),
-  // así que sin este efecto el estado local sobrevive a un cierre por backdrop
-  // sin guardar y reaparece con datos de un intento abandonado al reabrir.
+  // MobileSheet no desmonta sus hijos al cerrar: sin esto, un intento
+  // abandonado reaparece al volver a abrir.
   useEffect(() => {
     if (!open) return
     setPlayerName('')
-    setPositionLabel('')
-    setIsFreeAgent(false)
-    setCurrentTeam(null)
-    setCurrentContacts(EMPTY_CONTACTS)
-    setNoTargetYet(false)
-    setTargetTeam(null)
-    setTargetContacts(EMPTY_CONTACTS)
+    setClubName('')
+    setContactName('')
+    setContactRole('')
     setBelongsToAgency(null)
     setAgentName('')
-    setStatus('ofrecido')
     setAssigneeId(null)
     setAssigneeName('')
-    setNotes('')
+    setComment('')
     setSaving(false)
     setError('')
   }, [open])
-
-  const cleanContacts = (contacts: ClubContact[]): ClubContact[] =>
-    contacts
-      .filter(c => c.name.trim().length > 0)
-      .map(c => ({ name: c.name.trim(), role: c.role?.trim() || null }))
 
   const handleSave = async () => {
     if (!canSave) return
@@ -76,21 +52,21 @@ export default function NewNegotiationForm({ open, onClose, onCreated }: { open:
     setError('')
     const result = await createNegotiation(
       {
-        team_id: noTargetYet ? null : (targetTeam?.id ?? null),
-        team_name: noTargetYet ? null : (targetTeam?.name ?? null),
-        team_logo: noTargetYet ? null : (targetTeam?.logo ?? null),
-        current_team_id: isFreeAgent ? null : (currentTeam?.id ?? null),
-        current_team_name: isFreeAgent ? null : (currentTeam?.name ?? null),
-        current_team_logo: isFreeAgent ? null : (currentTeam?.logo ?? null),
+        team_id: null,
+        team_name: clubName.trim(),
+        team_logo: null,
+        current_team_id: null,
+        current_team_name: null,
+        current_team_logo: null,
         player_name: playerName.trim(),
         player_api_id: null,
         player_source: null,
-        position_label: positionLabel || null,
+        position_label: null,
         belongs_to_agency: belongsToAgency,
         agent_name: belongsToAgency ? null : (agentName.trim() || null),
-        target_club_contacts: noTargetYet ? [] : cleanContacts(targetContacts),
-        current_club_contacts: isFreeAgent ? [] : cleanContacts(currentContacts),
-        status,
+        target_club_contacts: contactName.trim() ? [{ name: contactName.trim(), role: contactRole.trim() || null }] : [],
+        current_club_contacts: [],
+        status: 'ofrecido',
         assigned_to_id: assigneeId,
         assigned_to_name: assigneeName || null,
       },
@@ -98,93 +74,70 @@ export default function NewNegotiationForm({ open, onClose, onCreated }: { open:
       userDisplayName || 'Usuario',
     )
     if (!result) { setSaving(false); setError(t('mercado.errorGuardar')); return }
-    if (notes.trim()) {
-      await addNoteTo({ negotiationId: result.id }, notes.trim(), false, null, user?.id ?? null, userDisplayName || 'Usuario')
+    if (comment.trim()) {
+      await addNoteTo({ negotiationId: result.id }, comment.trim(), false, null, user?.id ?? null, userDisplayName || 'Usuario')
     }
     setSaving(false)
     onCreated(result)
     onClose()
   }
 
+  const choice = (selected: boolean) =>
+    `flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-colors ${selected
+      ? 'bg-brand-green text-white border-brand-green'
+      : 'border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-700 dark:text-apple-gray-200 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/40'}`
+
   return (
     <MobileSheet open={open} onClose={onClose} title={t('mercado.nuevaNegociacion')}>
       <div className="space-y-4 p-4">
         <div>
-          <label className="block text-xs font-medium text-apple-gray-500 mb-1.5">{t('mercado.jugador')} *</label>
+          <label className="block text-sm font-medium text-apple-gray-700 dark:text-apple-gray-200 mb-1.5">{t('mercado.jugador')}<RequiredMark /></label>
           <input
             type="text"
             value={playerName}
             onChange={e => setPlayerName(e.target.value)}
             placeholder={t('mercado.nombreJugadorPlaceholder')}
             className="input-apple text-sm w-full"
+            autoFocus
           />
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-apple-gray-500 mb-1.5">{t('mercado.posicion')} *</label>
-          <select
-            value={positionLabel}
-            onChange={e => setPositionLabel(e.target.value)}
+          <label className="block text-sm font-medium text-apple-gray-700 dark:text-apple-gray-200 mb-1.5">{t('mercado.clubAlQueSeOfrece')}<RequiredMark /></label>
+          <input
+            type="text"
+            value={clubName}
+            onChange={e => setClubName(e.target.value)}
+            placeholder={t('mercado.clubPlaceholderLibre')}
             className="input-apple text-sm w-full"
-          >
-            <option value="" disabled>{t('mercado.posicionSinEspecificar')}</option>
-            {MARKET_POSITION_OPTIONS.map(p => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Club actual */}
-        <div className="rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 p-3 space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="block text-xs font-medium text-apple-gray-500">{t('mercado.clubActual')}</label>
-            <label className="flex items-center gap-1.5 text-2xs text-apple-gray-500 cursor-pointer">
-              <input type="checkbox" checked={isFreeAgent} onChange={e => { setIsFreeAgent(e.target.checked); if (e.target.checked) setCurrentTeam(null) }} className="rounded" />
-              {t('mercado.jugadorLibre')}
-            </label>
+          />
+          <p className="text-xs font-medium text-apple-gray-600 dark:text-apple-gray-300 mt-3 mb-1.5">{t('mercado.conQuienSeHablo')}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <input
+              type="text"
+              value={contactName}
+              onChange={e => setContactName(e.target.value)}
+              placeholder={t('mercado.contactoNombrePlaceholder')}
+              className="input-apple text-sm w-full"
+            />
+            <input
+              type="text"
+              value={contactRole}
+              onChange={e => setContactRole(e.target.value)}
+              placeholder={t('mercado.contactoCargoPlaceholder')}
+              className="input-apple text-sm w-full"
+            />
           </div>
-          {!isFreeAgent && (
-            <>
-              <TeamSearchSelect value={currentTeam} onChange={setCurrentTeam} onCustom={name => setCurrentTeam({ id: null, name, logo: null })} />
-              <ClubContactsField value={currentContacts} onChange={setCurrentContacts} />
-            </>
-          )}
         </div>
 
-        {/* Club destino */}
-        <div className="rounded-xl border border-apple-gray-200 dark:border-apple-gray-700 p-3 space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="block text-xs font-medium text-apple-gray-500">{t('mercado.clubDestino')}</label>
-            <label className="flex items-center gap-1.5 text-2xs text-apple-gray-500 cursor-pointer">
-              <input type="checkbox" checked={noTargetYet} onChange={e => { setNoTargetYet(e.target.checked); if (e.target.checked) setTargetTeam(null) }} className="rounded" />
-              {t('mercado.soloLiberarlo')}
-            </label>
-          </div>
-          {!noTargetYet && (
-            <>
-              <TeamSearchSelect value={targetTeam} onChange={setTargetTeam} onCustom={name => setTargetTeam({ id: null, name, logo: null })} />
-              <ClubContactsField value={targetContacts} onChange={setTargetContacts} />
-            </>
-          )}
-        </div>
-
-        {/* Pertenencia a la agencia */}
         <div>
-          <label className="block text-xs font-medium text-apple-gray-500 mb-1.5">{t('mercado.perteneceDobleG')} *</label>
+          <label className="block text-sm font-medium text-apple-gray-700 dark:text-apple-gray-200 mb-1.5">{t('mercado.perteneceDobleG')}<RequiredMark /></label>
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setBelongsToAgency(true)}
-              className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ${belongsToAgency === true ? 'bg-brand-green text-white border-brand-green' : 'border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-500'}`}
-            >
+            <button type="button" onClick={() => setBelongsToAgency(true)} className={choice(belongsToAgency === true)}>
               {t('mercado.si')}
             </button>
-            <button
-              type="button"
-              onClick={() => setBelongsToAgency(false)}
-              className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ${belongsToAgency === false ? 'bg-brand-green text-white border-brand-green' : 'border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-500'}`}
-            >
-              {t('mercado.no')}
+            <button type="button" onClick={() => setBelongsToAgency(false)} className={choice(belongsToAgency === false)}>
+              {t('mercado.noOtroRepresentante')}
             </button>
           </div>
           {belongsToAgency === false && (
@@ -199,39 +152,25 @@ export default function NewNegotiationForm({ open, onClose, onCreated }: { open:
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-apple-gray-500 mb-1.5">{t('mercado.estado')}</label>
-          <select
-            value={status}
-            onChange={e => setStatus(e.target.value as NegotiationStatus)}
-            className="input-apple text-sm w-full"
-          >
-            {NEGOTIATION_STATUS_ORDER.map(s => (
-              <option key={s} value={s}>{t(NEGOTIATION_STATUS_LABEL_KEY[s])}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-apple-gray-500 mb-1.5">{t('mercado.responsableNegociacion')}</label>
+          <label className="block text-sm font-medium text-apple-gray-700 dark:text-apple-gray-200 mb-1.5">{t('mercado.quienLaLleva')}</label>
           <AssigneeSelect value={assigneeId} onChange={(id, name) => { setAssigneeId(id); setAssigneeName(name) }} />
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-apple-gray-500 mb-1.5">{t('mercado.notas')}</label>
+          <label className="block text-sm font-medium text-apple-gray-700 dark:text-apple-gray-200 mb-1.5">{t('mercado.comentarioOpcional')}</label>
           <textarea
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            placeholder={t('mercado.escribirNota')}
+            value={comment}
+            onChange={e => setComment(e.target.value)}
             rows={2}
             className="input-apple text-sm w-full resize-none"
           />
         </div>
 
-        {error && <p className="text-xs text-red-500 bg-red-500/10 px-3 py-2 rounded-lg">{error}</p>}
+        {error && <p className="text-xs text-red-600 dark:text-red-400 bg-red-500/10 px-3 py-2 rounded-lg">{error}</p>}
         <button
           onClick={handleSave}
           disabled={!canSave || saving}
-          className="w-full py-2.5 rounded-lg text-sm font-semibold text-white bg-brand-green hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          className="w-full py-3 rounded-xl text-sm font-semibold text-white bg-brand-green hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
         >
           {saving ? t('mercado.guardando') : t('mercado.guardarNegociacion')}
         </button>

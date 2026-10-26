@@ -14,6 +14,7 @@ import { POSITION_DISPLAY } from '@/types/scoring'
 import { API_METRICS, getMetricValue, type ApiMetricKey } from '@/constants/apiMetrics'
 import { useLanguage } from '@/context/LanguageContext'
 import { LANGUAGE_LOCALES } from '@/constants/translations'
+import RequiredMark from '@/components/ui/RequiredMark'
 
 // ─── Color interpolation: red (bad) → yellow (medium) → green (good) ────────
 // Input range recalibrated to 1-10 (Rating scale)
@@ -506,7 +507,7 @@ export default function ScatterChartPage() {
           <div>
             <div className="flex items-center gap-2 mb-2">
               <label className={`text-xs font-medium ${!selectedLeagueId ? 'text-brand-green' : 'text-apple-gray-500'}`}>
-                {t('dispersion.liga')} {!selectedLeagueId && <span className="text-brand-green">*</span>}
+                {t('dispersion.liga')}{!selectedLeagueId && <RequiredMark />}
               </label>
               {selectedLeagueId && (
                 <button

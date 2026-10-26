@@ -15,6 +15,7 @@ import {
   type MarketContact,
 } from '@/services/marketNotesService'
 import type { MarketTeamChoice } from '@/types/market'
+import RequiredMark from '@/components/ui/RequiredMark'
 
 // Agenda de contactos de clubes (directores deportivos, mánagers, presidentes...):
 // cuando hay que hablar con un club, acá se ve con quién.
@@ -85,7 +86,7 @@ function ContactForm({ contact, open, onClose, onSaved, countries }: {
     <MobileSheet open={open} onClose={onClose} title={contact ? 'Editar contacto' : 'Nuevo contacto'}>
       <div className="space-y-4 p-4">
         <div>
-          <label className={label}>Nombre y apellido *</label>
+          <label className={label}>Nombre y apellido<RequiredMark /></label>
           <input value={form.full_name} onChange={e => set('full_name', e.target.value)} className="input-apple text-sm w-full" autoFocus />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { AgencyPlayer } from '@/constants/agencyPlayers'
 import type { MatchContextValue } from '../types'
+import RequiredMark from '@/components/ui/RequiredMark'
 
 interface Props {
   value: MatchContextValue
@@ -47,7 +48,7 @@ export default function MatchContextForm({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {!hidePlayer && (
           <div className="sm:col-span-2 lg:col-span-1">
-            <label className={label} htmlFor="gps-jugador">Jugador</label>
+            <label className={label} htmlFor="gps-jugador">Jugador<RequiredMark /></label>
             <select
               id="gps-jugador"
               className={field}
@@ -63,7 +64,7 @@ export default function MatchContextForm({
         )}
 
         <div>
-          <label className={label} htmlFor="gps-fecha">Fecha del partido</label>
+          <label className={label} htmlFor="gps-fecha">Fecha del partido<RequiredMark /></label>
           <input id="gps-fecha" type="date" className={field}
             value={value.matchDate} onChange={e => set('matchDate', e.target.value)} />
         </div>

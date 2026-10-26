@@ -8,6 +8,7 @@ import {
 } from '@/services/coachService'
 import { TYPE_META, FOCUS_TAGS, FOCUS_TAG_LABEL_KEY } from '@/features/coaches/trainingConstants'
 import { useLanguage } from '@/context/LanguageContext'
+import RequiredMark from '@/components/ui/RequiredMark'
 
 function DumbbellIcon({ className }: { className?: string }) {
   return (
@@ -149,7 +150,7 @@ function SessionForm({
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mb-1">{t('trainingDay.titulo')}</label>
+        <label className="block text-xs font-medium text-apple-gray-500 dark:text-apple-gray-400 mb-1">{t('trainingDay.titulo')}<RequiredMark /></label>
         <input
           type="text"
           value={draft.title}
