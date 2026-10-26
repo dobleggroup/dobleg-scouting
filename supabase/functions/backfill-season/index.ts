@@ -1,8 +1,9 @@
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
 import { getSupabaseAdmin } from '../_shared/supabase-client.ts';
-import { fetchFinishedFixtures } from '../_shared/api-football.ts';
+import { fetchFinishedFixtures, setApiCaller } from '../_shared/api-football.ts';
 
 serve(async (req) => {
+  setApiCaller('backfill-season', 'secondary');
   const supabase = getSupabaseAdmin();
   const { league_id, season } = await req.json().catch(() => ({ league_id: null, season: 2025 }));
 

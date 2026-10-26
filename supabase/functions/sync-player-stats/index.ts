@@ -1,23 +1,34 @@
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
 import { getSupabaseAdmin } from '../_shared/supabase-client.ts';
-import { fetchLineups, fetchFixturePlayers } from '../_shared/api-football.ts';
+import { fetchLineups, fetchFixturePlayers, isQuotaStop, setApiCaller, QUOTA_PAUSE_MESSAGE } from '../_shared/api-football.ts';
 import { mapGridToPosition, fallbackPosition } from '../_shared/position-mapper.ts';
 import { pctPasses } from '../_shared/stats-normalize.ts';
 import { canCloseWithoutPlayers } from '../_shared/api-response.ts';
 import type { PlayerMatchRow } from '../_shared/types.ts';
 
 const BATCH_SIZE = 15;
+// Los primeros intentos van en cada pasada (los datos suelen aparecer 1-2 h
+// después del partido); después, cada RETRY_SLOW_HOURS.
+const FAST_ATTEMPTS = 4;
+const RETRY_SLOW_HOURS = 3;
 
 
 serve(async () => {
+  setApiCaller('sync-player-stats', 'essential');
   const supabase = getSupabaseAdmin();
   const results = { fixtures_processed: 0, players_inserted: 0, pending: 0, errors: [] as string[] };
+  let paused = false;
 
   try {
+    // Un partido que ya vino vacío varias veces se vuelve a pedir recién cada
+    // RETRY_SLOW_HOURS (antes se pedía en cada pasada y se tiraban ~3.000
+    // llamadas por día en partidos que API-Football todavía no tenía).
+    const slowRetryBefore = new Date(Date.now() - RETRY_SLOW_HOURS * 3600000).toISOString();
     const { data: fixtures } = await supabase
       .from('fixtures')
-      .select('id, league_id, season, date, home_team_id, away_team_id')
+      .select('id, league_id, season, date, home_team_id, away_team_id, stats_attempts')
       .eq('stats_synced', false)
+      .or(`stats_attempts.lt.${FAST_ATTEMPTS},stats_last_attempt_at.lt.${slowRetryBefore}`)
       .order('date', { ascending: false })
       .limit(BATCH_SIZE);
 
@@ -27,17 +38,21 @@ serve(async () => {
 
     for (const fixture of fixtures) {
       try {
-        const [lineups, playerStats] = await Promise.all([
-          fetchLineups(fixture.id),
-          fetchFixturePlayers(fixture.id),
-        ]);
+        // Primero las estadísticas: la alineación solo se pide si hay jugadores,
+        // así un partido todavía vacío cuesta 1 llamada y no 2.
+        const playerStats = await fetchFixturePlayers(fixture.id);
 
-        // Sin datos de jugadores todavía: se reintenta en las próximas pasadas y solo se
-        // cierra pasados unos días (antes quedaba marcado como sincronizado y vacío).
+        // Sin datos de jugadores todavía: se reintenta (cada vez más espaciado) y solo
+        // se cierra pasados unos días (antes quedaba marcado como sincronizado y vacío).
         if (playerStats.length === 0 && !canCloseWithoutPlayers(fixture.date)) {
+          await supabase.from('fixtures')
+            .update({ stats_attempts: (fixture.stats_attempts ?? 0) + 1, stats_last_attempt_at: new Date().toISOString() })
+            .eq('id', fixture.id);
           results.pending++;
           continue;
         }
+
+        const lineups = playerStats.length > 0 ? await fetchLineups(fixture.id) : [];
 
         const gridMap = new Map<number, { grid: string | null; formation: string | null; teamId: number; isSub: boolean }>();
 
@@ -200,6 +215,11 @@ serve(async () => {
 
         results.fixtures_processed++;
       } catch (err) {
+        // Sin cupo: se corta acá y se sigue en la próxima pasada (no es una falla del partido).
+        if (isQuotaStop(err)) {
+          paused = true;
+          break;
+        }
         const msg = `Fixture ${fixture.id}: ${(err as Error).message}`;
         results.errors.push(msg);
 
@@ -211,15 +231,14 @@ serve(async () => {
           error_message: (err as Error).message,
         });
 
-        if ((err as Error).message === 'RATE_LIMITED') break;
       }
     }
 
     await supabase.from('sync_log').insert({
       function_name: 'sync-player-stats',
-      status: results.errors.length > 0 ? 'error' : 'success',
+      status: results.errors.length > 0 ? 'error' : paused ? 'paused' : 'success',
       fixtures_processed: results.fixtures_processed,
-      error_message: results.errors.length > 0 ? results.errors.join('; ') : null,
+      error_message: [...results.errors, ...(paused ? [QUOTA_PAUSE_MESSAGE] : [])].join('; ') || null,
     });
 
     return new Response(JSON.stringify(results), { status: 200 });

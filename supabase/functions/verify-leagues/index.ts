@@ -1,8 +1,9 @@
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
 import { getSupabaseAdmin } from '../_shared/supabase-client.ts';
-import { fetchLeagueInfo, fetchFinishedFixtures, fetchFixturePlayers } from '../_shared/api-football.ts';
+import { fetchLeagueInfo, fetchFinishedFixtures, fetchFixturePlayers, setApiCaller } from '../_shared/api-football.ts';
 
 serve(async () => {
+  setApiCaller('verify-leagues', 'secondary');
   const supabase = getSupabaseAdmin();
   const results: Array<{ league_id: number; name: string; has_stats: boolean; sample_fixture?: number }> = [];
 

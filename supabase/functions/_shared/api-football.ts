@@ -1,19 +1,70 @@
 // supabase/functions/_shared/api-football.ts
 
 import { apiResponseError } from './api-response.ts';
+import { getSupabaseAdmin } from './supabase-client.ts';
 
 const API_KEY = Deno.env.get('API_FOOTBALL_KEY')!;
 const BASE_URL = Deno.env.get('API_FOOTBALL_BASE_URL') || 'https://v3.football.api-sports.io';
 
-async function apiFetch<T>(endpoint: string, params: Record<string, string>): Promise<T> {
-  const url = new URL(endpoint, BASE_URL);
-  for (const [k, v] of Object.entries(params)) {
-    url.searchParams.set(k, v);
+// El cupo diario lo comparten otras plataformas. Cada proceso dice qué tan
+// importante es: los partidos y las estadísticas (lo que se ve en el Inicio)
+// siguen hasta el 95 %; lo que puede esperar (nacionalidades, revisiones,
+// cargas de temporadas) se frena al 50 % y sigue cuando el cupo vuelve a cero
+// (00:00 UTC, 21:00 en Argentina).
+export type ApiTier = 'essential' | 'secondary';
+const TIER_MAX: Record<ApiTier, number> = { essential: 0.95, secondary: 0.5 };
+export const QUOTA_RESERVED = 'QUOTA_RESERVED';
+
+let caller: { source: string; tier: ApiTier } = { source: 'sin-nombre', tier: 'essential' };
+// Uso al empezar la corrida (undefined: todavía no se miró) + consultas hechas desde ahí.
+let startUsage: { current: number; limit: number } | null | undefined;
+let callsThisRun = 0;
+let usageClient: ReturnType<typeof getSupabaseAdmin> | null = null;
+
+/** Se llama al empezar cada corrida: nombre del proceso (para el conteo) y su prioridad. */
+export function setApiCaller(source: string, tier: ApiTier) {
+  caller = { source, tier };
+  startUsage = undefined;
+  callsThisRun = 0;
+}
+
+/** Lo que queda en sync_log (status 'paused') cuando una corrida se frena por cupo. */
+export const QUOTA_PAUSE_MESSAGE = 'En pausa por el cupo de API-Football; sigue cuando vuelve a cero (21:00).';
+
+/** true si el error es la pausa por cupo (no es una falla: se sigue en la próxima pasada). */
+export function isQuotaStop(err: unknown): boolean {
+  const msg = (err as Error)?.message;
+  return msg === QUOTA_RESERVED || msg === 'RATE_LIMITED';
+}
+
+async function quotaNumbers(): Promise<{ current: number; limit: number } | null> {
+  try {
+    const res = await fetch(new URL('/status', BASE_URL).toString(), { headers: { 'x-apisports-key': API_KEY } });
+    const json = await res.json();
+    const req = json?.response?.requests;
+    if (req?.limit_day) return { current: req.current, limit: req.limit_day };
+    // Con el cupo agotado /status contesta con `errors` y sin números.
+    if (JSON.stringify(json?.errors ?? '').includes('request limit')) return { current: 1, limit: 1 };
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function guardedFetch(url: URL): Promise<any> {
+  if (startUsage === undefined) startUsage = await quotaNumbers();
+  if (startUsage && (startUsage.current + callsThisRun) / startUsage.limit >= TIER_MAX[caller.tier]) {
+    throw new Error(QUOTA_RESERVED);
   }
 
+  callsThisRun++;
   const res = await fetch(url.toString(), {
     headers: { 'x-apisports-key': API_KEY },
   });
+  try {
+    usageClient ??= getSupabaseAdmin();
+    await usageClient.rpc('bump_api_football_usage', { p_source: caller.source, p_calls: 1 });
+  } catch { /* el conteo nunca frena un sync */ }
 
   if (res.status === 429) {
     throw new Error('RATE_LIMITED');
@@ -26,6 +77,15 @@ async function apiFetch<T>(endpoint: string, params: Record<string, string>): Pr
   const json = await res.json();
   const apiError = apiResponseError(json);
   if (apiError) throw new Error(apiError);
+  return json;
+}
+
+async function apiFetch<T>(endpoint: string, params: Record<string, string>): Promise<T> {
+  const url = new URL(endpoint, BASE_URL);
+  for (const [k, v] of Object.entries(params)) {
+    url.searchParams.set(k, v);
+  }
+  const json = await guardedFetch(url);
   return json.response as T;
 }
 
@@ -40,6 +100,20 @@ export async function fetchFinishedFixtures(
     season: String(season),
     from: fromDate,
     to: toDate,
+    status: 'FT-AET-PEN',
+  });
+}
+
+export type FinishedFixture = Awaited<ReturnType<typeof fetchFinishedFixtures>>[number];
+
+/**
+ * Todos los partidos terminados de un día (fecha UTC), de todas las ligas, en
+ * una sola consulta. Reemplaza a pedir liga por liga en la pasada de cada hora
+ * (33 consultas por hora → 2).
+ */
+export async function fetchFinishedFixturesByDate(date: string) {
+  return apiFetch<FinishedFixture[]>('/fixtures', {
+    date,
     status: 'FT-AET-PEN',
   });
 }
@@ -108,12 +182,7 @@ export async function fetchLeaguePlayersPage(leagueId: number, season: number, p
   url.searchParams.set('league', String(leagueId));
   url.searchParams.set('season', String(season));
   url.searchParams.set('page', String(page));
-  const res = await fetch(url.toString(), { headers: { 'x-apisports-key': API_KEY } });
-  if (res.status === 429) throw new Error('RATE_LIMITED');
-  if (!res.ok) throw new Error(`API-Football ${res.status}: ${await res.text()}`);
-  const json = await res.json();
-  const apiError = apiResponseError(json);
-  if (apiError) throw new Error(apiError);
+  const json = await guardedFetch(url);
   const players = (json.response ?? []).map((r: any) => ({
     id: r.player?.id as number,
     nationality: (r.player?.nationality ?? null) as string | null,
@@ -124,12 +193,6 @@ export async function fetchLeaguePlayersPage(leagueId: number, season: number, p
 
 /** Parte usada del cupo diario (0 a 1). /status no descuenta del cupo. */
 export async function fetchQuotaUsage(): Promise<number | null> {
-  try {
-    const res = await fetch(new URL('/status', BASE_URL).toString(), { headers: { 'x-apisports-key': API_KEY } });
-    const json = await res.json();
-    const req = json?.response?.requests;
-    return req?.limit_day ? req.current / req.limit_day : null;
-  } catch {
-    return null;
-  }
+  const q = await quotaNumbers();
+  return q ? q.current / q.limit : null;
 }

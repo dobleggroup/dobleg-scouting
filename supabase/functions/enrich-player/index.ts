@@ -1,6 +1,8 @@
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
 import { getSupabaseAdmin } from '../_shared/supabase-client.ts';
-import { fetchPlayerProfile as fetchApiFootballProfile, fetchLeaguePlayersPage, fetchQuotaUsage } from '../_shared/api-football.ts';
+import {
+  fetchPlayerProfile as fetchApiFootballProfile, fetchLeaguePlayersPage, fetchQuotaUsage, isQuotaStop, setApiCaller,
+} from '../_shared/api-football.ts';
 
 const TM_API_BASE = 'https://tmapi-alpha.transfermarkt.technology';
 const TM_HEADERS = {
@@ -486,7 +488,15 @@ async function fillNationalitiesByLeague(supabase: ReturnType<typeof getSupabase
   let filled = 0;
   let pages = 0;
   for (; pages < LEAGUE_PAGES_PER_RUN && page <= total; pages++, page++) {
-    const { players, totalPages } = await fetchLeaguePlayersPage(target.league_id, target.season, page);
+    let fetched: Awaited<ReturnType<typeof fetchLeaguePlayersPage>>;
+    try {
+      fetched = await fetchLeaguePlayersPage(target.league_id, target.season, page);
+    } catch (e) {
+      // Sin cupo: se guarda hasta dónde se llegó y se sigue en otra corrida.
+      if (isQuotaStop(e)) break;
+      throw e;
+    }
+    const { players, totalPages } = fetched;
     total = totalPages;
     for (const pl of players) {
       if (!pl.id || !pl.nationality) continue;
@@ -517,9 +527,10 @@ async function fillNationalitiesByLeague(supabase: ReturnType<typeof getSupabase
   return { league: target.league_id, pages, filled };
 }
 
-// El cupo de API-Football lo comparten otras plataformas: con más del 65 % usado
-// del día, la carga de nacionalidades espera a la próxima hora.
-const NATIONALITY_MAX_QUOTA = 0.65;
+// El cupo de API-Football lo comparten otras plataformas: con más del 50 % usado
+// del día, la carga de nacionalidades espera a que el cupo vuelva a cero (mismo
+// tope que todo lo secundario, ver _shared/api-football.ts).
+const NATIONALITY_MAX_QUOTA = 0.5;
 
 async function fillNationalities(supabase: ReturnType<typeof getSupabaseAdmin>) {
   const usage = await fetchQuotaUsage();
@@ -553,7 +564,9 @@ async function fillNationalities(supabase: ReturnType<typeof getSupabaseAdmin>) 
       }
       // En una revisión (vínculo equivocado con Transfermarkt) la fecha se pisa con la de la fuente propia.
       if (profile?.birthDate && (!p.birth_date || p.profile_recheck)) patch.birth_date = profile.birthDate;
-    } catch {
+    } catch (e) {
+      // Sin cupo no se marca como consultado (si no, quedaba un mes sin revisar).
+      if (isQuotaStop(e)) break;
       results.no_data++;
     }
     results.checked++;
@@ -611,6 +624,12 @@ serve(async (req) => {
   try { body = await req.json(); } catch { /* empty body OK */ }
 
   const mode = body.mode ?? 'single';
+
+  // Lo que pide alguien desde la app no espera; las revisiones de fondo sí.
+  if (mode === 'single') setApiCaller('enrich-player', 'essential');
+  else if (mode === 'rematch') setApiCaller('tm-rematch', 'secondary');
+  else if (mode === 'refresh') setApiCaller('refresh-transfermarkt', 'secondary');
+  else setApiCaller('fill-nationality', 'secondary');
 
   if (mode === 'single' && body.player_id) {
     const result = await enrichSingle(supabase, body.player_id);
