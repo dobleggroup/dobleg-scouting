@@ -3,8 +3,11 @@ import { useAuth } from '@/context/AuthContext'
 import {
   addPlayerComment,
   deletePlayerComment,
+  fetchCommentViews,
   fetchPlayerComments,
+  markCommentsSeen,
   playerNameKey,
+  type CommentView,
   type CommentSentiment,
   type CommentSource,
   type CommentTarget,
@@ -55,6 +58,26 @@ async function migrateLegacy(target: CommentTarget, source: CommentSource, fallb
   }
 }
 
+// "Visto por Gerardo, Guillermo y Federico" — chiquito, abajo de cada
+// comentario. No cuenta al autor ni a uno mismo; el detalle (nombre completo y
+// cuándo) queda en el tooltip.
+function SeenBy({ views }: { views: CommentView[] }) {
+  if (views.length === 0) return null
+  const names = views.map(v => v.user_name.split(' ')[0] || v.user_name)
+  const shown = names.length <= 3 ? names : [...names.slice(0, 2), `${names.length - 2} más`]
+  const text = shown.length === 1 ? shown[0] : `${shown.slice(0, -1).join(', ')} y ${shown[shown.length - 1]}`
+  const detail = views.map(v => `${v.user_name} · ${formatWhen(v.seen_at)}`).join('\n')
+  return (
+    <p className="mt-2 flex items-center justify-end gap-1 text-2xs text-apple-gray-400" title={detail}>
+      <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+      <span className="truncate">Visto por {text}</span>
+    </p>
+  )
+}
+
 function formatWhen(iso: string): string {
   const d = new Date(iso)
   return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' }) +
@@ -75,6 +98,7 @@ export default function PlayerCommentsPanel({
 }) {
   const { user, userDisplayName } = useAuth()
   const [comments, setComments] = useState<PlayerComment[] | null>(null)
+  const [views, setViews] = useState<Record<string, CommentView[]>>({})
   const [text, setText] = useState('')
   const [sentiment, setSentiment] = useState<CommentSentiment | null>(null)
   const [saving, setSaving] = useState(false)
@@ -86,8 +110,16 @@ export default function PlayerCommentsPanel({
     const list = await fetchPlayerComments(target)
     setComments(list)
     onChange?.(list)
+
+    // Abrir los comentarios = verlos: se marcan los de otros que todavía no vi.
+    const seen = await fetchCommentViews(list.map(c => c.id))
+    const unseen = user
+      ? list.filter(c => c.author_id !== user.id && !seen[c.id]?.some(v => v.user_id === user.id)).map(c => c.id)
+      : []
+    for (const v of await markCommentsSeen(unseen, authorName)) (seen[v.comment_id] ??= []).push(v)
+    setViews(seen)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target.name, target.supabasePlayerId, target.scoutPlayerId])
+  }, [target.name, target.supabasePlayerId, target.scoutPlayerId, user?.id, authorName])
 
   useEffect(() => {
     let alive = true
@@ -203,6 +235,7 @@ export default function PlayerCommentsPanel({
                 </div>
               </div>
               <p className="mt-1.5 text-sm text-apple-gray-700 dark:text-apple-gray-300 leading-relaxed whitespace-pre-line">{c.body}</p>
+              <SeenBy views={(views[c.id] ?? []).filter(v => v.user_id !== c.author_id && v.user_id !== user?.id)} />
             </li>
           ))}
         </ol>

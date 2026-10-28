@@ -128,6 +128,49 @@ export async function addPlayerComment(
   return data as PlayerComment
 }
 
+// ─── "Visto por" (tabla player_comment_views) ────────────────────────────────
+
+export interface CommentView {
+  comment_id: string
+  user_id: string
+  user_name: string
+  seen_at: string
+}
+
+/** Quién vio cada comentario, agrupado por comentario y en orden de visto. */
+export async function fetchCommentViews(commentIds: string[]): Promise<Record<string, CommentView[]>> {
+  const result: Record<string, CommentView[]> = {}
+  if (commentIds.length === 0) return result
+  const { data, error } = await supabase
+    .from('player_comment_views')
+    .select('comment_id, user_id, user_name, seen_at')
+    .in('comment_id', commentIds)
+    .order('seen_at', { ascending: true })
+  if (error) {
+    console.error('Error fetching comment views:', error)
+    return result
+  }
+  for (const v of (data ?? []) as CommentView[]) (result[v.comment_id] ??= []).push(v)
+  return result
+}
+
+/** Marca como vistos por el usuario actual (si ya los había visto, no cambia nada). */
+export async function markCommentsSeen(commentIds: string[], userName: string): Promise<CommentView[]> {
+  if (commentIds.length === 0) return []
+  const { data: auth } = await supabase.auth.getUser()
+  if (!auth.user) return []
+  const rows = commentIds.map(comment_id => ({ comment_id, user_id: auth.user!.id, user_name: userName }))
+  const { error } = await supabase
+    .from('player_comment_views')
+    .upsert(rows, { onConflict: 'comment_id,user_id', ignoreDuplicates: true })
+  if (error) {
+    console.error('Error marking comments seen:', error)
+    return []
+  }
+  const now = new Date().toISOString()
+  return rows.map(r => ({ ...r, seen_at: now }))
+}
+
 export async function deletePlayerComment(id: string): Promise<boolean> {
   const { error } = await supabase.from('player_comments').delete().eq('id', id)
   if (error) {
