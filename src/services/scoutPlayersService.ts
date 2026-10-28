@@ -423,10 +423,10 @@ export async function linkScoutPlayerClub(id: string, teamId: number | null): Pr
   return true
 }
 
-// Update a scout player's profile
+// Update a scout player's profile (null borra el dato)
 export async function updateScoutPlayer(
   id: string,
-  updates: Partial<NewScoutPlayer>
+  updates: { [K in keyof NewScoutPlayer]?: NewScoutPlayer[K] | null }
 ): Promise<boolean> {
   const { error } = await supabase
     .from('scout_players')

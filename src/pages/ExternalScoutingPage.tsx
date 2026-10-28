@@ -6,7 +6,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import EmptyState from '@/components/ui/EmptyState'
 import { getScoreColorClass, getScoreBgClass } from '@/components/ui/ScoreBar'
 import { PlayerPhoto, TeamLogo } from '@/components/ui/PlayerPhoto'
-import { AgentBadge, agentKind } from '@/components/ui/AgentBadge'
+import { AgentBadge, AgentColumnLabel, agentKind } from '@/components/ui/AgentBadge'
 import MultiSelect from '@/components/filters/MultiSelect'
 import type { Position, PlayerWithScore } from '@/types/scoring'
 import { POSITION_DISPLAY, displayPosition } from '@/types/scoring'
@@ -146,7 +146,7 @@ function SortHeader({
   align = 'center',
 }: {
   column: PlayerListSort
-  label: string
+  label: React.ReactNode
   filters: Filters
   setFilters: React.Dispatch<React.SetStateAction<Filters>>
   align?: 'center' | 'right' | 'left'
@@ -904,7 +904,7 @@ export default function ExternalScoutingPage() {
               <option value="matches">{t('externo.colPJ')}</option>
               <option value="age">{t('externo.edad')}</option>
               <option value="value">{t('externo.colValor')}</option>
-              <option value="agent">{t('agente.columna')}</option>
+              <option value="agent">{t('agente.columna')} ({t('agente.segunTmkt')})</option>
             </select>
             <button
               type="button"
@@ -966,7 +966,7 @@ export default function ExternalScoutingPage() {
                     </th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">{t('externo.colJugador')}</th>
                     <th className="text-left py-3 px-3 text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">{t('externo.colEquipo')}</th>
-                    <SortHeader column="agent" label={t('agente.columna')} filters={filters} setFilters={setFilters} align="left" />
+                    <SortHeader column="agent" label={<AgentColumnLabel />} filters={filters} setFilters={setFilters} align="left" />
                     <th className="text-center py-3 px-3 text-xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">{t('externo.colPos')}</th>
                     <SortHeader column="age" label={t('externo.edad')} filters={filters} setFilters={setFilters} />
                     <SortHeader column="value" label={t('externo.colValor')} filters={filters} setFilters={setFilters} align="right" />

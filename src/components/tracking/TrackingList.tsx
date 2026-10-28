@@ -16,7 +16,7 @@ import LinkPlayerModal from '@/components/tracking/LinkPlayerModal'
 import LinkClubModal from '@/components/tracking/LinkClubModal'
 import FichaManualModal from '@/components/tracking/FichaManualModal'
 import { PlayerPhoto, TeamLogo } from '@/components/ui/PlayerPhoto'
-import { AgentBadge } from '@/components/ui/AgentBadge'
+import { AgentBadge, AgentColumnLabel } from '@/components/ui/AgentBadge'
 import PlayerCommentsPanel from '@/components/players/PlayerCommentsPanel'
 import { fetchCommentSummaries, type PlayerComment } from '@/services/playerCommentsService'
 import { isMarketLinkAdmin, fetchTeamMembers, memberAccounts } from '@/services/marketService'
@@ -25,6 +25,7 @@ import type { ScoutPlayer, ScoutPlayerStatusRecord, TrackingStatus, EnrichedPlay
 import type { TeamMember } from '@/types/market'
 import { fuzzyMatch } from '@/lib/search'
 import { useLanguage } from '@/context/LanguageContext'
+import { DISPLAY_POSITION_MAP } from '@/constants/scoring'
 
 // ─── STATUS CONFIG ────────────────────────────────────────────────────────────
 
@@ -58,6 +59,22 @@ function timeAgo(date: string, t: (key: string) => string) {
   if (days < 30) return t('seguimiento.haceDias').replace('{n}', String(days))
   if (days < 365) return t('seguimiento.haceMeses').replace('{n}', String(Math.floor(days / 30)))
   return t('seguimiento.haceAnios').replace('{n}', String(Math.floor(days / 365)))
+}
+
+// ─── POSICIÓN (chip verde, se lee de un vistazo) ─────────────────────────────
+
+// Algunos jugadores tienen guardado el código ("ARQ", "VI", "CB") y otros el
+// nombre: se muestran y se filtran siempre con el nombre completo.
+const displayPosition = (pos: string | null) => (pos ? DISPLAY_POSITION_MAP[pos] ?? pos : null)
+
+const PENCIL_PATH = 'M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zM19.5 7.125L16.875 4.5'
+
+function PositionChip({ position }: { position: string }) {
+  return (
+    <span className="inline-flex items-center px-1.5 py-px rounded-md ring-1 ring-inset ring-brand-green/25 bg-brand-green/10 text-emerald-700 dark:text-emerald-300 text-[11px] font-semibold leading-4 whitespace-nowrap">
+      {position}
+    </span>
+  )
 }
 
 // ─── STATUS BADGE (dropdown) ──────────────────────────────────────────────────
@@ -213,7 +230,7 @@ function AssignedToDropdown({
             : 'bg-apple-gray-100 dark:bg-apple-gray-700 border-apple-gray-200 dark:border-apple-gray-600 text-apple-gray-500 dark:text-apple-gray-400'
         }`}
       >
-        {currentUserName || t('seguimiento.sinAsignar')}
+        <span className="truncate max-w-[110px]">{currentUserName || t('seguimiento.sinAsignar')}</span>
         <svg className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
         </svg>
@@ -279,7 +296,7 @@ function CommentsCell({ summary, onOpen, compact = false, oneLine = false }: { s
     <button
       type="button"
       onClick={e => { e.stopPropagation(); onOpen() }}
-      className={`group/c text-left flex gap-2 rounded-lg px-2 py-1 -mx-2 hover:bg-brand-green/10 transition-colors ${oneLine ? 'items-center max-w-[220px]' : 'items-start'} ${compact ? '' : oneLine ? '' : 'max-w-[190px]'}`}
+      className={`group/c text-left flex gap-2 rounded-lg px-2 py-1 -mx-2 hover:bg-brand-green/10 transition-colors ${oneLine ? 'items-center max-w-[150px] 2xl:max-w-[200px]' : 'items-start'} ${compact ? '' : oneLine ? '' : 'max-w-[190px]'}`}
       title={last ? `${last.author_name} · ${new Date(last.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}: ${last.body}` : t('seguimiento.verComentarios')}
     >
       <span className={`flex-shrink-0 inline-flex items-center gap-1 text-xs font-semibold ${count > 0 ? 'text-brand-green' : 'text-apple-gray-400 group-hover/c:text-brand-green'}`}>
@@ -406,6 +423,7 @@ export default function TrackingList({ list }: { list: TrackingListKind }) {
   const [linkingPlayer, setLinkingPlayer] = useState<ScoutPlayerWithScore | null>(null)
   const [linkingClubPlayer, setLinkingClubPlayer] = useState<ScoutPlayerWithScore | null>(null)
   const [fichaPlayer, setFichaPlayer] = useState<ScoutPlayerWithScore | null>(null)
+  const [editingPlayer, setEditingPlayer] = useState<ScoutPlayerWithScore | null>(null)
 
   // Mismo criterio de admin que Mercado (Marcos + Matías) — antes esto solo
   // dejaba vincular jugadores con el email del dueño de la cuenta, Matías no
@@ -522,7 +540,7 @@ export default function TrackingList({ list }: { list: TrackingListKind }) {
   // Unique positions for filter
   const positions = useMemo(() => {
     const set = new Set<string>()
-    players.forEach(p => { if (p.posicion) set.add(p.posicion) })
+    players.forEach(p => { const pos = displayPosition(p.posicion); if (pos) set.add(pos) })
     return [...set].sort()
   }, [players])
 
@@ -535,7 +553,7 @@ export default function TrackingList({ list }: { list: TrackingListKind }) {
             !fuzzyMatch(search, p.club || '') &&
             !fuzzyMatch(search, p.liga || '')) return false
       }
-      if (posFilter && p.posicion !== posFilter) return false
+      if (posFilter && displayPosition(p.posicion) !== posFilter) return false
       if (scoutFilter && addedByOf(p) !== scoutFilter && p.assigned_to_name !== scoutFilter) return false
       if (statusFilter) {
         const s = (statuses[p.id]?.status as TrackingStatus) || 'en_seguimiento'
@@ -691,23 +709,23 @@ export default function TrackingList({ list }: { list: TrackingListKind }) {
         </div>
       ) : (
         <>
-          {/* ── Desktop table (hidden on mobile) ──
+          {/* ── Tabla (desde 1280px) ──
               Todo entra en el ancho de la pantalla, sin deslizar: edad y posición
-              van debajo del nombre, la liga debajo del club, el asignado debajo
-              del estado y los dos puntajes juntos. */}
-          <div className="hidden lg:block card-apple overflow-hidden">
+              van debajo del nombre y la liga debajo del club. Hasta 2xl, estado y
+              asignado, y los dos puntajes, van apilados para ganar ancho. */}
+          <div className="hidden xl:block card-apple overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-apple-gray-200 dark:border-apple-gray-700">
                     <th className="px-3 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">{t('seguimiento.colJugador')}</th>
                     <th className="px-3 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">{t('seguimiento.colClub')}</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">{t('seguimiento.colAgente')}</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider"><AgentColumnLabel /></th>
                     <th className="px-3 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider whitespace-nowrap">{t('seguimiento.colEstadoAsignado')}</th>
                     <th className="px-3 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">{t('seguimiento.comentarios')}</th>
                     <th className="px-3 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider">{t('seguimiento.colPuntajes')}</th>
                     <th className="px-3 py-3 text-left text-xs font-semibold text-apple-gray-500 uppercase tracking-wider whitespace-nowrap">{t('seguimiento.colAgregado')}</th>
-                    <th className="w-10 px-2 py-3"><span className="sr-only">{t('seguimiento.quitarDeLista')}</span></th>
+                    <th className="w-10 px-1 py-3"><span className="sr-only">{t('seguimiento.quitarDeLista')}</span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-apple-gray-100 dark:divide-apple-gray-700/50">
@@ -753,9 +771,7 @@ export default function TrackingList({ list }: { list: TrackingListKind }) {
                                   )}
                                 </div>
                                 <div className="mt-0.5 flex items-center gap-1.5 text-xs text-apple-gray-500 dark:text-apple-gray-400" onClick={e => e.stopPropagation()}>
-                                  {player.posicion && (
-                                    <span className="px-1.5 rounded bg-apple-gray-100 dark:bg-apple-gray-700 text-2xs font-semibold text-apple-gray-600 dark:text-apple-gray-300 whitespace-nowrap">{player.posicion}</span>
-                                  )}
+                                  {player.posicion && <PositionChip position={displayPosition(player.posicion)!} />}
                                   {eff.edad && <span className="whitespace-nowrap">{eff.edad} {t('seguimiento.aniosAbbr')}</span>}
                                   {player.transfermarkt_url && (
                                     <a href={player.transfermarkt_url} target="_blank" rel="noopener noreferrer" title={t('seguimiento.transfermarkt')} className="text-blue-500 hover:text-blue-600">
@@ -815,7 +831,7 @@ export default function TrackingList({ list }: { list: TrackingListKind }) {
 
                           {/* Estado + asignado */}
                           <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex flex-col 2xl:flex-row items-start 2xl:items-center gap-1 2xl:gap-1.5">
                               <StatusDropdown
                                 playerId={player.id}
                                 currentStatus={currentStatus}
@@ -841,7 +857,7 @@ export default function TrackingList({ list }: { list: TrackingListKind }) {
 
                           {/* Puntajes: scouts (reportes) y rating de partidos */}
                           <td className="px-3 py-2.5">
-                            <div className="flex items-center gap-3 text-xs whitespace-nowrap">
+                            <div className="flex flex-col 2xl:flex-row 2xl:items-center gap-0.5 2xl:gap-3 text-xs whitespace-nowrap">
                               <ScoreLine
                                 label={t('seguimiento.puntajeScouts')}
                                 value={player.scoutScore ?? null}
@@ -854,25 +870,37 @@ export default function TrackingList({ list }: { list: TrackingListKind }) {
 
                           {/* Agregado */}
                           <td className="px-3 py-2.5">
-                            <p className="text-xs font-medium text-apple-gray-700 dark:text-apple-gray-300 whitespace-nowrap">
+                            <p className="text-xs font-medium text-apple-gray-700 dark:text-apple-gray-300 whitespace-nowrap truncate max-w-[120px]" title={addedBy || undefined}>
                               {addedBy || t('seguimiento.sistema')}
                             </p>
                             <p className="text-2xs text-apple-gray-400 whitespace-nowrap">{timeAgo(player.created_at, t)}</p>
                           </td>
 
-                          {/* Eliminar */}
-                          <td className="px-2 py-2.5" onClick={e => e.stopPropagation()}>
+                          {/* Editar + eliminar */}
+                          <td className="px-1 py-2.5" onClick={e => e.stopPropagation()}>
                             {!requiresAuth && (
-                              <button
-                                onClick={() => handleDelete(player.id)}
-                                className="p-1.5 rounded-lg text-apple-gray-300 dark:text-apple-gray-600 hover:text-red-500 hover:bg-red-500/10 transition-colors"
-                                title={t('seguimiento.quitarDeLista')}
-                                aria-label={t('seguimiento.quitarDeLista')}
-                              >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                              </button>
+                              <div className="flex items-center">
+                                <button
+                                  onClick={() => setEditingPlayer(player)}
+                                  className="p-1 rounded-lg text-apple-gray-400 dark:text-apple-gray-500 hover:text-brand-green hover:bg-brand-green/10 transition-colors"
+                                  title={t('seguimiento.editarJugador')}
+                                  aria-label={t('seguimiento.editarJugador')}
+                                >
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={PENCIL_PATH} />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(player.id)}
+                                  className="p-1 rounded-lg text-apple-gray-300 dark:text-apple-gray-600 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                                  title={t('seguimiento.quitarDeLista')}
+                                  aria-label={t('seguimiento.quitarDeLista')}
+                                >
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              </div>
                             )}
                           </td>
                         </tr>
@@ -883,8 +911,8 @@ export default function TrackingList({ list }: { list: TrackingListKind }) {
             </div>
           </div>
 
-          {/* ── Mobile cards (block lg:hidden) ── */}
-          <div className="block lg:hidden space-y-3">
+          {/* ── Tarjetas (celular y pantallas medianas, donde la tabla no entra) ── */}
+          <div className="block xl:hidden space-y-3">
             {filtered.map(player => {
               const statusRecord = statuses[player.id]
               const currentStatus: TrackingStatus = (statusRecord?.status as TrackingStatus) || 'en_seguimiento'
@@ -899,12 +927,15 @@ export default function TrackingList({ list }: { list: TrackingListKind }) {
                   <div className="flex items-center gap-3">
                     <PlayerPhoto src={eff.photo} name={eff.name} size="sm" rounded="lg" className="flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p
-                        className="font-semibold text-sm truncate cursor-pointer text-apple-gray-900 dark:text-white hover:text-brand-green transition-colors"
-                        onClick={() => openPlayer(player)}
-                      >
-                        {eff.name}
-                      </p>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <p
+                          className="font-semibold text-sm truncate cursor-pointer text-apple-gray-900 dark:text-white hover:text-brand-green transition-colors"
+                          onClick={() => openPlayer(player)}
+                        >
+                          {eff.name}
+                        </p>
+                        {player.posicion && <span className="flex-shrink-0"><PositionChip position={displayPosition(player.posicion)!} /></span>}
+                      </div>
                       <p className="text-xs text-apple-gray-500 flex items-center gap-1 min-w-0">
                         {eff.teamLogo && <TeamLogo src={eff.teamLogo} className="w-3.5 h-3.5 flex-shrink-0" />}
                         <span className="truncate">
@@ -978,6 +1009,18 @@ export default function TrackingList({ list }: { list: TrackingListKind }) {
                       )}
                       {!requiresAuth && (
                         <button
+                          onClick={() => setEditingPlayer(player)}
+                          className="p-1.5 rounded-lg text-apple-gray-400 hover:text-brand-green hover:bg-brand-green/10 transition-colors"
+                          title={t('seguimiento.editarJugador')}
+                          aria-label={t('seguimiento.editarJugador')}
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={PENCIL_PATH} />
+                          </svg>
+                        </button>
+                      )}
+                      {!requiresAuth && (
+                        <button
                           onClick={() => handleDelete(player.id)}
                           className="p-1.5 rounded-lg text-apple-gray-400 hover:text-red-500 hover:bg-red-500/10 transition-colors"
                           title={t('seguimiento.quitarDeLista')}
@@ -1006,6 +1049,14 @@ export default function TrackingList({ list }: { list: TrackingListKind }) {
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         defaultList={list}
+        onSuccess={load}
+      />
+
+      {/* Editar la ficha del jugador (lápiz de cada fila) */}
+      <AddPlayerModal
+        isOpen={!!editingPlayer}
+        onClose={() => setEditingPlayer(null)}
+        editPlayer={editingPlayer}
         onSuccess={load}
       />
 

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useLanguage } from '@/context/LanguageContext'
 import { useAuth } from '@/context/AuthContext'
 import { PlayerPhoto, TeamLogo } from '@/components/ui/PlayerPhoto'
-import { AgentBadge } from '@/components/ui/AgentBadge'
+import { AgentBadge, AgentColumnLabel } from '@/components/ui/AgentBadge'
 import MultiSelect from '@/components/filters/MultiSelect'
 import { DISPLAY_POSITION_MAP } from '@/constants/scoring'
 import { formatMarketValue } from '@/utils/scoring'
@@ -411,7 +411,7 @@ export default function DebutantesPage() {
                             <th className="px-3 py-3 text-left text-2xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider pl-4">{t('seguimiento.colJugador')}</th>
                             <th className="px-3 py-3 text-left text-2xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">{t('seguimiento.colClub')}</th>
                             <th className="px-3 py-3 text-left text-2xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">{t('debutantes.colDebut')}</th>
-                            <th className="px-3 py-3 text-left text-2xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">{t('seguimiento.colAgente')}</th>
+                            <th className="px-3 py-3 text-left text-2xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider"><AgentColumnLabel /></th>
                             <th className="px-3 py-3 text-left text-2xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">{t('debutantes.colValorContrato')}</th>
                             <th className="px-3 py-3 text-left text-2xs font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider">{t('debutantes.colSeguimiento')}</th>
                             <th className="px-2 py-3"><span className="sr-only">{t('debutantes.crearReporte')}</span></th>

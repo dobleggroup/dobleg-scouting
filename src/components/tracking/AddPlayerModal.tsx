@@ -1,7 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { addScoutPlayer, uploadScoutPlayerFile, type NewScoutPlayer } from '@/services/scoutPlayersService'
+import { addScoutPlayer, updateScoutPlayer, uploadScoutPlayerFile, type NewScoutPlayer } from '@/services/scoutPlayersService'
+import type { ScoutPlayer } from '@/types'
 import { useAuth } from '@/context/AuthContext'
 import RequiredMark from '@/components/ui/RequiredMark'
+import { DISPLAY_POSITION_MAP } from '@/constants/scoring'
 
 const POSITIONS = [
   'Arquero', 'Lateral derecho', 'Defensor central', 'Lateral izquierdo',
@@ -28,11 +30,29 @@ const NATIONALITIES = [
   'Bolivia', 'Perú', 'Venezuela', 'México', 'España', 'Portugal', 'Otra',
 ]
 
+// Si la ficha ya trae un valor que no está en la lista (cargado desde otro
+// lado), se agrega como opción para que editar no lo borre sin querer.
+function withCurrent(options: string[], current: string) {
+  return current && !options.includes(current) ? [current, ...options] : options
+}
+
 interface AddPlayerModalProps {
   isOpen: boolean
   onClose: () => void
   defaultList?: 'datos' | 'scouts_gg' | 'both'
   onSuccess?: () => void
+  /** Si viene, el formulario edita la ficha de este jugador en vez de crear uno nuevo. */
+  editPlayer?: ScoutPlayer | null
+}
+
+// "ramiro lecchini" / "JULIO SINISTERRA" → "Ramiro Lecchini" / "Julio Sinisterra".
+// Partículas como "da", "de", "del" quedan en minúscula salvo al principio.
+const LOWER_PARTICLES = new Set(['da', 'de', 'del', 'di', 'do', 'dos', 'la', 'las', 'los', 'van', 'von', 'y'])
+function toNameCase(name: string) {
+  return name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('es').split(' ')
+    .map((w, i) => i > 0 && LOWER_PARTICLES.has(w) ? w
+      : w.split(/([-'])/).map(part => part.charAt(0).toLocaleUpperCase('es') + part.slice(1)).join(''))
+    .join(' ')
 }
 
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
@@ -49,8 +69,9 @@ function Field({ label, required, children }: { label: string; required?: boolea
 const inputCls = "w-full px-3 py-2.5 rounded-xl bg-apple-gray-50 dark:bg-apple-gray-800 border border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-800 dark:text-white placeholder-apple-gray-400 focus:outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/20 transition-all text-sm"
 const selectCls = `${inputCls} cursor-pointer`
 
-export default function AddPlayerModal({ isOpen, onClose, defaultList = 'scouts_gg', onSuccess }: AddPlayerModalProps) {
+export default function AddPlayerModal({ isOpen, onClose, defaultList = 'scouts_gg', onSuccess, editPlayer }: AddPlayerModalProps) {
   const { user, userDisplayName } = useAuth()
+  const isEdit = !!editPlayer
 
   // Required
   const [fullName, setFullName] = useState('')
@@ -92,6 +113,17 @@ export default function AddPlayerModal({ isOpen, onClose, defaultList = 'scouts_
   const [error, setError] = useState('')
   const [activeSection, setActiveSection] = useState<'identity' | 'physical' | 'contacts' | 'scout'>('identity')
 
+  // Al abrir en modo edición, se carga la ficha actual del jugador.
+  useEffect(() => {
+    if (!isOpen || !editPlayer) return
+    setFullName(editPlayer.full_name ?? ''); setClub(editPlayer.club ?? ''); setLiga(editPlayer.liga ?? '')
+    setEdad(editPlayer.edad != null ? String(editPlayer.edad) : ''); setFechaNacimiento(editPlayer.fecha_nacimiento ?? '')
+    setPosicion(editPlayer.posicion ? DISPLAY_POSITION_MAP[editPlayer.posicion] ?? editPlayer.posicion : ''); setRol(editPlayer.rol ?? ''); setNacionalidad(editPlayer.nacionalidad ?? '')
+    setAltura(editPlayer.altura != null ? String(editPlayer.altura) : ''); setPie(editPlayer.pie ?? '')
+    setTransfermarktUrl(editPlayer.transfermarkt_url ?? ''); setAgente(editPlayer.agente ?? ''); setVideoUrl(editPlayer.video_url ?? '')
+    setComentario(editPlayer.comentario ?? ''); setPrioridad(editPlayer.prioridad ?? 'normal'); setFuenteDeteccion(editPlayer.fuente_deteccion ?? '')
+  }, [isOpen, editPlayer])
+
   // Reset on close
   useEffect(() => {
     if (!isOpen) {
@@ -123,10 +155,42 @@ export default function AddPlayerModal({ isOpen, onClose, defaultList = 'scouts_
     e.preventDefault()
     if (!user) { setError('Debes iniciar sesión'); return }
     if (!fullName.trim()) { setError('El nombre y apellido son obligatorios'); return }
-    if (!addToDatos && !addToScoutsGG) { setError('Seleccioná al menos una lista'); return }
+    if (!isEdit && !addToDatos && !addToScoutsGG) { setError('Seleccioná al menos una lista'); return }
 
     setSubmitting(true)
     setError('')
+
+    if (editPlayer) {
+      // En edición se mandan todos los campos: si alguien vació uno, se borra.
+      const ok = await updateScoutPlayer(editPlayer.id, {
+        full_name: fullName.trim().replace(/\s+/g, ' '),
+        club: club.trim() || null,
+        liga: liga.trim() || null,
+        edad: edad ? parseInt(edad) : null,
+        fecha_nacimiento: fechaNacimiento || null,
+        posicion: posicion || null,
+        rol: rol || null,
+        nacionalidad: nacionalidad || null,
+        altura: altura ? parseInt(altura) : null,
+        pie: pie || null,
+        transfermarkt_url: transfermarktUrl.trim() || null,
+        agente: agente.trim() || null,
+        comentario: comentario.trim() || null,
+        prioridad,
+        fuente_deteccion: fuenteDeteccion || null,
+        video_url: videoUrl.trim() || null,
+      })
+      if (!ok) {
+        setError('No se pudieron guardar los cambios. Verificá tu conexión y probá de nuevo.')
+        setSubmitting(false)
+        return
+      }
+      for (const file of pendingFiles) await uploadScoutPlayerFile(editPlayer.id, file, userDisplayName)
+      setSubmitting(false)
+      onSuccess?.()
+      onClose()
+      return
+    }
 
     const list: 'datos' | 'scouts_gg' | 'both' =
       addToDatos && addToScoutsGG ? 'both' : addToDatos ? 'datos' : 'scouts_gg'
@@ -187,12 +251,14 @@ export default function AddPlayerModal({ isOpen, onClose, defaultList = 'scouts_
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-brand-green/15 flex items-center justify-center">
               <svg className="w-5 h-5 text-brand-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                {isEdit
+                  ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zM19.5 7.125L16.875 4.5" />
+                  : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />}
               </svg>
             </div>
             <div>
-              <h2 className="text-base font-bold text-apple-gray-900 dark:text-white">Agregar Jugador</h2>
-              <p className="text-xs text-apple-gray-500">Completá la ficha del jugador</p>
+              <h2 className="text-base font-bold text-apple-gray-900 dark:text-white">{isEdit ? 'Editar jugador' : 'Agregar Jugador'}</h2>
+              <p className="text-xs text-apple-gray-500">{isEdit ? 'Corregí o completá los datos de la ficha' : 'Completá la ficha del jugador'}</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-apple-gray-100 dark:hover:bg-apple-gray-800 transition-colors">
@@ -233,6 +299,16 @@ export default function AddPlayerModal({ isOpen, onClose, defaultList = 'scouts_
                   className={inputCls}
                   required
                 />
+                {fullName.trim() && toNameCase(fullName) !== fullName.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => setFullName(toNameCase(fullName))}
+                    className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-brand-green bg-brand-green/10 hover:bg-brand-green/15 transition-colors"
+                  >
+                    <span className="font-bold tracking-tight">Aa</span>
+                    Dejarlo como «{toNameCase(fullName)}»
+                  </button>
+                )}
               </Field>
             </div>
 
@@ -251,13 +327,13 @@ export default function AddPlayerModal({ isOpen, onClose, defaultList = 'scouts_
                   <Field label="Posición">
                     <select value={posicion} onChange={e => setPosicion(e.target.value)} className={selectCls}>
                       <option value="">Sin especificar</option>
-                      {POSITIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                      {withCurrent(POSITIONS, posicion).map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
                   </Field>
                   <Field label="Rol específico">
                     <select value={rol} onChange={e => setRol(e.target.value)} className={selectCls}>
                       <option value="">Sin especificar</option>
-                      {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                      {withCurrent(ROLES, rol).map(r => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </Field>
                 </div>
@@ -272,7 +348,7 @@ export default function AddPlayerModal({ isOpen, onClose, defaultList = 'scouts_
                 <Field label="Nacionalidad">
                   <select value={nacionalidad} onChange={e => setNacionalidad(e.target.value)} className={selectCls}>
                     <option value="">Sin especificar</option>
-                    {NATIONALITIES.map(n => <option key={n} value={n}>{n}</option>)}
+                    {withCurrent(NATIONALITIES, nacionalidad).map(n => <option key={n} value={n}>{n}</option>)}
                   </select>
                 </Field>
               </div>
@@ -343,7 +419,7 @@ export default function AddPlayerModal({ isOpen, onClose, defaultList = 'scouts_
                 <Field label="Fuente de detección">
                   <select value={fuenteDeteccion} onChange={e => setFuenteDeteccion(e.target.value)} className={selectCls}>
                     <option value="">Sin especificar</option>
-                    {DETECTION_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+                    {withCurrent(DETECTION_SOURCES, fuenteDeteccion).map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </Field>
 
@@ -397,8 +473,8 @@ export default function AddPlayerModal({ isOpen, onClose, defaultList = 'scouts_
 
           {/* Footer */}
           <div className="px-6 py-4 border-t border-apple-gray-200 dark:border-apple-gray-800 bg-apple-gray-50/50 dark:bg-apple-gray-800/30 space-y-3">
-            {/* List selector */}
-            <div>
+            {/* List selector (solo al agregar; en edición el jugador ya está en su lista) */}
+            {!isEdit && <div>
               <p className="text-xs font-semibold text-apple-gray-500 uppercase tracking-wider mb-2">Agregar a lista:</p>
               <div className="flex gap-3">
                 <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -424,7 +500,7 @@ export default function AddPlayerModal({ isOpen, onClose, defaultList = 'scouts_
                   <span className="text-sm text-apple-gray-700 dark:text-apple-gray-300">Seguimiento Scouts GG</span>
                 </label>
               </div>
-            </div>
+            </div>}
 
             {error && (
               <p className="text-sm text-red-500 bg-red-500/10 px-3 py-2 rounded-lg">{error}</p>
@@ -447,9 +523,9 @@ export default function AddPlayerModal({ isOpen, onClose, defaultList = 'scouts_
                 ) : (
                   <>
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isEdit ? 'M5 13l4 4L19 7' : 'M12 4v16m8-8H4'} />
                     </svg>
-                    Agregar Jugador
+                    {isEdit ? 'Guardar cambios' : 'Agregar Jugador'}
                   </>
                 )}
               </button>

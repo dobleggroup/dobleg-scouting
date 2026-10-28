@@ -16,6 +16,18 @@ export function agentKind(agent: string | null | undefined): AgentKind {
   return 'agent'
 }
 
+/** Encabezado de la columna Agente en todas las tablas: aclara que el dato sale
+ *  de Transfermarkt. La aclaración no va en mayúsculas aunque el th sí. */
+export function AgentColumnLabel() {
+  const { t } = useLanguage()
+  return (
+    <span className="whitespace-nowrap">
+      {t('agente.columna')}{' '}
+      <span className="normal-case tracking-normal font-medium opacity-80">({t('agente.segunTmkt')})</span>
+    </span>
+  )
+}
+
 export function AgentBadge({ agent, className = '' }: { agent: string | null | undefined; className?: string }) {
   const { t } = useLanguage()
   const kind = agentKind(agent)
