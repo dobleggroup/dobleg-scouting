@@ -68,10 +68,11 @@ export default function StatusPill<S extends string>({
         type="button"
         title={title}
         onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
-        className={`inline-flex items-center gap-1 max-w-full pl-2.5 pr-1.5 py-1 rounded-full text-2xs font-semibold truncate transition-[filter] hover:brightness-95 dark:hover:brightness-125 ${colors[value]}`}
+        className={`inline-flex items-center max-w-full rounded-full font-semibold truncate transition-[filter] hover:brightness-95 dark:hover:brightness-125 gap-1.5 pl-3 pr-2 py-1.5 text-sm ${colors[value]}`}
       >
+        <span className="w-2 h-2 rounded-full bg-current flex-shrink-0" />
         <span className="truncate">{labels[value]}</span>
-        <svg className={`w-2.5 h-2.5 flex-shrink-0 opacity-60 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}>
+        <svg className={`w-3.5 h-3.5 flex-shrink-0 opacity-60 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
         </svg>
       </button>
@@ -90,8 +91,9 @@ export default function StatusPill<S extends string>({
               onClick={() => { onChange(opt); setOpen(false) }}
               className={`w-full flex items-center gap-2 px-2 py-1 text-left transition-colors ${opt === value ? 'bg-apple-gray-50 dark:bg-apple-gray-700/60' : 'hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/40'}`}
             >
-              <span className={`flex-1 min-w-0 px-2.5 py-1 rounded-full text-2xs font-semibold truncate ${colors[opt]}`}>
-                {labels[opt]}
+              <span className={`flex-1 min-w-0 inline-flex items-center rounded-full font-semibold truncate gap-1.5 px-3 py-1.5 text-sm ${colors[opt]}`}>
+                <span className="w-2 h-2 rounded-full bg-current flex-shrink-0" />
+                <span className="truncate">{labels[opt]}</span>
               </span>
               {opt === value && (
                 <svg className="w-3.5 h-3.5 flex-shrink-0 text-apple-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
