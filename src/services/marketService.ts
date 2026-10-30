@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { dedupeTeamsByName } from './playerStatsService'
+import { fullTeamName, abbreviatedTeamNamesMatching } from '@/utils/teamNames'
 import { DISPLAY_POSITION_MAP } from '@/constants/scoring'
 import { notifyAccounts } from './notificationsService'
 import type { TeamMember, ClubNeed, ClubContact, Negotiation, MarketNote, MarketTeamSearchResult, NeedStatus, NegotiationStatus, NeedCandidate, CandidateStatus } from '@/types/market'
@@ -226,18 +227,38 @@ export async function fetchTeamMembers(): Promise<TeamMember[]> {
 export async function searchMarketTeams(query: string): Promise<MarketTeamSearchResult[]> {
   if (!query.trim()) return []
   const limit = 20
+  // "Audax" también tiene que encontrar a "A. Italiano" (así lo manda API-Football).
+  const pattern = `%${query.replace(/[%,()"]/g, ' ').trim()}%`
+  const aliases = abbreviatedTeamNamesMatching(query).map(n => `"${n}"`)
+  const filter = aliases.length ? `name.ilike.${pattern},name.in.(${aliases.join(',')})` : `name.ilike.${pattern}`
   const { data, error } = await supabase
     .from('teams')
     .select('id, name, logo, league_id, league:leagues(country)')
-    .ilike('name', `%${query}%`)
+    .or(filter)
     .order('name')
     .limit(limit * 3)
   if (error) throw error
   const rows = (data ?? []).map((row: any) => ({
     ...row,
+    name: fullTeamName(row.name),
     country: row.league?.country ?? null,
   }))
   return dedupeTeamsByName(rows).slice(0, limit)
+}
+
+/** Liga de cada club (por `team_id`) para la columna Liga de las búsquedas. */
+export async function fetchTeamLeagues(teamIds: number[]): Promise<Map<number, { id: number; name: string; country: string }>> {
+  const map = new Map<number, { id: number; name: string; country: string }>()
+  if (teamIds.length === 0) return map
+  const { data, error } = await supabase
+    .from('teams')
+    .select('id, league:leagues(id, name, country)')
+    .in('id', teamIds)
+  if (error) throw error
+  for (const row of (data ?? []) as any[]) {
+    if (row.league) map.set(row.id, row.league)
+  }
+  return map
 }
 
 export async function fetchClubNeeds(): Promise<ClubNeed[]> {
@@ -246,7 +267,7 @@ export async function fetchClubNeeds(): Promise<ClubNeed[]> {
     .select('*')
     .order('created_at', { ascending: false })
   if (error) throw error
-  return data ?? []
+  return (data ?? []).map(n => ({ ...n, team_name: fullTeamName(n.team_name) }))
 }
 
 export async function fetchNegotiations(): Promise<Negotiation[]> {
@@ -255,7 +276,11 @@ export async function fetchNegotiations(): Promise<Negotiation[]> {
     .select('*')
     .order('created_at', { ascending: false })
   if (error) throw error
-  return data ?? []
+  return (data ?? []).map(n => ({
+    ...n,
+    team_name: n.team_name && fullTeamName(n.team_name),
+    current_team_name: n.current_team_name && fullTeamName(n.current_team_name),
+  }))
 }
 
 export interface CreateClubNeedInput {

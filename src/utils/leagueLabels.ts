@@ -36,8 +36,12 @@ export function countryEs(country: string): string {
   return COUNTRY_ES[country] ?? country
 }
 
+export function leagueNameEs(name: string): string {
+  return NAME_ES[name] ?? name
+}
+
 export function leagueLabel(league: LeagueInfo): string {
-  const name = NAME_ES[league.name] ?? league.name
+  const name = leagueNameEs(league.name)
   const division = SECOND_DIVISION.has(league.id) ? ' (2ª división)' : ''
   return `${countryEs(league.country)} · ${name}${division}`
 }

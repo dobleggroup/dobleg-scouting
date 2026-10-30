@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { fetchClubNeeds, fetchNegotiations, fetchTeamMembers, fetchAllCandidates, needGroupKey } from '@/services/marketService'
+import { fetchClubNeeds, fetchNegotiations, fetchTeamMembers, fetchAllCandidates, fetchTeamLeagues, needGroupKey } from '@/services/marketService'
 import { computeAlerts, type AlertableItem } from '@/utils/marketAlerts'
 import { NEGOTIATION_STATUS_ORDER, NEGOTIATION_STATUS_LABEL_KEY, NEGOTIATION_STATUS_ACCENT, NEED_STATUS_ACCENT } from '@/components/market/marketLabels'
 import NegotiationRow from '@/components/market/NegotiationRow'
@@ -35,6 +35,7 @@ export default function MarketPage() {
   }, [highlight])
   const [negotiations, setNegotiations] = useState<Negotiation[]>([])
   const [needs, setNeeds] = useState<ClubNeed[]>([])
+  const [teamLeagues, setTeamLeagues] = useState<Map<number, { id: number; name: string; country: string }>>(new Map())
   const [candidates, setCandidates] = useState<NeedCandidate[]>([])
   const [members, setMembers] = useState<TeamMember[]>([])
   const [loading, setLoading] = useState(true)
@@ -97,6 +98,16 @@ export default function MarketPage() {
   }
 
   useEffect(() => { loadData() }, [])
+
+  const needTeamIdsKey = [...new Set(needs.map(n => n.team_id).filter((id): id is number => id != null))].sort((a, b) => a - b).join(',')
+  useEffect(() => {
+    if (!needTeamIdsKey) return
+    let active = true
+    fetchTeamLeagues(needTeamIdsKey.split(',').map(Number))
+      .then(m => { if (active) setTeamLeagues(m) })
+      .catch(() => {})
+    return () => { active = false }
+  }, [needTeamIdsKey])
 
   // Crear una negociación con club destino + posición engancha (o crea) una
   // búsqueda del lado del club, y un cambio de estado en cualquiera de los
@@ -210,7 +221,7 @@ export default function MarketPage() {
     <NeedRow
       key={needGroupKey(g[0])}
       needs={g}
-      overdue={g.some(n => overdueIds.needs.has(n.id))}
+      league={teamLeagues.get(groupPrimary(g).team_id ?? g.find(n => n.team_id)?.team_id ?? -1) ?? null}
       defaultExpanded={highlightKind === 'need' && g.some(n => n.id === highlightId)}
       flash={g.some(n => n.id === flashId)}
       onNeedsUpdated={updated => setNeeds(prev => prev.map(x => updated.find(u => u.id === x.id) ?? x))}
@@ -374,11 +385,12 @@ export default function MarketPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          <div className="hidden sm:grid grid-cols-[auto_minmax(0,2fr)_7rem_5.5rem_2rem] items-center gap-3 px-4 text-2xs font-semibold uppercase tracking-wide text-apple-gray-400">
-            <span />
+          <div className="hidden sm:grid grid-cols-[auto_minmax(0,2fr)_minmax(0,1fr)_8rem_7rem_2rem] items-center gap-3 px-4 text-2xs font-semibold uppercase tracking-wide text-apple-gray-400">
+            <span className="w-9" />
             <span>{t('mercado.club')}</span>
+            <span>{t('mercado.liga')}</span>
+            <span className="text-center">{t('mercado.jugadoresPropuestos')}</span>
             <span>{t('mercado.estado')}</span>
-            <span className="text-right">{t('mercado.columnaSeguimiento')}</span>
             <span />
           </div>
           {openGroups.map(renderNeed)}

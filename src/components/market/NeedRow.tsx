@@ -6,12 +6,10 @@ import MarketNotesPanel from './MarketNotesPanel'
 import NeedCandidatesPanel from './NeedCandidatesPanel'
 import PitchPositionPicker from './PitchPositionPicker'
 import StatusPill from './StatusPill'
-import FollowupDateField from './FollowupDateField'
 import { NEED_STATUS_LABEL_KEY, NEED_STATUS_COLOR, NEED_STATUS_ORDER } from './marketLabels'
 import {
   updateNeedsStatus,
-  updateFollowupDate,
-  setNeedHidden,
+    setNeedHidden,
   updateNeedDetails,
   createClubNeed,
   pitchOrder,
@@ -21,6 +19,7 @@ import {
   isMarketLinkAdmin,
 } from '@/services/marketService'
 import TeamSearchSelect from './TeamSearchSelect'
+import { countryEs, leagueNameEs } from '@/utils/leagueLabels'
 import type { ClubNeed, NeedStatus, NeedCandidate, Negotiation, TeamMember } from '@/types/market'
 
 /** Detalle de una posición: se escribe y se guarda solo al salir del campo. */
@@ -130,10 +129,10 @@ function PositionDetails({ need, readOnly, onSaved }: { need: ClubNeed; readOnly
  */
 export default function NeedRow({
   needs,
+  league = null,
   onNeedsUpdated,
   onNeedCreated,
   defaultExpanded = false,
-  overdue = false,
   flash = false,
   onNegotiationMightHaveChanged,
   candidatesByNeed,
@@ -146,6 +145,8 @@ export default function NeedRow({
   onOpenNegotiation,
 }: {
   needs: ClubNeed[]
+  /** Liga del club (null si se escribió a mano o el club no tiene liga cargada). */
+  league?: { name: string; country: string } | null
   onNeedsUpdated: (updated: ClubNeed[]) => void
   onNeedCreated: (need: ClubNeed) => void
   candidatesByNeed: Map<number, NeedCandidate[]>
@@ -157,7 +158,6 @@ export default function NeedRow({
   onNegotiationRemoved: (id: number) => void
   onOpenNegotiation: (id: number) => void
   defaultExpanded?: boolean
-  overdue?: boolean
   /** Resalte momentáneo al llegar desde el calendario semanal. */
   flash?: boolean
   onNegotiationMightHaveChanged?: () => void
@@ -188,8 +188,8 @@ export default function NeedRow({
   const status: NeedStatus = needs.some(n => n.status === 'abierto') ? 'abierto' : 'cerrado'
   const closed = status === 'cerrado'
   const isHidden = needs.every(n => !!n.hidden_at)
-  const followup = primary.next_followup_date ?? needs.find(n => n.next_followup_date)?.next_followup_date ?? null
   const logo = needs.find(n => n.team_logo)?.team_logo ?? null
+  const offeredCount = needs.reduce((sum, n) => sum + (candidatesByNeed.get(n.id) ?? []).filter(c => c.status !== 'descartado').length, 0)
 
   const needStatusLabels = Object.fromEntries(
     NEED_STATUS_ORDER.map(s => [s, t(NEED_STATUS_LABEL_KEY[s])]),
@@ -201,15 +201,6 @@ export default function NeedRow({
     setError('')
     if (await updateNeedsStatus(ids, next)) updateAll({ status: next })
     else setError(t('mercado.errorGuardar'))
-  }
-
-  const handleFollowupChange = async (date: string | null) => {
-    setError('')
-    if (!(await updateFollowupDate({ needId: primary.id }, date))) { setError(t('mercado.errorGuardar')); return }
-    // Fechas viejas en otras posiciones se limpian: una sola fecha por búsqueda.
-    const others = needs.filter(n => n.id !== primary.id && n.next_followup_date)
-    await Promise.all(others.map(n => updateFollowupDate({ needId: n.id }, null)))
-    onNeedsUpdated(needs.map(n => ({ ...n, next_followup_date: n.id === primary.id ? date : null })))
   }
 
   const handleToggleHidden = async (e: React.MouseEvent) => {
@@ -283,7 +274,7 @@ export default function NeedRow({
         tabIndex={0}
         onClick={() => setExpanded(e => !e)}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(x => !x) } }}
-        className="w-full flex flex-col gap-2 sm:grid sm:grid-cols-[auto_minmax(0,2fr)_7rem_5.5rem_2rem] sm:items-center sm:gap-3 px-4 py-3 sm:py-3.5 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/40 transition-colors font-sans cursor-pointer"
+        className="w-full flex flex-col gap-2 sm:grid sm:grid-cols-[auto_minmax(0,2fr)_minmax(0,1fr)_8rem_7rem_2rem] sm:items-center sm:gap-3 px-4 py-3 sm:py-3.5 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/40 transition-colors font-sans cursor-pointer"
       >
         <div className="flex items-center gap-3 min-w-0 sm:contents">
           <div className={`flex items-center gap-2 flex-shrink-0 ${closed ? 'opacity-50 grayscale' : ''}`}>
@@ -305,6 +296,11 @@ export default function NeedRow({
               )}
               <span className="truncate">{primary.team_name}</span>
             </p>
+            {league && (
+              <p className="sm:hidden text-xs text-apple-gray-500 dark:text-apple-gray-400 truncate">
+                {leagueNameEs(league.name)} · {countryEs(league.country)}
+              </p>
+            )}
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               {positions.map(n => {
                 const offered = (candidatesByNeed.get(n.id) ?? []).filter(c => c.status !== 'descartado').length
@@ -326,7 +322,24 @@ export default function NeedRow({
           </div>
         </div>
 
+        <div className="hidden sm:block min-w-0">
+          {league ? (
+            <>
+              <p className={`text-sm font-medium truncate ${closed ? 'text-apple-gray-500 dark:text-apple-gray-400' : 'text-apple-gray-800 dark:text-apple-gray-100'}`}>{leagueNameEs(league.name)}</p>
+              <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400 truncate">{countryEs(league.country)}</p>
+            </>
+          ) : (
+            <span className="text-sm text-apple-gray-400 dark:text-apple-gray-500">—</span>
+          )}
+        </div>
+
         <div className="flex items-center gap-2 flex-wrap pl-[3.25rem] sm:pl-0 sm:contents">
+          <p className="hidden sm:block text-center">
+            <span className={`text-lg font-bold tabular-nums ${offeredCount > 0 ? 'text-brand-green' : 'text-apple-gray-400 dark:text-apple-gray-500'}`}>{offeredCount}</span>
+          </p>
+          <span className={`sm:hidden text-xs font-semibold tabular-nums ${offeredCount > 0 ? 'text-brand-green' : 'text-apple-gray-500 dark:text-apple-gray-400'}`}>
+            {t('mercado.ofrecidosResumen').replace('{n}', String(offeredCount))}
+          </span>
           <StatusPill
             value={status}
             options={NEED_STATUS_ORDER}
@@ -335,17 +348,12 @@ export default function NeedRow({
             onChange={handleStatusChange}
             title={t('mercado.cambiarEstado')}
           />
-          <div className="ml-auto sm:ml-0 sm:text-right">
-            {closed
-              ? <span className="text-xs text-apple-gray-500 dark:text-apple-gray-400">{t('mercado.busquedaCerrada')}</span>
-              : <FollowupDateField value={followup} overdue={overdue} onChange={handleFollowupChange} />}
-          </div>
           <button
             type="button"
             onClick={handleToggleHidden}
             title={isHidden ? t('mercado.volverAMostrar') : t('mercado.ocultarBusqueda')}
             aria-label={isHidden ? t('mercado.volverAMostrar') : t('mercado.ocultarBusqueda')}
-            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${isHidden
+            className={`ml-auto sm:ml-0 w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${isHidden
               ? 'text-brand-green hover:bg-brand-green/10'
               : 'text-apple-gray-400 dark:text-apple-gray-500 hover:text-red-500 hover:bg-red-500/10'}`}
           >
