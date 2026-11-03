@@ -46,6 +46,10 @@ export interface NewEvaluation {
   match_date: string
   competition?: string
   rival?: string
+  /** Cómo vio el partido: en la cancha o por TV. */
+  watch_mode?: 'presencial' | 'tv'
+  /** Dónde, si fue presencial. */
+  place?: string
   technical_score?: number  // Used as the single match performance score
   tactical_score?: number
   physical_score?: number

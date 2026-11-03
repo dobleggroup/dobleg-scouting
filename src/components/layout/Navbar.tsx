@@ -10,6 +10,7 @@ import MarketAlertBadge from './MarketAlertBadge'
 import AuthModal from '@/components/auth/AuthModal'
 import { PDFBuilderFloatingButton } from '@/components/pdf/AddToReportButton'
 import { useSwipeToClose } from '@/hooks/useSwipeToClose'
+import { useCanSeeScoutsPanel } from '@/hooks/useCanSeeScoutsPanel'
 
 // ─── Navigation structure ────────────────────────────────────────────────────
 
@@ -29,13 +30,23 @@ interface NavGroup {
   prefixes?: string[]
 }
 
-const inicioGroup: NavGroup = {
+const inicioBase: NavGroup = {
   labelKey: 'nav.inicio',
   icon: 'home',
   to: '/',
   items: [
     { to: '/calendario', labelKey: 'nav.calendario', icon: 'calendar' },
     { to: '/carga-gps', labelKey: 'nav.cargaGps', icon: 'chart' },
+  ],
+}
+
+// Scouts va debajo de Calendario, solo para las cuentas habilitadas.
+const inicioWithScouts: NavGroup = {
+  ...inicioBase,
+  items: [
+    inicioBase.items[0],
+    { to: '/scouts', labelKey: 'nav.scouts', icon: 'binoculars' },
+    ...inicioBase.items.slice(1),
   ],
 }
 
@@ -95,7 +106,16 @@ const talentGroup: NavGroup = {
   ],
 }
 
-const reportLink: NavItem = { to: '/evaluar', labelKey: 'nav.reporte', icon: 'clipboard' }
+// Cargar actividad: reporte de un jugador, reunión o viaje.
+const cargarGroup: NavGroup = {
+  labelKey: 'nav.cargarActividad',
+  icon: 'clipboard',
+  items: [
+    { to: '/cargar-reporte', labelKey: 'nav.cargarReporte', icon: 'clipboard' },
+    { to: '/cargar-reunion', labelKey: 'nav.cargarReunion', icon: 'chat' },
+    { to: '/cargar-viaje', labelKey: 'nav.cargarViaje', icon: 'plane' },
+  ],
+}
 
 // ─── Icon component ──────────────────────────────────────────────────────────
 
@@ -120,6 +140,9 @@ function NavIcon({ icon, className = "w-5 h-5" }: { icon: string; className?: st
     whistle: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h3m6-13H9a4 4 0 00-4 4v2a7 7 0 007 7h1a7 7 0 007-7v-1a5 5 0 00-5-5zM6 8a2 2 0 11-4 0 2 2 0 014 0z" />,
     tag: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />,
     contacts: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />,
+    binoculars: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6.5 20a3.5 3.5 0 100-7 3.5 3.5 0 000 7zm11 0a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM10 16.5h4M3 16.5L5.5 6A2 2 0 017.4 4.5h.2A1.5 1.5 0 019 6v4m12 6.5L18.5 6a2 2 0 00-1.9-1.5h-.2A1.5 1.5 0 0015 6v4m-6 0h6" />,
+    chat: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a2 2 0 01-2-2v-1m10-7V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l4-4h4" />,
+    plane: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />,
     briefcase: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7h-3V5a2 2 0 00-2-2H9a2 2 0 00-2 2v2H4a1 1 0 00-1 1v11a2 2 0 002 2h14a2 2 0 002-2V8a1 1 0 00-1-1zM9 5h6v2H9V5z" />,
   }
   return (
@@ -204,6 +227,7 @@ export default function Navbar() {
   const { theme } = useTheme()
   const { t } = useLanguage()
   const { user, userDisplayName, signOut, loading: authLoading } = useAuth()
+  const inicioGroup = useCanSeeScoutsPanel() ? inicioWithScouts : inicioBase
   const location = useLocation()
   const [isOpen, setIsOpen] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
@@ -217,6 +241,7 @@ export default function Navbar() {
   const scoutExternoRef = useRef<HTMLDivElement>(null)
   const seguimientoRef = useRef<HTMLDivElement>(null)
   const talentRef = useRef<HTMLDivElement>(null)
+  const cargarRef = useRef<HTMLDivElement>(null)
 
   // Close menu on route change
   useEffect(() => {
@@ -235,7 +260,8 @@ export default function Navbar() {
         scoutInternoRef.current && !scoutInternoRef.current.contains(target) &&
         scoutExternoRef.current && !scoutExternoRef.current.contains(target) &&
         seguimientoRef.current && !seguimientoRef.current.contains(target) &&
-        talentRef.current && !talentRef.current.contains(target)
+        talentRef.current && !talentRef.current.contains(target) &&
+        (!cargarRef.current || !cargarRef.current.contains(target))
       ) {
         setOpenDropdown(null)
       }
@@ -268,6 +294,7 @@ export default function Navbar() {
   const isScoutExternoRoute = scoutExternoGroup.items.some(l => location.pathname === l.to) || location.pathname.startsWith('/opta/')
   const isSeguimientoRoute = seguimientoGroup.items.some(l => location.pathname === l.to)
   const isTalentRoute = talentGroup.items.some(l => location.pathname === l.to)
+  const isCargarRoute = cargarGroup.items.some(l => location.pathname === l.to)
 
   // Swipe-to-close for the mobile drawer (swipe right closes it)
   const swipe = useSwipeToClose(() => setIsOpen(false))
@@ -355,19 +382,15 @@ export default function Navbar() {
               t={t}
             />
 
-            {/* Reporte */}
-            <NavLink
-              to={reportLink.to}
-              className={({ isActive }) =>
-                `lg:px-2.5 xl:px-3.5 py-2 text-sm whitespace-nowrap font-medium rounded-lg transition-all duration-200 ${
-                  isActive
-                    ? 'bg-brand-green text-gray-900 shadow-sm'
-                    : 'text-apple-gray-600 dark:text-apple-gray-300 hover:text-apple-gray-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-apple-gray-700/50'
-                }`
-              }
-            >
-              {t(reportLink.labelKey)}
-            </NavLink>
+            {/* Cargar actividad */}
+            <DesktopDropdown
+              group={cargarGroup}
+              isOpen={openDropdown === 'cargar'}
+              onToggle={() => toggleDropdown('cargar')}
+              dropdownRef={cargarRef}
+              location={location}
+              t={t}
+            />
           </nav>
 
           {/* Right side */}
@@ -729,21 +752,30 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* Reporte */}
+          {/* Cargar actividad */}
           <div className="mt-4 pt-4 border-t border-apple-gray-200 dark:border-apple-gray-800">
-            <NavLink
-              to={reportLink.to}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                  isActive
-                    ? 'bg-brand-green text-gray-900'
-                    : 'text-apple-gray-700 dark:text-apple-gray-300 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-800'
-                }`
-              }
-            >
-              <NavIcon icon={reportLink.icon} className="w-5 h-5" />
-              {t(reportLink.labelKey)}
-            </NavLink>
+            <div className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium ${isCargarRoute ? 'text-brand-green' : 'text-apple-gray-700 dark:text-apple-gray-300'}`}>
+              <NavIcon icon="clipboard" className="w-5 h-5" />
+              {t('nav.cargarActividad')}
+            </div>
+            <div className="ml-4 mt-1 space-y-1">
+              {cargarGroup.items.map(link => (
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
+                      isActive
+                        ? 'bg-brand-green text-gray-900'
+                        : 'text-apple-gray-500 dark:text-apple-gray-400 hover:bg-apple-gray-100 dark:hover:bg-apple-gray-800'
+                    }`
+                  }
+                >
+                  <NavIcon icon={link.icon} className="w-4 h-4" />
+                  {t(link.labelKey)}
+                </NavLink>
+              ))}
+            </div>
           </div>
 
           {/* Footer in menu */}

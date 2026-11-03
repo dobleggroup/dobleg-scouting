@@ -1,5 +1,5 @@
 import { Outlet } from 'react-router-dom'
-import { Suspense } from 'react'
+import { Suspense, useEffect } from 'react'
 import Navbar from './Navbar'
 import Footer from './Footer'
 import LiquidGlassBottomNav from './LiquidGlassBottomNav'
@@ -8,11 +8,27 @@ import { useAuth } from '@/context/AuthContext'
 import { useLanguage } from '@/context/LanguageContext'
 import AuthModal from '@/components/auth/AuthModal'
 import { useHideOnScrollDown } from '@/hooks/useHideOnScrollDown'
+import { touchActivity } from '@/services/scoutsPanelService'
 
 export default function Layout() {
   const { user, loading, clubId, signOut } = useAuth()
   const { t } = useLanguage()
   const bottomNavVisible = useHideOnScrollDown()
+
+  // Registra que la cuenta usa la plataforma hoy (aunque no haya vuelto a iniciar sesión):
+  // al abrir, al volver a la pestaña y cada 5 minutos mientras está a la vista.
+  const userId = user?.id
+  useEffect(() => {
+    if (!userId) return
+    const ping = () => { if (document.visibilityState === 'visible') touchActivity() }
+    ping()
+    document.addEventListener('visibilitychange', ping)
+    const timer = window.setInterval(ping, 5 * 60 * 1000)
+    return () => {
+      document.removeEventListener('visibilitychange', ping)
+      window.clearInterval(timer)
+    }
+  }, [userId])
 
   // Show loading while checking auth
   if (loading) {

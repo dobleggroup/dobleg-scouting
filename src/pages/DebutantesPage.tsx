@@ -230,7 +230,7 @@ export default function DebutantesPage() {
         e.stopPropagation()
         const params = new URLSearchParams({ jugador: a.playerName })
         if (a.teamName) params.set('equipo', a.teamName)
-        navigate(`/evaluar?${params.toString()}`)
+        navigate(`/cargar-reporte?${params.toString()}`)
       }}
       title={t('debutantes.crearReporte')}
       aria-label={t('debutantes.crearReporte')}

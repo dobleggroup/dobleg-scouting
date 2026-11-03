@@ -3,12 +3,13 @@ import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { useLanguage } from '@/context/LanguageContext'
-import { LANGUAGE_LOCALES } from '@/constants/translations'
-import { createEvaluation, fetchRecentEvaluations, type ScoutEvaluation, type PlayerSource } from '@/services/scoutEvaluationService'
+import { createEvaluation, type PlayerSource } from '@/services/scoutEvaluationService'
 import { setPlayerStatus, fetchAllStatuses } from '@/services/monitoringService'
 import { addScoutPlayer } from '@/services/scoutPlayersService'
 import { smartSearch } from '@/lib/search'
 import RequiredMark from '@/components/ui/RequiredMark'
+import { ChoiceButtons } from '@/components/scouts/ActivityForm'
+import CargarTabs from '@/components/scouts/CargarTabs'
 
 // Position options — value stays in Spanish (stored in DB, matched elsewhere e.g.
 // EvaluationsAdminPage's sharedMatchScore against player.position); only the
@@ -213,7 +214,7 @@ function Input({
 export default function ScoutEvaluationPage() {
   const { user, userDisplayName } = useAuth()
   const { external, internal } = useData()
-  const { t, language } = useLanguage()
+  const { t } = useLanguage()
 
   const positionOptions = useMemo(
     () => POSITIONS.map(p => ({ value: p.value, label: t(`evaluar.${p.key}`) })),
@@ -249,17 +250,12 @@ export default function ScoutEvaluationPage() {
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
+  const [watchMode, setWatchMode] = useState<'presencial' | 'tv' | null>(null)
+  const [place, setPlace] = useState('')
   const [addedToMonitoring, setAddedToMonitoring] = useState(false)
-
-  // Recent evaluations for sidebar
-  const [recentEvaluations, setRecentEvaluations] = useState<ScoutEvaluation[]>([])
 
   // Monitoring statuses to check if player is in seguimiento
   const [monitoringStatuses, setMonitoringStatuses] = useState<Record<string, { status: string }>>({})
-
-  useEffect(() => {
-    fetchRecentEvaluations(5).then(setRecentEvaluations)
-  }, [success])
 
   // Load monitoring statuses
   useEffect(() => {
@@ -394,6 +390,8 @@ export default function ScoutEvaluationPage() {
         position: position || undefined,
         role: role || undefined,
         match_date: matchDate,
+        watch_mode: watchMode ?? undefined,
+        place: watchMode === 'presencial' ? place.trim() || undefined : undefined,
         competition: competition || undefined,
         rival: rival || undefined,
         technical_score: score,
@@ -464,6 +462,8 @@ export default function ScoutEvaluationPage() {
       setRole('')
       setCompetition('')
       setRival('')
+      setWatchMode(null)
+      setPlace('')
       setScore(undefined)
       setTacticalScore(undefined)
       setMentalScore(undefined)
@@ -484,7 +484,8 @@ export default function ScoutEvaluationPage() {
     }
   }
 
-  const isFormValid = playerName.trim() && matchDate && score && scoutName
+  const isFormValid = playerName.trim() && matchDate && score && scoutName &&
+    watchMode && (watchMode === 'tv' || place.trim())
 
   return (
     <div className="min-h-screen bg-apple-gray-50 dark:bg-apple-gray-900">
@@ -506,6 +507,7 @@ export default function ScoutEvaluationPage() {
               </p>
             </div>
           </div>
+          <div className="mt-3"><CargarTabs /></div>
         </div>
       </div>
 
@@ -669,6 +671,21 @@ export default function ScoutEvaluationPage() {
               required
             />
 
+            <div>
+              <label className="block text-sm font-medium text-apple-gray-600 dark:text-apple-gray-400 mb-2">
+                ¿Cómo lo viste?<RequiredMark />
+              </label>
+              <ChoiceButtons
+                value={watchMode}
+                onChange={setWatchMode}
+                options={[{ value: 'presencial', label: 'Presencial' }, { value: 'tv', label: 'Por TV' }]}
+              />
+            </div>
+
+            {watchMode === 'presencial' && (
+              <Input label="Lugar" value={place} onChange={setPlace} placeholder="Ej: Cancha de Temperley" required />
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <Input
                 label={t('evaluar.rival')}
@@ -747,44 +764,6 @@ export default function ScoutEvaluationPage() {
         </div>
       </div>
 
-      {/* Recent evaluations - Desktop sidebar (read-only) */}
-      {recentEvaluations.length > 0 && (
-        <div className="hidden xl:block fixed right-6 top-32 w-72">
-          <div className="bg-white dark:bg-apple-gray-800 rounded-2xl p-5 shadow-sm border border-apple-gray-100 dark:border-apple-gray-700">
-            <h3 className="text-sm font-semibold text-apple-gray-500 dark:text-apple-gray-400 uppercase tracking-wider mb-4">
-              {t('evaluar.ultimasEvaluaciones')}
-            </h3>
-            <div className="space-y-3">
-              {recentEvaluations.slice(0, 5).map(ev => (
-                <div
-                  key={ev.id}
-                  className="p-3 rounded-xl bg-apple-gray-50 dark:bg-apple-gray-700/50"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium text-apple-gray-900 dark:text-white text-sm truncate">
-                        {ev.player_name}
-                      </div>
-                      <div className="text-xs text-apple-gray-500 truncate">
-                        {ev.team} - {new Date(ev.match_date).toLocaleDateString(LANGUAGE_LOCALES[language], { day: '2-digit', month: 'short' })}
-                      </div>
-                    </div>
-                    {ev.technical_score && (
-                      <div className={`text-lg font-bold ml-2 ${
-                        ev.technical_score >= 8 ? 'text-brand-green' :
-                        ev.technical_score >= 6 ? 'text-emerald-500' :
-                        ev.technical_score >= 4 ? 'text-amber-500' : 'text-red-500'
-                      }`}>
-                        {ev.technical_score}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

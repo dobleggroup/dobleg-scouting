@@ -13,7 +13,9 @@ describe('activeNavKey', () => {
   it('mapea el resto de destinos', () => {
     expect(activeNavKey('/calendario', BOTTOM_NAV_ITEMS)).toBe('calendario')
     expect(activeNavKey('/seguimiento-gg', BOTTOM_NAV_ITEMS)).toBe('seguimiento')
-    expect(activeNavKey('/evaluar', BOTTOM_NAV_ITEMS)).toBe('reporte')
+    expect(activeNavKey('/cargar-reporte', BOTTOM_NAV_ITEMS)).toBe('reporte')
+    expect(activeNavKey('/cargar-reunion', BOTTOM_NAV_ITEMS)).toBe('reporte')
+    expect(activeNavKey('/cargar-viaje', BOTTOM_NAV_ITEMS)).toBe('reporte')
   })
   it('ruta desconocida devuelve null', () => {
     expect(activeNavKey('/comparacion', BOTTOM_NAV_ITEMS)).toBeNull()

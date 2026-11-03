@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Layout from '@/components/layout/Layout'
 import { PDFBuilderProvider } from '@/context/PDFBuilderContext'
 import { supabase } from '@/lib/supabase'
@@ -11,6 +11,8 @@ const HomePage = lazy(() => import('@/pages/HomePage'))
 const MarketPage = lazy(() => import('@/pages/MarketPage'))
 const MarketContactsPage = lazy(() => import('@/pages/MarketContactsPage'))
 const CalendarPage = lazy(() => import('@/pages/CalendarPage'))
+const ScoutsPage = lazy(() => import('@/pages/ScoutsPage'))
+const CargarActividadPage = lazy(() => import('@/pages/CargarActividadPage'))
 const GpsUploadPage = lazy(() => import('@/pages/GpsUploadPage'))
 const OptaHubPage = lazy(() => import('@/pages/opta/OptaHubPage'))
 const OptaPlayerPage = lazy(() => import('@/pages/opta/OptaPlayerPage'))
@@ -52,6 +54,13 @@ function AdminRoute({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
+// /evaluar pasó a /cargar-reporte: los links viejos siguen andando y conservan sus datos
+// (por ejemplo, Debutantes abre el reporte con el jugador ya cargado).
+function RedirectKeepingQuery({ to }: { to: string }) {
+  const { search } = useLocation()
+  return <Navigate to={`${to}${search}`} replace />
+}
+
 export default function App() {
   return (
     <PDFBuilderProvider>
@@ -60,6 +69,7 @@ export default function App() {
           <Route element={<Layout />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/calendario" element={<CalendarPage />} />
+            <Route path="/scouts" element={<ScoutsPage />} />
             <Route path="/rendimiento-individual" element={<TableroPage />} />
             <Route path="/tablero" element={<Navigate to="/rendimiento-individual" replace />} />
             <Route path="/carga-wyscout" element={<WyscoutUploadPage />} />
@@ -88,7 +98,10 @@ export default function App() {
             <Route path="/comparacion" element={<Navigate to="/" replace />} />
             <Route path="/formacion" element={<FormationPage />} />
             <Route path="/dispersion" element={<Navigate to="/" replace />} />
-            <Route path="/evaluar" element={<ScoutEvaluationPage />} />
+            <Route path="/cargar-reporte" element={<ScoutEvaluationPage />} />
+            <Route path="/evaluar" element={<RedirectKeepingQuery to="/cargar-reporte" />} />
+            <Route path="/cargar-reunion" element={<CargarActividadPage kind="reunion" />} />
+            <Route path="/cargar-viaje" element={<CargarActividadPage kind="viaje" />} />
             <Route path="/evaluaciones" element={<EvaluationsAdminPage />} />
             <Route path="/radar" element={<Navigate to="/" replace />} />
             <Route path="/trabajos-scouting" element={<Navigate to="/" replace />} />

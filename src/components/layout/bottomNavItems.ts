@@ -2,6 +2,8 @@ export interface BottomNavItem {
   key: string
   label: string
   to: string
+  /** Otras rutas que también marcan este destino como activo. */
+  also?: string[]
 }
 
 export const BOTTOM_NAV_ITEMS: BottomNavItem[] = [
@@ -9,7 +11,7 @@ export const BOTTOM_NAV_ITEMS: BottomNavItem[] = [
   { key: 'calendario', label: 'Calendario', to: '/calendario' },
   { key: 'jugadores', label: 'Jugadores', to: '/interno' },
   { key: 'seguimiento', label: 'Seguimiento', to: '/seguimiento-gg' },
-  { key: 'reporte', label: 'Reporte', to: '/evaluar' },
+  { key: 'reporte', label: 'Cargar', to: '/cargar-reporte', also: ['/cargar-reunion', '/cargar-viaje'] },
 ]
 
 /**
@@ -22,7 +24,7 @@ export function activeNavKey(pathname: string, items: BottomNavItem[]): string |
     const matches =
       item.to === '/'
         ? pathname === '/'
-        : pathname === item.to || pathname.startsWith(item.to + '/')
+        : pathname === item.to || pathname.startsWith(item.to + '/') || (item.also ?? []).includes(pathname)
     if (matches && (!best || item.to.length > best.len)) {
       best = { key: item.key, len: item.to.length }
     }
