@@ -2,7 +2,7 @@ import { addDays, todayAR, type ScoutSummary } from '@/services/scoutsPanelServi
 
 export type MetricKey =
   | 'days' | 'tracking_now' | 'added' | 'reports' | 'matches' | 'matches_tv' | 'meetings'
-  | 'trips' | 'searches' | 'negotiations' | 'comments'
+  | 'trips' | 'searches' | 'negotiations' | 'comments' | 'contacts'
 
 export interface Metric {
   key: MetricKey
@@ -22,6 +22,7 @@ export const METRICS: Metric[] = [
   { key: 'trips', label: 'Viajes', short: 'Viajes', value: s => s.trips },
   { key: 'searches', label: 'Búsquedas de clubes', short: 'Búsq.', value: s => s.searches },
   { key: 'negotiations', label: 'Negociaciones a cargo', short: 'Negoc.', value: s => s.negotiations },
+  { key: 'contacts', label: 'Contactos', short: 'Contactos', value: s => s.contacts },
   { key: 'comments', label: 'Comentarios de jugadores', short: 'Coment.', value: s => s.comments },
 ]
 

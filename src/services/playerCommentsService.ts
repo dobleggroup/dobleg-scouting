@@ -5,6 +5,15 @@ import { supabase } from '@/lib/supabase'
 
 export type CommentSentiment = 'positive' | 'neutral' | 'negative'
 export type CommentSource = 'ficha' | 'seguimiento_gg' | 'seguimiento_datos'
+/** Qué fue: un comentario, una reunión (presencial u online) o un contacto (llamada, mensaje). */
+export type CommentKind = 'comentario' | 'reunion_presencial' | 'reunion_online' | 'contacto'
+
+export const COMMENT_KIND_LABEL: Record<CommentKind, string> = {
+  comentario: 'Comentario',
+  reunion_presencial: 'Reunión presencial',
+  reunion_online: 'Reunión online',
+  contacto: 'Contacto',
+}
 
 export interface PlayerComment {
   id: string
@@ -18,6 +27,9 @@ export interface PlayerComment {
   author_id: string | null
   author_name: string
   created_at: string
+  kind?: CommentKind
+  /** Ciudad, si fue una reunión presencial. */
+  place?: string | null
 }
 
 /** Cómo se identifica al jugador. Con más datos, más comentarios se encuentran. */
@@ -126,6 +138,16 @@ export async function addPlayerComment(
     return null
   }
   return data as PlayerComment
+}
+
+/**
+ * Pone o cambia la etiqueta de un comentario. Si es una reunión, también queda cargada como
+ * reunión en la página Scouts (pendiente de aceptar, salvo que la ponga Marcos o Matías).
+ */
+export async function setCommentKind(id: string, kind: CommentKind, place: string | null, editorName: string): Promise<string | null> {
+  const { error } = await supabase.rpc('set_comment_kind', { p_comment: id, p_kind: kind, p_place: place, p_editor_name: editorName })
+  if (error) console.error('Error setting comment kind:', error)
+  return error ? error.message : null
 }
 
 // ─── "Visto por" (tabla player_comment_views) ────────────────────────────────

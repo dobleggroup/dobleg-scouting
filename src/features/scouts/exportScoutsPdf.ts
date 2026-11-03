@@ -5,6 +5,7 @@ import {
   addDays,
   formatDay,
   lastActiveLabel,
+  meetingTitle,
   todayAR,
   type ScoutSummary,
 } from '@/services/scoutsPanelService'
@@ -212,7 +213,7 @@ function scoutSection(w: Writer, s: ScoutSummary, photo: string | undefined) {
   sectionTitle(w, `Reuniones (${s.meetings})`)
   lines(w, meetings.map(a => ({
     left: formatDay(a.day),
-    mid: [`Con ${a.title ?? ''}`, a.player ? `(sobre ${a.player})` : null, a.review_status === 'pendiente' ? '- falta aceptar' : null].filter(Boolean).join(' '),
+    mid: [meetingTitle(a), a.title && a.player ? `(sobre ${a.player})` : null, a.review_status === 'pendiente' ? '- falta aceptar' : null].filter(Boolean).join(' '),
     right: [a.mode === 'online' ? 'Online' : a.mode === 'presencial' ? 'Presencial' : '', a.place].filter(Boolean).join(' · '),
   })), 'Sin reuniones cargadas.')
 

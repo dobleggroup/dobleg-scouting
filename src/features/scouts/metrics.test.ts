@@ -5,7 +5,7 @@ import { addDays, lastActiveLabel, type ScoutSummary } from '@/services/scoutsPa
 const scout = (name: string, reports: number): ScoutSummary => ({
   user_id: name, name, photo_url: null, last_active: null, active_days: [], recent_days: [],
   tracking_now: 0, added: 0, reports, matches: 0, matches_tv: 0, meetings: 0, trips: 0,
-  negotiations: 0, comments: 0, comments_by_player: [], searches: 0, search_list: [], match_list: [], trip_list: [],
+  negotiations: 0, comments: 0, contacts: 0, comments_by_player: [], searches: 0, search_list: [], match_list: [], trip_list: [],
   report_list: [], activities: [],
 })
 

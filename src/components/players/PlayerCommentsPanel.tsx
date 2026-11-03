@@ -2,17 +2,22 @@ import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import {
   addPlayerComment,
+  COMMENT_KIND_LABEL,
+  setCommentKind,
   deletePlayerComment,
   fetchCommentViews,
   fetchPlayerComments,
   markCommentsSeen,
   playerNameKey,
   type CommentView,
+  type CommentKind,
   type CommentSentiment,
   type CommentSource,
   type CommentTarget,
   type PlayerComment,
 } from '@/services/playerCommentsService'
+import { guessCommentKind } from '@/features/scouts/meetingFromComment'
+import { useCanApproveActivities } from '@/hooks/useCanApproveActivities'
 
 // Historial de comentarios de un jugador (ficha y listas de seguimiento ven lo
 // mismo). Cada comentario queda con quién lo escribió y cuándo.
@@ -21,6 +26,50 @@ const SENTIMENT: Record<CommentSentiment, { label: string; dot: string; text: st
   positive: { label: 'Positivo', dot: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400' },
   neutral: { label: 'Neutral', dot: 'bg-amber-500', text: 'text-amber-600 dark:text-amber-400' },
   negative: { label: 'Negativo', dot: 'bg-red-500', text: 'text-red-600 dark:text-red-400' },
+}
+
+const KINDS = Object.keys(COMMENT_KIND_LABEL) as CommentKind[]
+
+const KIND_PILL: Record<CommentKind, string> = {
+  comentario: 'bg-apple-gray-100 dark:bg-apple-gray-700 text-apple-gray-600 dark:text-apple-gray-300',
+  reunion_presencial: 'bg-brand-green/15 text-apple-gray-900 dark:text-white',
+  reunion_online: 'bg-sky-500/15 text-apple-gray-900 dark:text-white',
+  contacto: 'bg-amber-500/15 text-apple-gray-900 dark:text-white',
+}
+
+/** Las cuatro etiquetas para elegir (al escribir y al cambiarla después). */
+function KindPicker({ value, onChange, city, onCity }: {
+  value: CommentKind
+  onChange: (k: CommentKind) => void
+  city: string
+  onCity: (c: string) => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {KINDS.map(k => (
+        <button
+          key={k}
+          type="button"
+          onClick={() => onChange(k)}
+          className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+            value === k
+              ? 'border-brand-green bg-brand-green/10 text-apple-gray-900 dark:text-white'
+              : 'border-apple-gray-200 dark:border-apple-gray-700 text-apple-gray-500 dark:text-apple-gray-400 hover:border-apple-gray-300'
+          }`}
+        >
+          {COMMENT_KIND_LABEL[k]}
+        </button>
+      ))}
+      {value === 'reunion_presencial' && (
+        <input
+          value={city}
+          onChange={e => onCity(e.target.value)}
+          placeholder="¿En qué ciudad?"
+          className="input-apple text-xs py-1 px-2.5 w-40"
+        />
+      )}
+    </div>
+  )
 }
 
 const SOURCE_LABEL: Record<CommentSource, string> = {
@@ -103,6 +152,20 @@ export default function PlayerCommentsPanel({
   const [sentiment, setSentiment] = useState<CommentSentiment | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  // Qué fue (comentario, reunión, contacto): se adivina del texto hasta que la persona elige.
+  const [kind, setKind] = useState<CommentKind>('comentario')
+  const [city, setCity] = useState('')
+  const [kindTouched, setKindTouched] = useState(false)
+  // Cambiar la etiqueta de un comentario ya guardado (quien lo escribió, Marcos o Matías).
+  const canApprove = useCanApproveActivities()
+  const [editing, setEditing] = useState<{ id: string; kind: CommentKind; city: string } | null>(null)
+
+  useEffect(() => {
+    if (kindTouched) return
+    const g = guessCommentKind(text)
+    setKind(g.kind)
+    setCity(g.city ?? '')
+  }, [text, kindTouched])
 
   const authorName = userDisplayName || user?.email?.split('@')[0] || 'Staff'
 
@@ -136,16 +199,42 @@ export default function PlayerCommentsPanel({
     setSaving(true)
     setError('')
     const created = await addPlayerComment(target, text, source, authorName, sentiment)
-    setSaving(false)
     if (!created) {
+      setSaving(false)
       setError('No se pudo guardar. Probá de nuevo.')
       return
     }
+    // La etiqueta (si es una reunión, queda cargada también como reunión).
+    let kindError = ''
+    if (kind !== 'comentario') {
+      const err = await setCommentKind(created.id, kind, kind === 'reunion_presencial' ? city.trim() : null, authorName)
+      if (err) kindError = 'El comentario se guardó, pero no la etiqueta. Tocá la etiqueta del comentario para ponerla de nuevo.'
+      else Object.assign(created, { kind, place: kind === 'reunion_presencial' ? city.trim() : null })
+    }
+    setSaving(false)
     const next = [created, ...(comments ?? [])]
     setComments(next)
     onChange?.(next)
     setText('')
     setSentiment(null)
+    setKind('comentario')
+    setCity('')
+    setKindTouched(false)
+    setError(kindError)
+  }
+
+  const kindValid = kind !== 'reunion_presencial' || !!city.trim()
+
+  const handleChangeKind = async () => {
+    if (!editing) return
+    if (editing.kind === 'reunion_presencial' && !editing.city.trim()) return
+    const place = editing.kind === 'reunion_presencial' ? editing.city.trim() : null
+    const err = await setCommentKind(editing.id, editing.kind, place, authorName)
+    if (err) { setError('No se pudo cambiar la etiqueta. Probá de nuevo.'); return }
+    const next = (comments ?? []).map(c => c.id === editing.id ? { ...c, kind: editing.kind, place } : c)
+    setComments(next)
+    onChange?.(next)
+    setEditing(null)
   }
 
   const handleDelete = async (id: string) => {
@@ -169,6 +258,15 @@ export default function PlayerCommentsPanel({
             placeholder="Escribí un comentario: contexto, lo que viste, con quién hablaste..."
             className="input-apple w-full resize-y min-h-[4.5rem] text-sm"
           />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-medium text-apple-gray-600 dark:text-apple-gray-300 mr-1">¿Qué fue?</span>
+            <KindPicker
+              value={kind}
+              onChange={k => { setKind(k); setKindTouched(true) }}
+              city={city}
+              onCity={c => { setCity(c); setKindTouched(true) }}
+            />
+          </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex gap-1.5">
               {(Object.keys(SENTIMENT) as CommentSentiment[]).map(s => (
@@ -190,7 +288,7 @@ export default function PlayerCommentsPanel({
             <button
               type="button"
               onClick={handleSave}
-              disabled={!text.trim() || saving}
+              disabled={!text.trim() || saving || !kindValid}
               className="px-4 py-1.5 rounded-lg bg-brand-green text-white text-sm font-semibold hover:bg-emerald-600 disabled:opacity-50 transition-colors"
             >
               {saving ? 'Guardando...' : 'Guardar'}
@@ -235,6 +333,53 @@ export default function PlayerCommentsPanel({
                 </div>
               </div>
               <p className="mt-1.5 text-sm text-apple-gray-700 dark:text-apple-gray-300 leading-relaxed whitespace-pre-line">{c.body}</p>
+              {(() => {
+                const k: CommentKind = c.kind ?? 'comentario'
+                const canEdit = !!user && (c.author_id === user.id || canApprove)
+                if (editing?.id === c.id) {
+                  return (
+                    <div className="mt-2 space-y-2">
+                      <KindPicker
+                        value={editing.kind}
+                        onChange={kk => setEditing({ ...editing, kind: kk })}
+                        city={editing.city}
+                        onCity={cc => setEditing({ ...editing, city: cc })}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={handleChangeKind}
+                          disabled={editing.kind === 'reunion_presencial' && !editing.city.trim()}
+                          className="px-3 py-1 rounded-lg bg-brand-green text-white text-xs font-semibold hover:bg-emerald-600 disabled:opacity-50"
+                        >
+                          Guardar
+                        </button>
+                        <button type="button" onClick={() => setEditing(null)} className="px-3 py-1 rounded-lg text-xs text-apple-gray-500 hover:text-apple-gray-800 dark:hover:text-white">
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )
+                }
+                const label = `${COMMENT_KIND_LABEL[k]}${k === 'reunion_presencial' && c.place ? ` · ${c.place}` : ''}`
+                return (
+                  <div className="mt-2">
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        onClick={() => setEditing({ id: c.id, kind: k, city: c.place ?? '' })}
+                        title="Cambiar qué fue"
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-2xs font-medium ${KIND_PILL[k]} hover:ring-1 hover:ring-brand-green/50`}
+                      >
+                        {label}
+                        <svg className="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                      </button>
+                    ) : (
+                      <span className={`inline-flex px-2 py-0.5 rounded-md text-2xs font-medium ${KIND_PILL[k]}`}>{label}</span>
+                    )}
+                  </div>
+                )
+              })()}
               <SeenBy views={(views[c.id] ?? []).filter(v => v.user_id !== c.author_id && v.user_id !== user?.id)} />
             </li>
           ))}

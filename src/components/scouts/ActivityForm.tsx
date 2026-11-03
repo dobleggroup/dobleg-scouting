@@ -115,6 +115,10 @@ export function ActivityForm({ kind, onSaved, scouts, defaultScoutId }: {
 
       {kind === 'reunion' ? (
         <>
+          <div className="rounded-xl bg-sky-500/10 border border-sky-500/25 px-4 py-3 text-sm text-apple-gray-800 dark:text-apple-gray-100">
+            Si la reunión fue sobre un jugador, también podés escribirla en sus comentarios y marcar
+            que fue una reunión: se carga sola y no hace falta cargarla acá.
+          </div>
           <div>
             <label className={label}>¿Con quién?<RequiredMark /></label>
             <input value={title} onChange={e => setTitle(e.target.value)} className={input}

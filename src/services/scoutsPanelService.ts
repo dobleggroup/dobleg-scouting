@@ -68,6 +68,8 @@ export interface ScoutSummary {
   negotiations: number
   /** Comentarios sobre jugadores (ficha / Seguimiento) + notas en negociaciones. */
   comments: number
+  /** Comentarios marcados como contacto (llamada, mensaje). */
+  contacts: number
   comments_by_player: { player: string; comments: number; negotiation_notes: number; last: string }[]
   /** Búsquedas de clubes que cargó en Mercado (una por club). */
   searches: number
@@ -111,6 +113,12 @@ export interface NewActivity {
 export async function createActivity(a: NewActivity, createdByName: string): Promise<string | null> {
   const { error } = await supabase.from('scout_activities').insert({ ...a, created_by_name: createdByName })
   return error ? error.message : null
+}
+
+/** "Con el director de Banfield", o "Reunión sobre R. Morínigo" si salió de un comentario. */
+export function meetingTitle(a: Pick<ScoutActivity, 'title' | 'player'>): string {
+  if (a.title?.trim()) return `Con ${a.title.trim()}`
+  return a.player ? `Reunión sobre ${a.player}` : 'Reunión'
 }
 
 /** Marcos y Matías Roberti aceptan o rechazan las reuniones y viajes que cargan los scouts. */

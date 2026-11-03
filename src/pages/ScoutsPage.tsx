@@ -11,6 +11,7 @@ import {
   deleteActivity,
   fetchScoutsPanel,
   reviewActivity,
+  meetingTitle,
   formatDay,
   lastActiveDays,
   lastActiveLabel,
@@ -317,7 +318,7 @@ function ScoutDetail({ s, onBack, onPdf, pdfBusy, onAdd, onDelete }: {
               {meetings.map(a => (
                 <Row key={a.id} day={a.day} onDelete={() => onDelete(a.id)}>
                   <div className={mainText}>
-                    Con {a.title}<Pill p={a.mode ? MEETING_PILL[a.mode] : null} />
+                    {meetingTitle(a)}<Pill p={a.mode ? MEETING_PILL[a.mode] : null} />
                     {a.review_status === 'pendiente' && <Pill p={PENDING_PILL} />}
                   </div>
                   {a.place && <div className={subText}>{a.place}</div>}
@@ -496,7 +497,7 @@ function PendingReview({ items, onReview, busyId }: {
               <Avatar s={scout} size={40} />
               <div className="min-w-0">
                 <div className={mainText}>
-                  {a.kind === 'reunion' ? `Reunión con ${a.title ?? ''}` : `Viaje a ${a.place ?? ''}`}
+                  {a.kind === 'reunion' ? (a.title ? `Reunión con ${a.title}` : meetingTitle(a)) : `Viaje a ${a.place ?? ''}`}
                   {a.kind === 'reunion' && <Pill p={a.mode ? MEETING_PILL[a.mode] : null} />}
                 </div>
                 <div className={subText}>
