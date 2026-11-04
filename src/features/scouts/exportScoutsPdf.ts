@@ -1,7 +1,7 @@
 // PDF de la página Scouts: el de todos (resumen, comparación y ranking + el informe de cada
 // scout) o el de un solo scout. Cada informe individual: cabecera con foto y nombre, números,
-// lo que cargó, el calendario del mes y el día por día. Todas las hojas de un scout llevan
-// su nombre arriba, para que siempre se sepa de quién es. jsPDF (texto vectorial), A4.
+// lo que cargó y el día por día de esta semana (y de la pasada, si tiene algo). Todas las
+// hojas son verticales y llevan el nombre del scout arriba. jsPDF (texto vectorial), A4.
 import { C, clean, Doc, M } from '@/features/coaches/wyscoutSquad/pdfDoc'
 import {
   addDays,
@@ -15,17 +15,12 @@ import {
 import { initials, METRIC_BY_KEY, METRICS, rank, type MetricKey } from './metrics'
 import { fullTeamName } from '@/utils/teamNames'
 import {
-  countKinds,
   fetchScoutCalendar,
   groupByDay,
-  ITEM_KINDS,
   KIND_META,
-  monthEnd,
-  monthGrid,
-  monthLabel,
-  monthStart,
-  WEEKDAY_HEAD,
+  startOfWeek,
   weekdayShort,
+  weekLabel,
   type CalendarDay,
   type CalendarEvent,
 } from './calendar'
@@ -34,11 +29,34 @@ const TOP = 70
 const BOTTOM_GAP = 48
 const DARK = '#14532D'
 
-/** Color mezclado con blanco (a = cuánto del color queda). */
+export type PdfTheme = 'claro' | 'oscuro'
+
+/** Colores del modo oscuro (mismos nombres que C). El fondo de cada hoja va aparte. */
+const DARK_C: typeof C = {
+  ink: '#F5F5F7', text: '#D1D1D6', muted: '#A1A1A6', faint: '#6E6E73', line: '#3A3A3C',
+  tile: '#1C1C1E', green: '#4ADE80', greenBar: '#22C55E', greenTint: '#0F3B22',
+  red: '#F87171', redTint: '#3B1515', grayChip: '#48484A', white: '#FFFFFF',
+}
+const DARK_BG = '#111113'
+
+/** Tema del PDF que se está armando (lo fija exportScoutsPdf mientras dibuja). */
+let dark = false
+
+/** Color mezclado con el fondo de la hoja (a = cuánto del color queda). */
 function tint(hex: string, a: number): string {
   const n = parseInt(hex.slice(1), 16)
-  const mix = (c: number) => Math.round(c * a + 255 * (1 - a)).toString(16).padStart(2, '0')
-  return `#${mix(n >> 16)}${mix((n >> 8) & 255)}${mix(n & 255)}`
+  const bg = parseInt((dark ? DARK_BG : '#FFFFFF').slice(1), 16)
+  const ch = (v: number, shift: number) => (v >> shift) & 255
+  const mix = (shift: number) => Math.round(ch(n, shift) * a + ch(bg, shift) * (1 - a)).toString(16).padStart(2, '0')
+  return `#${mix(16)}${mix(8)}${mix(0)}`
+}
+
+/** Hoja con fondo oscuro en modo oscuro (antes del encabezado, para que quede debajo). */
+class ScoutDoc extends Doc {
+  header() {
+    if (dark) this.rect(0, 0, this.W, this.H, DARK_BG)
+    super.header()
+  }
 }
 
 /** Foto recortada en círculo (PNG). Si no se puede leer, undefined e iniciales. */
@@ -98,7 +116,7 @@ function avatar(d: Doc, photo: string | undefined, name: string, x: number, y: n
   }
   d.pdf.setFillColor(onDark ? '#FFFFFF' : C.greenTint)
   d.pdf.circle(x + size / 2, y + size / 2, size / 2, 'F')
-  d.text(initials(name), x + size / 2, y + size / 2 + size * 0.13, { size: size * 0.36, bold: true, color: C.green, align: 'center' })
+  d.text(initials(name), x + size / 2, y + size / 2 + size * 0.13, { size: size * 0.36, bold: true, color: onDark ? '#15803D' : C.green, align: 'center' })
 }
 
 function dot(d: Doc, x: number, y: number, color: string, r = 2.2) {
@@ -108,6 +126,7 @@ function dot(d: Doc, x: number, y: number, color: string, r = 2.2) {
 
 function recencyColor(ts: string | null): string {
   const n = lastActiveDays(ts)
+  if (dark) return n <= 2 ? '#4ADE80' : n <= 7 ? '#FBBF24' : '#F87171'
   return n <= 2 ? '#15803D' : n <= 7 ? '#B45309' : '#B91C1C'
 }
 
@@ -332,93 +351,33 @@ function scoutSection(w: Writer, s: ScoutSummary, o: Owner, period: string) {
   lines(w, s.report_list.map(r => ({ left: formatDay(r.day), mid: r.player, right: [r.team, r.score != null ? `Nota ${r.score}` : null].filter(Boolean).join(' · ') })), 'Sin reportes en este período.')
 }
 
-// ─── Calendario del mes ──────────────────────────────────────────────────────
+// ─── Semana por semana ───────────────────────────────────────────────────────
 
-/** Hoja apaisada: el mes en grilla, cada cosa con su color. */
-function calendarPage(d: Doc, s: ScoutSummary, o: Owner, byDay: Map<string, CalendarDay>, month: string) {
-  const today = todayAR()
-  const first = monthStart(month)
-  const last = monthEnd(month)
-  const counts = countKinds(byDay, first, [last, today].sort()[0])
-
-  d.newPage('landscape')
-  const y0 = 62
-  const bandH = ownerBand(d, y0, o, `Calendario · ${monthLabel(month)}`, { label: 'Días que entró en el mes', value: `${counts.entered} de ${counts.total}` }, true)
-
-  // Leyenda
-  let lx = M
-  const ly = y0 + bandH + 16
-  const legend = [
-    { color: C.greenBar, text: 'Entró ese día' },
-    ...ITEM_KINDS.filter(k => counts.byKind[k] > 0).map(k => ({ color: KIND_META[k].pdf, text: `${KIND_META[k].plural} (${counts.byKind[k]})` })),
-  ]
-  for (const l of legend) {
-    dot(d, lx + 3.5, ly - 2.8, l.color, 3.2)
-    d.text(l.text, lx + 11, ly, { size: 7.8, color: C.text })
-    lx += d.width(l.text, 7.8) + 22
-  }
-
-  const weeks = monthGrid(month)
-  const top = ly + 12
-  const headH = 18
-  const gap = 4
-  const cellW = (d.CW - gap * 6) / 7
-  const cellH = (d.H - 44 - top - headH - gap * (weeks.length - 1)) / weeks.length
-  WEEKDAY_HEAD.forEach((h, i) => {
-    const x = M + i * (cellW + gap)
-    d.rect(x, top, cellW, 14, DARK, 4)
-    d.text(h.toUpperCase(), x + cellW / 2, top + 9.8, { size: 7.4, bold: true, color: C.white, align: 'center' })
-  })
-  const chipH = 10
-  const chipGap = 1.5
-  const maxChips = Math.max(1, Math.floor((cellH - 19) / (chipH + chipGap)))
-  weeks.forEach((week, r) => {
-    week.forEach((day, c) => {
-      const x = M + c * (cellW + gap)
-      const y = top + headH + r * (cellH + gap)
-      const inMonth = day.slice(0, 7) === month.slice(0, 7)
-      const info = byDay.get(day)
-      if (!inMonth) {
-        d.pdf.setDrawColor(C.line)
-        d.pdf.setLineWidth(0.6)
-        d.pdf.roundedRect(x, y, cellW, cellH, 5, 5, 'S')
-        d.text(String(Number(day.slice(8))), x + 7, y + 13, { size: 9, color: C.faint })
-        return
-      }
-      d.rect(x, y, cellW, cellH, day === today ? C.greenTint : C.tile, 5)
-      if (day === today) {
-        d.pdf.setDrawColor(C.greenBar)
-        d.pdf.setLineWidth(1)
-        d.pdf.roundedRect(x, y, cellW, cellH, 5, 5, 'S')
-      }
-      d.text(String(Number(day.slice(8))), x + 7, y + 13, { size: 10, bold: true, color: C.ink })
-      if (day <= today && info?.entered) dot(d, x + cellW - 9, y + 9.5, C.greenBar, 3)
-      const items = info?.items ?? []
-      const shown = items.length > maxChips ? maxChips - 1 : maxChips
-      items.slice(0, shown).forEach((it, i) => {
-        const cy = y + 17 + i * (chipH + chipGap)
-        const color = KIND_META[it.kind].pdf
-        d.rect(x + 4, cy, cellW - 8, chipH, tint(color, 0.16), 3)
-        d.rect(x + 4, cy, 2.4, chipH, color, 1)
-        d.text(d.fit(it.short, cellW - 18, 6.8), x + 10, cy + 7.2, { size: 6.8, color: C.ink })
-      })
-      if (items.length > shown) d.text(`+${items.length - shown} más`, x + 8, y + 17 + shown * (chipH + chipGap) + 7.4, { size: 6.8, bold: true, color: C.muted })
-    })
-  })
-  void s
-}
-
-/** El mes día por día, con todo escrito (solo los días en que hizo algo). */
-function dayByDay(w: Writer, byDay: Map<string, CalendarDay>, month: string) {
+/** Una semana (lunes a domingo) día por día, con todo escrito; los días sin nada también van. */
+function weekByWeek(w: Writer, byDay: Map<string, CalendarDay>, weekStart: string, title: string) {
   const d = w.d
   const today = todayAR()
-  sectionTitle(w, `Día por día · ${monthLabel(month)}`)
-  let any = false
+  const weekEnd = addDays(weekStart, 6)
+  const lastDay = [weekEnd, today].sort()[0]
+  let entered = 0
+  let total = 0
+  for (let day = weekStart; day <= lastDay; day = addDays(day, 1)) {
+    total++
+    if (byDay.get(day)?.entered) entered++
+  }
+  w.ensure(100) // el título nunca queda solo al pie de la hoja
+  sectionTitle(w, `${title} · ${weekLabel(weekStart)}`)
+  d.text(`Entró ${entered} de ${total} ${total === 1 ? 'día' : 'días'}`, d.W - M, w.y - 11, { size: 8.6, bold: true, color: C.green, align: 'right' })
   const xText = M + 150
-  for (let day = monthStart(month); day <= monthEnd(month) && day <= today; day = addDays(day, 1)) {
-    const info = byDay.get(day)
-    if (!info?.items.length) continue
-    any = true
+  for (let day = weekStart; day <= lastDay; day = addDays(day, 1)) {
+    const info = byDay.get(day) ?? { entered: false, items: [] }
+    if (!info.items.length) {
+      // Día sin nada cargado: solo la fila del día.
+      w.ensure(26)
+      dayRow(w, day, info.entered, 'Sin actividad')
+      w.y += 26
+      continue
+    }
     const textW = d.W - M - xText
     const blocks = info.items.map(it => {
       const extra = [it.badge, it.pending ? 'falta aceptar' : null].filter(Boolean).join(' · ')
@@ -430,13 +389,7 @@ function dayByDay(w: Writer, byDay: Map<string, CalendarDay>, month: string) {
     })
     const firstH = 20 + blocks[0].h
     w.ensure(30 + firstH)
-    // Día
-    d.rect(M, w.y, d.CW, 20, C.tile, 5)
-    const label = `${weekdayShort(day)} ${Number(day.slice(8))}`
-    d.text(label.charAt(0).toUpperCase() + label.slice(1), M + 10, w.y + 13.5, { size: 10, bold: true })
-    d.text(formatDay(day, true), M + 16 + d.width(label, 10, true), w.y + 13.5, { size: 8.2, color: C.muted })
-    if (info.entered) { dot(d, d.W - M - 40, w.y + 10, C.greenBar, 3); d.text('Entró', d.W - M - 10, w.y + 13.5, { size: 8.2, color: C.green, align: 'right' }) }
-    else d.text('No entró', d.W - M - 10, w.y + 13.5, { size: 8.2, color: C.muted, align: 'right' })
+    dayRow(w, day, info.entered)
     w.y += 26
     for (const { it, title, detail, h } of blocks) {
       w.ensure(h + 2)
@@ -452,10 +405,28 @@ function dayByDay(w: Writer, byDay: Map<string, CalendarDay>, month: string) {
     }
     w.y += 8
   }
-  if (!any) {
-    d.text('Sin actividad cargada en este mes.', M + 10, w.y + 10, { size: 9, color: C.muted })
-    w.y += 24
+  w.y += 8
+}
+
+/** Fila de un día: "Lun 2  2 de nov de 2026   Sin actividad   ● Entró / No entró". */
+function dayRow(w: Writer, day: string, entered: boolean, note?: string) {
+  const d = w.d
+  d.rect(M, w.y, d.CW, 20, C.tile, 5)
+  const label = `${weekdayShort(day)} ${Number(day.slice(8))}`
+  d.text(label.charAt(0).toUpperCase() + label.slice(1), M + 10, w.y + 13.5, { size: 10, bold: true, color: note ? C.muted : C.ink })
+  d.text(formatDay(day, true), M + 16 + d.width(label, 10, true), w.y + 13.5, { size: 8.2, color: C.muted })
+  if (note) d.text(note, M + 150, w.y + 13.5, { size: 8.6, color: C.faint })
+  if (entered) { dot(d, d.W - M - 40, w.y + 10, C.greenBar, 3); d.text('Entró', d.W - M - 10, w.y + 13.5, { size: 8.2, color: C.green, align: 'right' }) }
+  else d.text('No entró', d.W - M - 10, w.y + 13.5, { size: 8.2, color: C.muted, align: 'right' })
+}
+
+/** ¿Hizo o cargó algo en la semana? (para mostrar la semana pasada solo si tiene algo). */
+function weekHasActivity(byDay: Map<string, CalendarDay>, weekStart: string): boolean {
+  for (let i = 0; i < 7; i++) {
+    const info = byDay.get(addDays(weekStart, i))
+    if (info && (info.entered || info.items.length)) return true
   }
+  return false
 }
 
 /** "Fede Pereyra - Informe 04-11-2026.pdf": prolijo para mandar por WhatsApp o mail. */
@@ -487,21 +458,41 @@ async function deliver(pdf: { save: (name: string) => unknown; output: (t: 'blob
   pdf.save(fileName)
 }
 
-export async function exportScoutsPdf(scouts: ScoutSummary[], period: string, only: ScoutSummary | null, calendarMonth: string = todayAR()): Promise<void> {
+export async function exportScoutsPdf(scouts: ScoutSummary[], period: string, only: ScoutSummary | null, theme: PdfTheme = 'claro'): Promise<void> {
   const { jsPDF } = await import('jspdf')
-  const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4', compress: true })
   const title = only ? `Informe de ${only.name} · ${period}` : `Informe de actividad de los scouts · ${period}`
-  pdf.setProperties({ title, author: 'Doble G Sports Group', creator: 'Doble G Sports Group' })
-  const d = new Doc(pdf, title)
-  d.header()
-  const w = new Writer(d)
-
   const list = only ? [only] : scouts
-  const grid = monthGrid(calendarMonth).flat()
+  const thisWeek = startOfWeek(todayAR())
+  const lastWeek = addDays(thisWeek, -7)
   const [photoList, events] = await Promise.all([
     Promise.all(scouts.map(s => circlePhoto(s.photo_url))),
-    fetchScoutCalendar(grid[0], grid[grid.length - 1], only?.user_id ?? null),
+    fetchScoutCalendar(lastWeek, addDays(thisWeek, 6), only?.user_id ?? null),
   ])
+
+  // Desde acá se dibuja todo de una (sin esperas): los colores compartidos C se cambian al
+  // modo oscuro solo durante el dibujo y se devuelven siempre, aunque algo falle.
+  const light = { ...C }
+  dark = theme === 'oscuro'
+  if (dark) Object.assign(C, DARK_C)
+  let pdf: InstanceType<typeof jsPDF>
+  try {
+    pdf = draw(new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4', compress: true }), title, scouts, list, only, period, photoList, events, thisWeek, lastWeek)
+  } finally {
+    Object.assign(C, light)
+    dark = false
+  }
+
+  await deliver(pdf, pdfFileName(only?.name ?? null), title)
+}
+
+function draw<P extends ConstructorParameters<typeof Doc>[0]>(
+  pdf: P, title: string, scouts: ScoutSummary[], list: ScoutSummary[], only: ScoutSummary | null, period: string,
+  photoList: (string | undefined)[], events: CalendarEvent[], thisWeek: string, lastWeek: string,
+): P {
+  pdf.setProperties({ title, author: 'Doble G Sports Group', creator: 'Doble G Sports Group' })
+  const d = new ScoutDoc(pdf, title)
+  d.header()
+  const w = new Writer(d)
   const photos = new Map(scouts.map((s, i) => [s.user_id, photoList[i]]))
   const eventsBy = new Map<string, CalendarEvent[]>()
   for (const e of events) eventsBy.set(e.user_id, [...(eventsBy.get(e.user_id) ?? []), e])
@@ -523,9 +514,8 @@ export async function exportScoutsPdf(scouts: ScoutSummary[], period: string, on
     w.owner = o
     scoutSection(w, s, o, period)
     const byDay = groupByDay(eventsBy.get(s.user_id) ?? [])
-    calendarPage(d, s, o, byDay, calendarMonth)
-    w.page()
-    dayByDay(w, byDay, calendarMonth)
+    weekByWeek(w, byDay, thisWeek, 'Esta semana')
+    if (weekHasActivity(byDay, lastWeek)) weekByWeek(w, byDay, lastWeek, 'Semana pasada')
     w.owner = null
   })
 
@@ -536,6 +526,5 @@ export async function exportScoutsPdf(scouts: ScoutSummary[], period: string, on
     d.text('Doble G Sports Group', M, d.H - 18, { size: 7, color: C.faint })
     d.text(`Página ${i} de ${total}`, d.W - M, d.H - 18, { size: 7, color: C.faint, align: 'right' })
   }
-
-  await deliver(pdf, pdfFileName(only?.name ?? null), title)
+  return pdf
 }

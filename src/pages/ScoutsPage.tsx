@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import NotFoundPage from '@/pages/NotFoundPage'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { ActivitySheet } from '@/components/scouts/ActivityForm'
+import type { PdfTheme } from '@/features/scouts/exportScoutsPdf'
+import PdfExportButton from '@/components/scouts/PdfExportButton'
 import ScoutCalendar, { type CalendarView } from '@/components/scouts/ScoutCalendar'
 import { useCanSeeScoutsPanel } from '@/hooks/useCanSeeScoutsPanel'
 import { useCanApproveActivities } from '@/hooks/useCanApproveActivities'
@@ -225,7 +227,7 @@ const subText = 'text-sm text-apple-gray-600 dark:text-apple-gray-300'
 function ScoutDetail({ s, onBack, onPdf, pdfBusy, onAdd, onDelete }: {
   s: ScoutSummary
   onBack: () => void
-  onPdf: (calendarMonth: string) => void
+  onPdf: (theme: PdfTheme) => void
   pdfBusy: boolean
   onAdd: (k: ActivityKind) => void
   onDelete: (id: number) => void
@@ -258,14 +260,7 @@ function ScoutDetail({ s, onBack, onPdf, pdfBusy, onAdd, onDelete }: {
           <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
             <button type="button" onClick={() => onAdd('reunion')} className={outline}>Cargar reunión de {firstName}</button>
             <button type="button" onClick={() => onAdd('viaje')} className={outline}>Cargar viaje de {firstName}</button>
-            <button
-              type="button"
-              onClick={() => onPdf(calAnchor)}
-              disabled={pdfBusy}
-              className="px-4 py-2.5 rounded-xl text-sm font-medium bg-apple-gray-900 dark:bg-white text-white dark:text-apple-gray-900 hover:opacity-90 disabled:opacity-50 transition-all"
-            >
-              {pdfBusy ? 'Armando PDF...' : `Extraer PDF de ${s.name}`}
-            </button>
+            <PdfExportButton label={`Extraer PDF de ${s.name}`} busy={pdfBusy} onExport={onPdf} />
           </div>
         </div>
         <div className="mt-5"><DaysStrip days={s.recent_days} /></div>
@@ -590,12 +585,12 @@ export default function ScoutsPage() {
   const scoutList = useMemo(() => (data ?? []).map(s => ({ user_id: s.user_id, name: s.name })), [data])
   const open = data?.find(s => s.user_id === openId) ?? null
 
-  const handlePdf = async (only: ScoutSummary | null, calendarMonth: string = todayAR()) => {
+  const handlePdf = async (only: ScoutSummary | null, theme: PdfTheme) => {
     if (!data || pdfBusy) return
     setPdfBusy(only?.user_id ?? 'all')
     try {
       const { exportScoutsPdf } = await import('@/features/scouts/exportScoutsPdf')
-      await exportScoutsPdf(data, periodLabel(period), only, calendarMonth)
+      await exportScoutsPdf(data, periodLabel(period), only, theme)
     } catch {
       setError('No se pudo armar el PDF. Probá de nuevo.')
     } finally {
@@ -638,14 +633,12 @@ export default function ScoutsPage() {
               {tabBtn('scouts', 'Scouts')}
               {tabBtn('ranking', 'Ranking')}
             </div>
-            <button
-              type="button"
-              onClick={() => handlePdf(null)}
+            <PdfExportButton
+              label="Extraer PDF de todos los scouts"
+              busy={pdfBusy === 'all'}
               disabled={!data?.length || !!pdfBusy}
-              className="px-4 py-2.5 rounded-xl text-sm font-medium bg-apple-gray-900 dark:bg-white text-white dark:text-apple-gray-900 hover:opacity-90 disabled:opacity-50 transition-all"
-            >
-              {pdfBusy === 'all' ? 'Armando PDF...' : 'Extraer PDF de todos los scouts'}
-            </button>
+              onExport={theme => handlePdf(null, theme)}
+            />
           </div>
         </div>
 
@@ -678,7 +671,7 @@ export default function ScoutsPage() {
           <ScoutDetail
             s={open}
             onBack={() => setOpenId(null)}
-            onPdf={month => handlePdf(open, month)}
+            onPdf={theme => handlePdf(open, theme)}
             pdfBusy={pdfBusy === open.user_id}
             onAdd={kind => setAdding({ kind, scoutId: open.user_id })}
             onDelete={handleDelete}
