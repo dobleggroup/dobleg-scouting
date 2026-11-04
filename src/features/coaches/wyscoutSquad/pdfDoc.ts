@@ -17,6 +17,10 @@ export const LOCALE = 'es-AR'
 /** La fuente estandar de jsPDF es Latin-1: los signos que no entran se reemplazan. */
 export function clean(s: string): string {
   return s.replace(/[−–—]/g, '-').replace(/…/g, '...').replace(/[“”]/g, '"').replace(/[‘’]/g, "'")
+    // Lo que no es Latin-1 sale como basura en el PDF: letras con tilde rara (ć, ğ) quedan sin
+    // la tilde; emojis y otros signos se sacan.
+    .replace(/[^\u0000-ÿ]/gu, ch => ch.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\u0000-ÿ]/gu, ''))
+    .replace(/[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/g, ' ')
 }
 
 

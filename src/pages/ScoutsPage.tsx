@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import NotFoundPage from '@/pages/NotFoundPage'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { ActivitySheet } from '@/components/scouts/ActivityForm'
+import ScoutCalendar, { type CalendarView } from '@/components/scouts/ScoutCalendar'
 import { useCanSeeScoutsPanel } from '@/hooks/useCanSeeScoutsPanel'
 import { useCanApproveActivities } from '@/hooks/useCanApproveActivities'
 import { useAuth } from '@/context/AuthContext'
@@ -224,11 +225,13 @@ const subText = 'text-sm text-apple-gray-600 dark:text-apple-gray-300'
 function ScoutDetail({ s, onBack, onPdf, pdfBusy, onAdd, onDelete }: {
   s: ScoutSummary
   onBack: () => void
-  onPdf: () => void
+  onPdf: (calendarMonth: string) => void
   pdfBusy: boolean
   onAdd: (k: ActivityKind) => void
   onDelete: (id: number) => void
 }) {
+  const [calView, setCalView] = useState<CalendarView>('semana')
+  const [calAnchor, setCalAnchor] = useState(todayAR)
   const meetings = s.activities.filter(a => a.kind === 'reunion')
   const acceptedMeetings = meetings.filter(a => a.review_status === 'aceptada').length
   const pendingTrips = s.activities.filter(a => a.kind === 'viaje' && a.review_status === 'pendiente')
@@ -252,16 +255,16 @@ function ScoutDetail({ s, onBack, onPdf, pdfBusy, onAdd, onDelete }: {
               <LastActive ts={s.last_active} big />
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
             <button type="button" onClick={() => onAdd('reunion')} className={outline}>Cargar reunión de {firstName}</button>
             <button type="button" onClick={() => onAdd('viaje')} className={outline}>Cargar viaje de {firstName}</button>
             <button
               type="button"
-              onClick={onPdf}
+              onClick={() => onPdf(calAnchor)}
               disabled={pdfBusy}
               className="px-4 py-2.5 rounded-xl text-sm font-medium bg-apple-gray-900 dark:bg-white text-white dark:text-apple-gray-900 hover:opacity-90 disabled:opacity-50 transition-all"
             >
-              {pdfBusy ? 'Armando PDF...' : 'Descargar PDF'}
+              {pdfBusy ? 'Armando PDF...' : `Extraer PDF de ${s.name}`}
             </button>
           </div>
         </div>
@@ -270,6 +273,8 @@ function ScoutDetail({ s, onBack, onPdf, pdfBusy, onAdd, onDelete }: {
           {METRICS.map(m => <Stat key={m.key} value={m.value(s)} label={m.label} />)}
         </div>
       </div>
+
+      <ScoutCalendar scoutId={s.user_id} view={calView} onView={setCalView} anchor={calAnchor} onAnchor={setCalAnchor} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Section title="Partidos" count={s.match_list.length}>
@@ -585,12 +590,14 @@ export default function ScoutsPage() {
   const scoutList = useMemo(() => (data ?? []).map(s => ({ user_id: s.user_id, name: s.name })), [data])
   const open = data?.find(s => s.user_id === openId) ?? null
 
-  const handlePdf = async (only: ScoutSummary | null) => {
+  const handlePdf = async (only: ScoutSummary | null, calendarMonth: string = todayAR()) => {
     if (!data || pdfBusy) return
     setPdfBusy(only?.user_id ?? 'all')
     try {
       const { exportScoutsPdf } = await import('@/features/scouts/exportScoutsPdf')
-      await exportScoutsPdf(data, periodLabel(period), only)
+      await exportScoutsPdf(data, periodLabel(period), only, calendarMonth)
+    } catch {
+      setError('No se pudo armar el PDF. Probá de nuevo.')
     } finally {
       setPdfBusy(null)
     }
@@ -637,7 +644,7 @@ export default function ScoutsPage() {
               disabled={!data?.length || !!pdfBusy}
               className="px-4 py-2.5 rounded-xl text-sm font-medium bg-apple-gray-900 dark:bg-white text-white dark:text-apple-gray-900 hover:opacity-90 disabled:opacity-50 transition-all"
             >
-              {pdfBusy === 'all' ? 'Armando PDF...' : 'PDF de todos'}
+              {pdfBusy === 'all' ? 'Armando PDF...' : 'Extraer PDF de todos los scouts'}
             </button>
           </div>
         </div>
@@ -671,7 +678,7 @@ export default function ScoutsPage() {
           <ScoutDetail
             s={open}
             onBack={() => setOpenId(null)}
-            onPdf={() => handlePdf(open)}
+            onPdf={month => handlePdf(open, month)}
             pdfBusy={pdfBusy === open.user_id}
             onAdd={kind => setAdding({ kind, scoutId: open.user_id })}
             onDelete={handleDelete}

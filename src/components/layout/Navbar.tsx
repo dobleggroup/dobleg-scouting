@@ -183,7 +183,7 @@ function DesktopDropdown({
           }
           onToggle()
         }}
-        className={`flex items-center gap-1 lg:px-2.5 xl:px-3.5 py-2 text-sm whitespace-nowrap font-medium rounded-lg transition-all duration-200 ${
+        className={`flex items-center gap-1 xl:px-2.5 2xl:px-3.5 py-2 text-sm whitespace-nowrap font-medium rounded-lg transition-all duration-200 ${
           active
             ? 'bg-brand-green text-gray-900 shadow-sm'
             : 'text-apple-gray-600 dark:text-apple-gray-300 hover:text-apple-gray-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-apple-gray-700/50'
@@ -312,7 +312,7 @@ export default function Navbar() {
                 className="w-12 h-12 object-contain"
               />
             </div>
-            <div className="hidden sm:flex lg:hidden xl:flex flex-col">
+            <div className="hidden sm:flex xl:hidden 2xl:flex flex-col">
               <span className="font-bold text-apple-gray-800 dark:text-white text-base tracking-tight leading-none">
                 Scout Platform
               </span>
@@ -323,7 +323,7 @@ export default function Navbar() {
           </NavLink>
 
           {/* Desktop Nav */}
-          <nav className="hidden lg:flex items-center gap-0.5 bg-apple-gray-100/70 dark:bg-apple-gray-800/70 rounded-xl p-1 backdrop-blur-sm">
+          <nav className="hidden xl:flex items-center gap-0.5 bg-apple-gray-100/70 dark:bg-apple-gray-800/70 rounded-xl p-1 backdrop-blur-sm">
             {/* Inicio dropdown */}
             <DesktopDropdown
               group={inicioGroup}
@@ -412,7 +412,7 @@ export default function Navbar() {
                     <div className="w-7 h-7 rounded-full bg-gradient-to-br from-brand-green to-emerald-600 flex items-center justify-center text-white text-sm font-semibold">
                       {userDisplayName.charAt(0).toUpperCase()}
                     </div>
-                    <span className="hidden sm:block lg:hidden xl:block text-sm font-medium text-apple-gray-700 dark:text-apple-gray-300 max-w-24 truncate">
+                    <span className="hidden sm:block xl:hidden 2xl:block text-sm font-medium text-apple-gray-700 dark:text-apple-gray-300 max-w-24 truncate">
                       {userDisplayName}
                     </span>
                     <svg className="w-4 h-4 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -474,7 +474,7 @@ export default function Navbar() {
             {/* Hamburger button */}
             <button
               onClick={() => setIsOpen(!isOpen)}
-              className="lg:hidden p-2 rounded-xl bg-apple-gray-100 dark:bg-apple-gray-800 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-700 transition-colors"
+              className="xl:hidden p-2 rounded-xl bg-apple-gray-100 dark:bg-apple-gray-800 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-700 transition-colors"
               aria-label="Toggle menu"
             >
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -494,7 +494,7 @@ export default function Navbar() {
 
       {/* Mobile menu overlay */}
       <div
-        className={`fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity duration-300 lg:hidden ${
+        className={`fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity duration-300 xl:hidden ${
           isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
         onClick={() => setIsOpen(false)}
@@ -502,7 +502,7 @@ export default function Navbar() {
 
       {/* Mobile menu panel */}
       <div
-        className={`fixed top-14 right-0 bottom-0 z-40 w-72 bg-white dark:bg-apple-gray-900 shadow-2xl transform transition-transform duration-300 ease-out lg:hidden pb-safe ${
+        className={`fixed top-14 right-0 bottom-0 z-40 w-72 bg-white dark:bg-apple-gray-900 shadow-2xl transform transition-transform duration-300 ease-out xl:hidden pb-safe ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
         {...swipe}
