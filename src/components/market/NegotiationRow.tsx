@@ -3,16 +3,17 @@ import { useAuth } from '@/context/AuthContext'
 import { useLanguage } from '@/context/LanguageContext'
 import { PlayerPhoto } from '@/components/ui/PlayerPhoto'
 import ClubTransferBadge from './ClubTransferBadge'
-import AssigneeSelect from './AssigneeSelect'
+import AssigneePill from './AssigneePill'
 import PlayerLinkField from './PlayerLinkField'
 import MarketNotesPanel from './MarketNotesPanel'
 import StatusPill from './StatusPill'
 import FollowupDateField from './FollowupDateField'
 import { NEGOTIATION_STATUS_LABEL_KEY, NEGOTIATION_STATUS_COLOR, NEGOTIATION_STATUS_ORDER } from './marketLabels'
 import { buildPlayerPhotoUrl } from '@/utils/marketAlerts'
+import { findAgencyPlayerByName } from '@/services/agencyPlayersService'
 import { useLinkedPlayerAge } from '@/hooks/useLinkedPlayerAge'
-import { updateNegotiationStatus, updateFollowupDate, reassignNegotiation, linkNegotiationPlayer, updateNegotiationFields, isMarketLinkAdmin, setNegotiationHidden } from '@/services/marketService'
-import type { Negotiation, NegotiationStatus } from '@/types/market'
+import { updateNegotiationStatus, updateFollowupDate, reassignNegotiation, linkNegotiationPlayer, updateNegotiationFields, fetchCurrentClubs, withLinkedClubs, isMarketLinkAdmin, setNegotiationHidden } from '@/services/marketService'
+import type { Negotiation, NegotiationStatus, TeamMember } from '@/types/market'
 
 /**
  * Un dato que se completa después de crear la negociación. Siempre se ve si
@@ -71,6 +72,7 @@ function SavedTextField({ label, value, placeholder, onSave }: {
 
 export default function NegotiationRow({
   negotiation,
+  members,
   onUpdated,
   defaultExpanded = false,
   overdue = false,
@@ -78,6 +80,8 @@ export default function NegotiationRow({
   onNeedMightHaveChanged,
 }: {
   negotiation: Negotiation
+  /** Equipo de Mercado (cargado una vez en la página) para elegir responsable. */
+  members: TeamMember[]
   onUpdated: (n: Negotiation) => void
   defaultExpanded?: boolean
   overdue?: boolean
@@ -105,7 +109,6 @@ export default function NegotiationRow({
       rowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
   }, [defaultExpanded])
-  const [reassigning, setReassigning] = useState(false)
   const [linking, setLinking] = useState(false)
   const [pendingApiId, setPendingApiId] = useState<number | null>(null)
   const [pendingIdentity, setPendingIdentity] = useState<{ name: string; age: number | null } | null>(null)
@@ -113,7 +116,7 @@ export default function NegotiationRow({
 
   const canLink = isMarketLinkAdmin(user?.email)
   const age = useLinkedPlayerAge(negotiation.player_api_id)
-  const photoUrl = buildPlayerPhotoUrl(negotiation.player_api_id)
+  const photoUrl = findAgencyPlayerByName(negotiation.player_name)?.image ?? buildPlayerPhotoUrl(negotiation.player_api_id)
   const negotiationStatusLabels = Object.fromEntries(
     NEGOTIATION_STATUS_ORDER.map(s => [s, t(NEGOTIATION_STATUS_LABEL_KEY[s])]),
   ) as Record<NegotiationStatus, string>
@@ -145,7 +148,6 @@ export default function NegotiationRow({
     const ok = await reassignNegotiation(negotiation.id, id, name, user?.id ?? null, userDisplayName || 'Usuario')
     if (ok) {
       onUpdated({ ...negotiation, assigned_to_id: id, assigned_to_name: name })
-      setReassigning(false)
       setNotesRefreshSignal(s => s + 1)
     }
   }
@@ -167,12 +169,13 @@ export default function NegotiationRow({
     if (pendingApiId == null) return
     const ok = await linkNegotiationPlayer(negotiation.id, pendingApiId, 'externo', pendingIdentity?.name)
     if (ok) {
-      onUpdated({
+      const currentClub = negotiation.current_team_name ? undefined : (await fetchCurrentClubs([pendingApiId])).get(pendingApiId)
+      onUpdated(withLinkedClubs({
         ...negotiation,
         player_api_id: pendingApiId,
         player_source: 'externo',
         player_name: pendingIdentity?.name ?? negotiation.player_name,
-      })
+      }, null, currentClub))
       setLinking(false)
     }
   }
@@ -190,7 +193,7 @@ export default function NegotiationRow({
         tabIndex={0}
         onClick={() => setExpanded(e => !e)}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(x => !x) } }}
-        className="w-full flex flex-col gap-2 sm:grid sm:grid-cols-[auto_minmax(0,2fr)_7rem_7rem_5.5rem_2rem] sm:items-center sm:gap-3 px-4 py-3 sm:py-3.5 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/40 transition-colors font-sans cursor-pointer"
+        className="w-full flex flex-col gap-2 sm:grid sm:grid-cols-[auto_minmax(0,2fr)_8rem_11rem_5.5rem_2rem] sm:items-center sm:gap-3 px-4 py-3 sm:py-3.5 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/40 transition-colors font-sans cursor-pointer"
       >
         <div className="flex items-center gap-3 min-w-0 sm:contents">
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -205,7 +208,7 @@ export default function NegotiationRow({
           <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-none">
             <PlayerPhoto src={photoUrl} name={negotiation.player_name} size="sm" />
             <div className="min-w-0">
-              <p className={`font-semibold text-sm truncate ${negotiation.status === 'cerrado_caido' ? 'text-apple-gray-400 line-through decoration-apple-gray-300' : 'text-apple-gray-800 dark:text-white'}`}>
+              <p className={`font-semibold text-[13px] truncate ${negotiation.status === 'cerrado_caido' ? 'text-apple-gray-400 line-through decoration-apple-gray-300' : 'text-apple-gray-800 dark:text-white'}`}>
                 {negotiation.player_name}
                 {age != null && <span className="font-normal text-apple-gray-400">, {age} {t('externo.anios')}</span>}
               </p>
@@ -225,7 +228,14 @@ export default function NegotiationRow({
             onChange={handleStatusChange}
             title={t('mercado.cambiarEstado')}
           />
-          <span className="text-xs text-apple-gray-500 dark:text-apple-gray-400 truncate min-w-0">{negotiation.assigned_to_name || '—'}</span>
+          <div className="min-w-0">
+            <AssigneePill
+              valueId={negotiation.assigned_to_id}
+              valueName={negotiation.assigned_to_name}
+              members={members}
+              onChange={handleReassign}
+            />
+          </div>
           <div className="ml-auto sm:ml-0 sm:text-right">
             <FollowupDateField value={negotiation.next_followup_date} overdue={overdue} onChange={handleFollowupChange} />
           </div>
@@ -283,23 +293,6 @@ export default function NegotiationRow({
               </p>
             </div>
           </div>
-
-          {/* Quién la lleva: solo en las que se armaron desde Negociaciones (las
-              que salen de una búsqueda no tienen responsable). */}
-          {(!negotiation.need_id || negotiation.assigned_to_id) && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm text-apple-gray-700 dark:text-apple-gray-200 min-w-0 truncate">
-                  <span className="text-xs font-semibold text-apple-gray-600 dark:text-apple-gray-300">{t('mercado.quienLaLlevaCorto')}: </span>
-                  {negotiation.assigned_to_name || t('mercado.sinAsignar')}
-                </p>
-                <button onClick={() => setReassigning(r => !r)} className="text-sm font-medium text-brand-green hover:text-emerald-600 flex-shrink-0">
-                  {reassigning ? t('mercado.cancelar') : negotiation.assigned_to_id ? t('mercado.reasignar') : t('mercado.asignar')}
-                </button>
-              </div>
-              {reassigning && <AssigneeSelect value={negotiation.assigned_to_id} onChange={handleReassign} />}
-            </div>
-          )}
 
           {canLink && (
             <div className="space-y-2">

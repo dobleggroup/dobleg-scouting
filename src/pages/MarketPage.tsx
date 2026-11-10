@@ -5,6 +5,7 @@ import { computeAlerts, type AlertableItem } from '@/utils/marketAlerts'
 import { NEGOTIATION_STATUS_ORDER, NEGOTIATION_STATUS_LABEL_KEY, NEGOTIATION_STATUS_ACCENT, NEED_STATUS_ACCENT } from '@/components/market/marketLabels'
 import NegotiationRow from '@/components/market/NegotiationRow'
 import NeedRow from '@/components/market/NeedRow'
+import { customClubLeague } from '@/constants/customClubs'
 import NewNegotiationForm from '@/components/market/NewNegotiationForm'
 import NewNeedForm from '@/components/market/NewNeedForm'
 import MarketWeekCalendar, { type CalendarEntry } from '@/components/market/MarketWeekCalendar'
@@ -221,7 +222,8 @@ export default function MarketPage() {
     <NeedRow
       key={needGroupKey(g[0])}
       needs={g}
-      league={teamLeagues.get(groupPrimary(g).team_id ?? g.find(n => n.team_id)?.team_id ?? -1) ?? null}
+      league={teamLeagues.get(groupPrimary(g).team_id ?? g.find(n => n.team_id)?.team_id ?? -1)
+        ?? (customClubLeague(groupPrimary(g).team_name) ? { id: -1, name: customClubLeague(groupPrimary(g).team_name)!, country: '' } : null)}
       defaultExpanded={highlightKind === 'need' && g.some(n => n.id === highlightId)}
       flash={g.some(n => n.id === flashId)}
       onNeedsUpdated={updated => setNeeds(prev => prev.map(x => updated.find(u => u.id === x.id) ?? x))}
@@ -328,7 +330,7 @@ export default function MarketPage() {
           </div>
         ) : (
           <div className="space-y-2">
-            <div className="hidden sm:grid grid-cols-[auto_minmax(0,2fr)_7rem_7rem_5.5rem_2rem] items-center gap-3 px-4 text-2xs font-semibold uppercase tracking-wide text-apple-gray-400">
+            <div className="hidden sm:grid grid-cols-[auto_minmax(0,2fr)_8rem_11rem_5.5rem_2rem] items-center gap-3 px-4 text-2xs font-semibold uppercase tracking-wide text-apple-gray-400">
               <span />
               <span>{t('mercado.jugador')}</span>
               <span>{t('mercado.estado')}</span>
@@ -340,6 +342,7 @@ export default function MarketPage() {
               <NegotiationRow
                 key={n.id}
                 negotiation={n}
+                members={members}
                 overdue={overdueIds.negotiations.has(n.id)}
                 defaultExpanded={highlightKind === 'negotiation' && n.id === highlightId}
                 flash={flashId === n.id}

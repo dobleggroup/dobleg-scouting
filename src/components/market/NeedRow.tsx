@@ -218,6 +218,7 @@ export default function NeedRow({
     setError('')
     if (await linkNeedsTeam(ids, team)) {
       updateAll({ team_id: team.id, team_name: team.name, team_logo: team.logo })
+      onNegotiationMightHaveChanged?.()
       setLinkingTeam(false)
     } else {
       setError(t('mercado.errorGuardar'))
@@ -288,7 +289,7 @@ export default function NeedRow({
           </div>
 
           <div className="min-w-0 flex-1 sm:flex-none">
-            <p className={`font-semibold text-base truncate flex items-center gap-1.5 ${closed ? 'text-apple-gray-500 dark:text-apple-gray-400' : 'text-apple-gray-900 dark:text-white'}`}>
+            <p className={`font-semibold text-[15px] truncate flex items-center gap-1.5 ${closed ? 'text-apple-gray-500 dark:text-apple-gray-400' : 'text-apple-gray-900 dark:text-white'}`}>
               {closed && (
                 <svg className="w-3.5 h-3.5 flex-shrink-0 text-apple-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-label={t('mercado.busquedaCerrada')}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -298,7 +299,7 @@ export default function NeedRow({
             </p>
             {league && (
               <p className="sm:hidden text-xs text-apple-gray-500 dark:text-apple-gray-400 truncate">
-                {leagueNameEs(league.name)} · {countryEs(league.country)}
+                {leagueNameEs(league.name)}{league.country && ` · ${countryEs(league.country)}`}
               </p>
             )}
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -308,7 +309,7 @@ export default function NeedRow({
                   <span
                     key={n.id}
                     title={n.details ?? undefined}
-                    className={`inline-flex items-center gap-1.5 pl-2 pr-2.5 py-0.5 rounded-full text-xs font-medium border ${closed
+                    className={`inline-flex items-center gap-1.5 pl-2 pr-2.5 py-0.5 rounded-full text-[11px] font-medium border ${closed
                       ? 'bg-apple-gray-100 dark:bg-apple-gray-700/60 border-apple-gray-200 dark:border-apple-gray-600 text-apple-gray-600 dark:text-apple-gray-300'
                       : 'bg-emerald-50 dark:bg-emerald-900/25 border-emerald-200 dark:border-emerald-800/70 text-emerald-800 dark:text-emerald-300'}`}
                   >
@@ -325,8 +326,8 @@ export default function NeedRow({
         <div className="hidden sm:block min-w-0">
           {league ? (
             <>
-              <p className={`text-sm font-medium truncate ${closed ? 'text-apple-gray-500 dark:text-apple-gray-400' : 'text-apple-gray-800 dark:text-apple-gray-100'}`}>{leagueNameEs(league.name)}</p>
-              <p className="text-xs text-apple-gray-500 dark:text-apple-gray-400 truncate">{countryEs(league.country)}</p>
+              <p className={`text-[13px] font-medium truncate ${closed ? 'text-apple-gray-500 dark:text-apple-gray-400' : 'text-apple-gray-800 dark:text-apple-gray-100'}`}>{leagueNameEs(league.name)}</p>
+              {league.country && <p className="text-[11px] text-apple-gray-500 dark:text-apple-gray-400 truncate">{countryEs(league.country)}</p>}
             </>
           ) : (
             <span className="text-sm text-apple-gray-400 dark:text-apple-gray-500">—</span>
@@ -335,7 +336,7 @@ export default function NeedRow({
 
         <div className="flex items-center gap-2 flex-wrap pl-[3.25rem] sm:pl-0 sm:contents">
           <p className="hidden sm:block text-center">
-            <span className={`text-lg font-bold tabular-nums ${offeredCount > 0 ? 'text-brand-green' : 'text-apple-gray-400 dark:text-apple-gray-500'}`}>{offeredCount}</span>
+            <span className={`text-base font-bold tabular-nums ${offeredCount > 0 ? 'text-brand-green' : 'text-apple-gray-400 dark:text-apple-gray-500'}`}>{offeredCount}</span>
           </p>
           <span className={`sm:hidden text-xs font-semibold tabular-nums ${offeredCount > 0 ? 'text-brand-green' : 'text-apple-gray-500 dark:text-apple-gray-400'}`}>
             {t('mercado.ofrecidosResumen').replace('{n}', String(offeredCount))}

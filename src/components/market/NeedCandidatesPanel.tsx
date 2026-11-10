@@ -7,6 +7,7 @@ import StatusPill from './StatusPill'
 import FollowupDateField from './FollowupDateField'
 import { CANDIDATE_STATUS_ORDER, CANDIDATE_STATUS_LABEL_KEY, CANDIDATE_STATUS_COLOR } from './marketLabels'
 import { buildPlayerPhotoUrl } from '@/utils/marketAlerts'
+import { findAgencyPlayerByName } from '@/services/agencyPlayersService'
 import { useLinkedPlayerAge } from '@/hooks/useLinkedPlayerAge'
 import {
   addCandidate,
@@ -131,7 +132,7 @@ function CandidateRow({
     >
       <div className="flex items-center gap-2.5">
         <div className={discarded ? 'opacity-40 grayscale' : ''}>
-          <PlayerPhoto src={buildPlayerPhotoUrl(candidate.player_api_id)} name={candidate.player_name} size="xs" />
+          <PlayerPhoto src={findAgencyPlayerByName(candidate.player_name)?.image ?? buildPlayerPhotoUrl(candidate.player_api_id)} name={candidate.player_name} size="xs" />
         </div>
         <span className="flex-1 min-w-0">
           <span className={`block text-sm truncate ${discarded ? 'text-apple-gray-400 line-through decoration-apple-gray-300' : 'font-medium text-apple-gray-800 dark:text-apple-gray-100'}`}>

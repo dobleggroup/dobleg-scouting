@@ -3,6 +3,8 @@ import { dedupeTeamsByName } from './playerStatsService'
 import { fullTeamName, abbreviatedTeamNamesMatching } from '@/utils/teamNames'
 import { DISPLAY_POSITION_MAP } from '@/constants/scoring'
 import { notifyAccounts } from './notificationsService'
+import { findAgencyPlayerByName } from './agencyPlayersService'
+import { customClubLogo } from '@/constants/customClubs'
 import type { TeamMember, ClubNeed, ClubContact, Negotiation, MarketNote, MarketTeamSearchResult, NeedStatus, NegotiationStatus, NeedCandidate, CandidateStatus } from '@/types/market'
 
 /**
@@ -267,20 +269,99 @@ export async function fetchClubNeeds(): Promise<ClubNeed[]> {
     .select('*')
     .order('created_at', { ascending: false })
   if (error) throw error
-  return (data ?? []).map(n => ({ ...n, team_name: fullTeamName(n.team_name) }))
+  return (data ?? []).map(n => ({
+    ...n,
+    team_name: fullTeamName(n.team_name),
+    team_logo: customClubLogo(n.team_name) ?? n.team_logo,
+  }))
+}
+
+export interface MarketClub { id: number; name: string; logo: string | null }
+
+/**
+ * Club actual de jugadores vinculados a la API, leído en vivo de `players`
+ * (pasando por `canonical_id` cuando la fila tiene un gemelo oficial) — así el
+ * escudo sigue al jugador si cambia de club, sin guardarlo en la negociación.
+ */
+export async function fetchCurrentClubs(playerApiIds: number[]): Promise<Map<number, MarketClub>> {
+  const result = new Map<number, MarketClub>()
+  const ids = [...new Set(playerApiIds)]
+  if (ids.length === 0) return result
+  const { data: rows, error } = await supabase.from('players').select('id, canonical_id, current_team_id').in('id', ids)
+  if (error) { console.error('fetchCurrentClubs players error:', error); return result }
+  const canonicalIds = [...new Set((rows ?? []).map(r => r.canonical_id).filter((c): c is number => c != null && !ids.includes(c)))]
+  const canonicalRows = canonicalIds.length
+    ? (await supabase.from('players').select('id, current_team_id').in('id', canonicalIds)).data ?? []
+    : []
+  const teamOfPlayer = new Map<number, number | null>([...(rows ?? []), ...canonicalRows].map(r => [r.id, r.current_team_id]))
+  const teamIdFor = (r: { id: number; canonical_id: number | null; current_team_id: number | null }) =>
+    (r.canonical_id != null ? teamOfPlayer.get(r.canonical_id) : null) ?? r.current_team_id
+  const teamIds = [...new Set((rows ?? []).map(teamIdFor).filter((t): t is number => t != null))]
+  if (teamIds.length === 0) return result
+  const { data: teams, error: teamsErr } = await supabase.from('teams').select('id, name, logo').in('id', teamIds)
+  if (teamsErr) { console.error('fetchCurrentClubs teams error:', teamsErr); return result }
+  const teamById = new Map((teams ?? []).map(t => [t.id, { id: t.id, name: fullTeamName(t.name), logo: t.logo }]))
+  for (const r of rows ?? []) {
+    const team = teamById.get(teamIdFor(r) as number)
+    if (team) result.set(r.id, team)
+  }
+  return result
+}
+
+/**
+ * Completa los escudos de una negociación con lo que ya está vinculado:
+ * - club destino: si la búsqueda de la que sale ya tiene club vinculado, manda ese.
+ * - club actual: si nadie lo escribió a mano, el del jugador vinculado en la API;
+ *   si no está vinculado y es de Doble G, el club de la lista de la agencia.
+ * - escudos propios (`customClubs`) por encima de los externos.
+ */
+export function withLinkedClubs(
+  n: Negotiation,
+  need: { team_id: number | null; team_name: string | null; team_logo: string | null } | null,
+  currentClub: MarketClub | undefined,
+): Negotiation {
+  const out = { ...n }
+  if (need?.team_id != null && need.team_name) {
+    out.team_id = need.team_id
+    out.team_name = fullTeamName(need.team_name)
+    out.team_logo = need.team_logo
+  }
+  if (!out.current_team_name && currentClub) {
+    out.current_team_id = currentClub.id
+    out.current_team_name = currentClub.name
+    out.current_team_logo = currentClub.logo
+  }
+  if (!out.current_team_name && out.player_api_id == null) {
+    const agency = findAgencyPlayerByName(out.player_name)
+    if (agency?.team) {
+      out.current_team_id = agency.apiTeamId
+      out.current_team_name = agency.team
+      out.current_team_logo = agency.apiTeamId ? `https://media.api-sports.io/football/teams/${agency.apiTeamId}.png` : null
+    }
+  }
+  out.team_logo = customClubLogo(out.team_name) ?? out.team_logo
+  out.current_team_logo = customClubLogo(out.current_team_name) ?? out.current_team_logo
+  return out
 }
 
 export async function fetchNegotiations(): Promise<Negotiation[]> {
   const { data, error } = await supabase
     .from('market_negotiations')
-    .select('*')
+    .select('*, need:market_club_needs(team_id, team_name, team_logo)')
     .order('created_at', { ascending: false })
   if (error) throw error
-  return (data ?? []).map(n => ({
-    ...n,
-    team_name: n.team_name && fullTeamName(n.team_name),
-    current_team_name: n.current_team_name && fullTeamName(n.current_team_name),
-  }))
+  const currentClubs = await fetchCurrentClubs(
+    (data ?? []).filter(n => !n.current_team_name && n.player_api_id != null).map(n => n.player_api_id as number),
+  )
+  return (data ?? []).map(({ need, ...n }) => withLinkedClubs(
+    {
+      ...n,
+      team_name: n.team_name && fullTeamName(n.team_name),
+      current_team_name: n.current_team_name && fullTeamName(n.current_team_name),
+    } as Negotiation,
+    need,
+    n.player_api_id != null ? currentClubs.get(n.player_api_id) : undefined,
+  ))
 }
 
 export interface CreateClubNeedInput {
@@ -378,6 +459,12 @@ export async function linkNeedsTeam(ids: number[], team: { id: number; name: str
     .update({ team_id: team.id, team_name: team.name, team_logo: team.logo, updated_at: new Date().toISOString() })
     .in('id', ids)
   if (error) { console.error('linkNeedsTeam error:', error); return false }
+  // Las negociaciones de los ofrecidos en esta búsqueda toman el mismo club (y escudo).
+  const { error: negErr } = await supabase
+    .from('market_negotiations')
+    .update({ team_id: team.id, team_name: team.name, team_logo: team.logo })
+    .in('need_id', ids)
+  if (negErr) console.error('linkNeedsTeam negotiations error:', negErr)
   return true
 }
 

@@ -54,6 +54,20 @@ export function mergeAgencyPlayers(base: AgencyPlayer[], overlay: AgencyOverlayR
   return result
 }
 
+/**
+ * Jugador Doble G por nombre tal como se cargó en Mercado: nombre completo,
+ * forma corta ("A. Melano") o sólo el apellido ("melano") si es único en la lista.
+ */
+export function findAgencyPlayerByName(name: string | null | undefined, list: AgencyPlayer[] = _cache): AgencyPlayer | null {
+  if (!name?.trim()) return null
+  const key = agencyKey(name)
+  const exact = list.find(p => agencyKey(p.fullName) === key || agencyKey(p.shortName) === key)
+  if (exact) return exact
+  if (key.includes(' ')) return null
+  const bySurname = list.filter(p => agencyKey(p.fullName).split(' ').slice(1).join(' ') === key || agencyKey(p.fullName).endsWith(` ${key}`))
+  return bySurname.length === 1 ? bySurname[0] : null
+}
+
 /** True si `target` (por nombre) está en la lista Doble G provista. */
 export function matchAgency(
   list: AgencyPlayer[],
