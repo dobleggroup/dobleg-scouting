@@ -18,9 +18,7 @@ import type { EnrichedPlayer, TrackingStatus, ScoutPlayerStatusRecord } from '@/
 import { fetchScoutPlayersWithScores, fetchScoutPlayerStatuses, fetchScoutPlayers, type ScoutPlayerWithScore } from '@/services/scoutPlayersService'
 import { PlayerPhoto } from '@/components/ui/PlayerPhoto'
 import OpportunityHero from '@/components/dashboard/OpportunityHero'
-import PortfolioValueChart from '@/components/charts/PortfolioValueChart'
 import AgencyClassificationInsights from '@/components/dashboard/AgencyClassificationInsights'
-import PortfolioInsights from '@/components/dashboard/PortfolioInsights'
 import { FILTER_POSITION_MAP } from '@/constants/scoring'
 import { useRecentForm, useLeagues } from '@/hooks/usePlayerStats'
 import { isApiFootballPlayer } from '@/services/playerStatsService'
@@ -28,6 +26,7 @@ import { excludeAgencyPlayers } from '@/utils/agencyFilter'
 import type { RecentFormPlayer, LeagueInfo } from '@/types/scoring'
 
 const HomeRendimientoSection = lazy(() => import('@/features/wyscoutPerf/components/HomeRendimientoSection'))
+const PortfolioDashboard = lazy(() => import('@/features/portfolio/PortfolioDashboard'))
 
 const AR_TZ = 'America/Argentina/Buenos_Aires'
 
@@ -1940,7 +1939,7 @@ function MatchSkeleton() {
 export default function HomePage() {
   const { userDisplayName } = useAuth()
   const { t, language } = useLanguage()
-  const { internal, monitoring, marketValueHistory, agencyPlayers, loading: dataLoading } = useData()
+  const { internal, monitoring, agencyPlayers, loading: dataLoading } = useData()
   const { currency, rate } = useCurrency()
   const latamScouting = useLatamScouting()
   const [fixtures, setFixtures] = useState<AgencyFixture[]>([])
@@ -2159,6 +2158,11 @@ export default function HomePage() {
         )}
       </HomeSection>
 
+      {/* ── Portfolio de la agencia ─────────────────────────── */}
+      <Suspense fallback={<div className="h-[720px] rounded-apple-lg bg-apple-gray-100 dark:bg-apple-gray-800 animate-pulse" />}>
+        <PortfolioDashboard />
+      </Suspense>
+
       {/* ── Accesos rápidos ─────────────────────────────────── */}
       <QuickAccess />
 
@@ -2224,16 +2228,6 @@ export default function HomePage() {
 
       {/* ── Contratos por vencer ─────────────────────────────── */}
       {!dataLoading && <ContractAlertsWidget internal={internal} />}
-
-      {/* ── Valor de mercado evolutivo + concentración/riesgo ── */}
-      {!dataLoading && marketValueHistory.length > 0 && (
-        <HomeSection title={t('home.valorMercadoEvolutivo')}>
-          <PortfolioValueChart data={marketValueHistory} players={internal} />
-          <div className="mt-5 pt-5 border-t border-apple-gray-100 dark:border-apple-gray-700/40">
-            <PortfolioInsights players={internal} history={marketValueHistory} />
-          </div>
-        </HomeSection>
-      )}
 
       {/* ── Mayor Valor de Mercado + Jóvenes Promesas ─────────── */}
       {!dataLoading && (mostValuable.length > 0 || youngTalents.length > 0) && (

@@ -196,6 +196,25 @@ export async function fetchPositionAverages(
   }));
 }
 
+/** Id de jugador de Transfermarkt de un link de perfil (`.../spieler/1000674`). */
+export function tmIdFromUrl(url: string | null | undefined): number | null {
+  const m = url?.match(/\/spieler\/(\d+)/);
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * Filtro de `players` para el plantel Doble G: los que Transfermarkt lista con la
+ * agencia y, además, los del plantel por su id de Transfermarkt — hay representados
+ * que en TM figuran con otro representante (Prestianni con Gestifute) y sin esto
+ * quedaban con el valor viejo de la planilla.
+ */
+export function agencyRosterFilter(rosterTmIds: number[]): string {
+  const ids = [...new Set(rosterTmIds.filter(id => Number.isFinite(id) && id > 0))];
+  return ids.length
+    ? `agent.eq."Doble G Sports Group",transfermarkt_id.in.(${ids.join(',')})`
+    : 'agent.eq."Doble G Sports Group"';
+}
+
 export interface AgencyLiveDataRow {
   name: string;
   market_value_eur: number | null;
@@ -215,11 +234,11 @@ export interface AgencyLiveDataRow {
  * real: Rodrigo Schlegel sin fila en el Sheet legacy, ficha sin link a
  * Transfermarkt pese a que Supabase ya lo tiene).
  */
-export async function fetchAgencyLiveData(): Promise<AgencyLiveDataRow[]> {
+export async function fetchAgencyLiveData(rosterTmIds: number[] = []): Promise<AgencyLiveDataRow[]> {
   const { data, error } = await supabase
     .from('players')
     .select('id, canonical_id, name, market_value_eur, transfermarkt_url, birth_date, nationality')
-    .eq('agent', 'Doble G Sports Group');
+    .or(agencyRosterFilter(rosterTmIds));
 
   if (error) throw error;
   // Un mismo jugador puede tener varias filas (la vieja de la agencia y las de cada
@@ -227,13 +246,22 @@ export async function fetchAgencyLiveData(): Promise<AgencyLiveDataRow[]> {
   // es la que gana en applyLiveAgencyData — la misma regla que el resto de la plataforma.
   const isOfficial = (r: any) => r.canonical_id == null || r.canonical_id === r.id;
   const rows = [...(data ?? [])].sort((a: any, b: any) => Number(isOfficial(b)) - Number(isOfficial(a)));
-  return rows.map((r: any) => ({
-    name: r.name as string,
-    market_value_eur: typeof r.market_value_eur === 'number' && r.market_value_eur > 0 ? r.market_value_eur : null,
-    transfermarkt_url: r.transfermarkt_url || null,
-    birth_date: r.birth_date || null,
-    nationality: r.nationality || null,
-  }));
+  // La fila oficial a veces es la del proveedor de partidos, sin datos de Transfermarkt
+  // (Bravo, J. Palacios, Farías): lo que le falte se completa con el de su gemela.
+  const ownerOf = (r: any) => (r.canonical_id ?? r.id) as number;
+  const best = new Map<number, AgencyLiveDataRow>();
+  for (const r of rows as any[]) {
+    const cur = best.get(ownerOf(r));
+    const value = typeof r.market_value_eur === 'number' && r.market_value_eur > 0 ? r.market_value_eur : null;
+    best.set(ownerOf(r), {
+      name: cur?.name ?? r.name,
+      market_value_eur: cur?.market_value_eur ?? value,
+      transfermarkt_url: cur?.transfermarkt_url ?? (r.transfermarkt_url || null),
+      birth_date: cur?.birth_date ?? (r.birth_date || null),
+      nationality: cur?.nationality ?? (r.nationality || null),
+    });
+  }
+  return rows.map((r: any) => ({ ...best.get(ownerOf(r))!, name: r.name as string }));
 }
 
 export async function fetchDistinctAgents(): Promise<string[]> {

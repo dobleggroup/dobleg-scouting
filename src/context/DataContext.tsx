@@ -5,7 +5,7 @@ import { POSITION_MAP, SCORING_CONFIG, FILTER_POSITION_MAP } from '@/constants/s
 import { loadAgencyPlayers } from '@/services/agencyPlayersService'
 import { getAgencyPlayersList, AGENCY_OVERRIDES, type AgencyPlayer } from '@/constants/agencyPlayers'
 import { fetchAllPlayerVideos, computePlayerFreshness } from '@/services/playerVideosService'
-import { fetchScoreLookup, fetchAgencyLiveData, type ScoreLookupEntry, type AgencyLiveDataRow } from '@/services/playerStatsService'
+import { fetchScoreLookup, fetchAgencyLiveData, tmIdFromUrl, type ScoreLookupEntry, type AgencyLiveDataRow } from '@/services/playerStatsService'
 import { fetchGpsEntries, fetchGpsCatalog, toLegacyGpsEntry } from '@/services/gpsService'
 import { listManualExternalPlayers, createManualExternalPlayer, type ManualExternalPlayerRow } from '@/services/manualExternalPlayersService'
 import { manualExternalToEnriched } from '@/features/coaches/manualExternalPlayer'
@@ -75,7 +75,7 @@ export function identityKey(name: string): string {
  * clave es de UNA persona: "F. Paradela" es Federico y Francesco, y con la clave sola el
  * último le pisaba nombre, club y valor al otro.
  */
-function buildAgencyMatcher<T>(
+export function buildAgencyMatcher<T>(
   entries: { names: string[]; value: T }[],
 ): (name: string, keyFallback?: boolean) => T | undefined {
   // Ante filas repetidas de la misma persona (mismo nombre) gana la primera.
@@ -1301,7 +1301,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         // Valor de mercado y link de Transfermarkt vivos del roster Doble G
         // (Supabase, refrescado semanal desde Transfermarkt) — pisa el dato stale
         // o ausente del Sheet/agencyPlayers.ts.
-        const agencyLiveData = await fetchAgencyLiveData().catch(() => [] as AgencyLiveDataRow[])
+        const rosterTmIds = raw.internal.map(r => tmIdFromUrl(r.Transfermkt)).filter((id): id is number => id != null)
+        const agencyLiveData = await fetchAgencyLiveData(rosterTmIds).catch(() => [] as AgencyLiveDataRow[])
         if (cancelled) return
         agencyLiveDataRef.current = agencyLiveData
 
