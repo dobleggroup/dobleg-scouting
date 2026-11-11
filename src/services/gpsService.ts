@@ -147,6 +147,19 @@ export interface SaveResult {
  * Inserta las cargas. Con `replace` pisa la fila existente del mismo jugador y fecha;
  * sin `replace`, las que chocan vuelven en `conflicts` para que la UI pregunte.
  */
+/**
+ * Métricas que se deducen de otras cuando el informe no las trae: HSR (>21 km/h) =
+ * 21-24 + >24, y metros por minuto = distancia ÷ minutos. Nunca pisa un valor del informe.
+ */
+export function withDerivedMetrics(metrics: Record<string, number>, minutos: number | null): Record<string, number> {
+  const out = { ...metrics }
+  if (out.hsr == null && out.dist_21_24 != null && out.dist_over_24 != null) out.hsr = out.dist_21_24 + out.dist_over_24
+  if (out.metros_por_min == null && out.distancia_total != null && minutos && minutos > 0) {
+    out.metros_por_min = Math.round((out.distancia_total / minutos) * 10) / 10
+  }
+  return out
+}
+
 export async function saveGpsEntries(
   entries: GpsEntryInput[],
   opts: { replace?: boolean } = {},
@@ -155,6 +168,9 @@ export async function saveGpsEntries(
 
   const { data: { user } } = await supabase.auth.getUser()
   const rows = entries.map(e => ({
+    ...e,
+    metrics: withDerivedMetrics(e.metrics, e.minutos ?? null),
+  })).map(e => ({
     player_key: gpsPlayerKey(e.playerName),
     player_name: e.playerName,
     match_date: e.matchDate,

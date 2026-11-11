@@ -31,7 +31,8 @@ function median(values: number[]): number {
  */
 export function ocrWordsToItems(words: OcrWord[]): PdfTextItem[] {
   return words
-    .map(w => ({ str: w.text.trim(), x: w.bbox.x0, y: -w.bbox.y0, width: w.bbox.x1 - w.bbox.x0, page: 1 }))
+    // Las líneas de la grilla se leen como "|" (sueltas o pegadas a una palabra): no son texto.
+    .map(w => ({ str: w.text.trim().replace(/^[|¦]+|[|¦]+$/g, '').trim(), x: w.bbox.x0, y: -w.bbox.y0, width: w.bbox.x1 - w.bbox.x0, page: 1 }))
     .filter(item => item.str.length > 0 && !UNIT_TOKEN_RE.test(item.str))
 }
 

@@ -15,6 +15,9 @@ export const KNOWN_COMPETITIONS: string[] = [
   // Resto de Sudamérica
   'Primera División Uruguay',
   'Primera División Chile',
+  'Copa Chile',
+  'Copa de la Liga Chile',
+  'Supercopa de Chile',
   'División Profesional Bolivia',
   'LigaPro Ecuador',
   'Primera A Colombia',

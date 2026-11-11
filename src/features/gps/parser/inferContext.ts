@@ -18,6 +18,14 @@ const pad = (n: number): string => String(n).padStart(2, '0')
 
 function inferRival(lines: string[]): string | null {
   for (const line of lines) {
+    // "Rosario Central vs A.A. Estudiantes (V)": la marca de local/visitante va pegada
+    // al equipo del informe, así que el rival es el de la izquierda. Si a la izquierda
+    // no hay un equipo ("Fecha n1 vs Tigre (L)"), sigue la regla de abajo.
+    const marked = line.match(/^(.+?)\s+vs\.?\s+.+?\s*\((?:L|V)\)/i)
+    if (marked && !/\b(fecha|jornada|partido|informe|reporte)\b|\d/i.test(marked[1]) && marked[1].trim().length <= 40) {
+      return marked[1].trim()
+    }
+
     const vs = line.match(/\bvs\.?\s+(.+?)\s*(?:\((?:L|V|H|A)\))?\s*$/i)
     if (vs && vs[1].trim().length <= 40) return vs[1].trim()
 
@@ -62,9 +70,11 @@ function inferDate(lines: string[], today: Date): string | null {
  * inferir queda en null y lo completa el usuario en la revisión.
  */
 export function inferContext(lines: string[], today: Date = new Date()): ParsedContext {
+  const resultado = lines.map(l => /^resultado:\s*(\d+\s*-\s*\d+)\s*$/i.exec(l.trim())?.[1]).find(Boolean)
   return {
     rival: inferRival(lines),
     matchDate: inferDate(lines, today),
     teamText: lines[0]?.trim() || null,
+    ...(resultado ? { resultado: resultado.replace(/\s/g, '') } : {}),
   }
 }

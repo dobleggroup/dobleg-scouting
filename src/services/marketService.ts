@@ -33,7 +33,7 @@ const CANDIDATE_TO_NEGOTIATION_STATUS: Record<CandidateStatus, NegotiationStatus
 function normalizePosition(label: string): string {
   return label
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim()
     // La canchita de búsquedas distingue lado ("Extremo derecho", "Defensor
@@ -99,7 +99,7 @@ export function pitchOrder(label: string): number {
  * del mismo club (una por posición). Las archivadas van en un grupo aparte.
  */
 export function needGroupKey(need: Pick<ClubNeed, 'team_name' | 'hidden_at'>): string {
-  const club = need.team_name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+  const club = need.team_name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
   return `${need.hidden_at ? 'archivada:' : ''}${club}`
 }
 
@@ -308,6 +308,9 @@ export async function fetchCurrentClubs(playerApiIds: number[]): Promise<Map<num
   return result
 }
 
+const plainName = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
+const sameName = (a: string, b: string | null) => b != null && plainName(a) === plainName(b)
+
 /**
  * Completa los escudos de una negociación con lo que ya está vinculado:
  * - club destino: si la búsqueda de la que sale ya tiene club vinculado, manda ese.
@@ -337,6 +340,14 @@ export function withLinkedClubs(
       out.current_team_id = agency.apiTeamId
       out.current_team_name = agency.team
       out.current_team_logo = agency.apiTeamId ? `https://media.api-sports.io/football/teams/${agency.apiTeamId}.png` : null
+    }
+  }
+  // Los escudos de Sofascore a veces no cargan (rechaza pedidos de otros sitios): si el
+  // jugador es de la agencia y sigue en el club de la lista, va el de API-Football.
+  if (out.current_team_logo?.includes('sofascore.com')) {
+    const agency = findAgencyPlayerByName(out.player_name)
+    if (agency?.apiTeamId && agency.team && sameName(agency.team, out.current_team_name)) {
+      out.current_team_logo = `https://media.api-sports.io/football/teams/${agency.apiTeamId}.png`
     }
   }
   out.team_logo = customClubLogo(out.team_name) ?? out.team_logo

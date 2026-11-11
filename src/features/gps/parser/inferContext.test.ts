@@ -16,6 +16,16 @@ describe('inferContext', () => {
     expect(ctx.teamText).toBe('A.A. ESTUDIANTES')
   })
 
+  it('con "Local vs Equipo (V)" el rival es el de la izquierda (foto de Estudiantes)', () => {
+    const ctx = inferContext([
+      'A.A. ESTUDIANTES',
+      '7 de Noviembre de 2026 | 17:30 hs',
+      'Rosario Central vs A.A. Estudiantes (V) Torneo Clausura',
+    ], new Date('2026-11-10T12:00:00Z'))
+    expect(ctx.rival).toBe('Rosario Central')
+    expect(ctx.matchDate).toBe('2026-11-07')
+  })
+
   it('usa el año anterior si la fecha caería en el futuro', () => {
     const ctx = inferContext(['Fecha n1 vs Tigre (L)', '25 de Diciembre'], TODAY)
     expect(ctx.matchDate).toBe('2025-12-25')

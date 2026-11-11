@@ -4,6 +4,7 @@ import { buildCardTable } from './parseCardReport'
 import { buildParseResult, type BuildParseResultOptions } from './buildParseResult'
 import { ocrWordsToRows, type OcrWord } from './ocrRows'
 import { GpsParseError } from './errors'
+import { readImageWords, type RawImage } from './darkBandOcr'
 import type { GpsParseResult } from '../types'
 
 export interface ImageParseOptions extends BuildParseResultOptions {
@@ -36,10 +37,39 @@ export async function createOcrReader(langs: string[] = ['eng', 'spa'], opts: { 
   }
 }
 
+/** Píxeles de la imagen; null si el navegador no puede decodificarla (se lee el archivo tal cual). */
+async function decodeImage(file: Blob): Promise<RawImage | null> {
+  if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') return null
+  try {
+    const bitmap = await createImageBitmap(file)
+    const canvas = document.createElement('canvas')
+    canvas.width = bitmap.width
+    canvas.height = bitmap.height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    ctx.drawImage(bitmap, 0, 0)
+    bitmap.close()
+    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    return { data, width: canvas.width, height: canvas.height }
+  } catch {
+    return null
+  }
+}
+
+function toCanvas(image: RawImage): HTMLCanvasElement {
+  const canvas = document.createElement('canvas')
+  canvas.width = image.width
+  canvas.height = image.height
+  canvas.getContext('2d')!.putImageData(new ImageData(image.data, image.width, image.height), 0, 0)
+  return canvas
+}
+
 async function recognizeWords(file: Blob, langs: string[]): Promise<OcrWord[]> {
   const reader = await createOcrReader(langs)
   try {
-    return await reader.read(file)
+    const image = await decodeImage(file)
+    // Con los píxeles a mano se leen también los encabezados de texto blanco sobre fondo oscuro.
+    return image ? await readImageWords(image, img => reader.read(toCanvas(img))) : await reader.read(file)
   } finally {
     await reader.close()
   }

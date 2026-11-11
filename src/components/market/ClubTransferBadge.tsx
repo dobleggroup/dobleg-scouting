@@ -3,13 +3,13 @@ import { useLanguage } from '@/context/LanguageContext'
 
 function ClubShield({ logo, name, freeLabel, size }: { logo: string | null; name: string | null; freeLabel: string; size: string }) {
   if (name) {
-    return logo ? (
-      <TeamLogo src={logo} className={`${size} drop-shadow-md`} />
-    ) : (
+    const initials = (
       <div className={`${size} rounded-full bg-apple-gray-100 dark:bg-apple-gray-700 flex items-center justify-center text-2xs font-bold text-apple-gray-500 dark:text-apple-gray-400 flex-shrink-0`}>
         {name.slice(0, 2).toUpperCase()}
       </div>
     )
+    // Si el escudo externo no carga, las iniciales en vez de un hueco vacío.
+    return logo ? <TeamLogo key={logo} src={logo} className={`${size} drop-shadow-md`} fallback={initials} /> : initials
   }
   return (
     <div

@@ -2,6 +2,7 @@ import { extractPdfItems } from '@/lib/pdf/extractPdfItems'
 import { renderPdfPages } from '@/lib/pdf/renderPdfPages'
 import { groupRows, buildTable } from './buildTable'
 import { buildCardTable } from './parseCardReport'
+import { buildSeriesReportTable } from './parseSeriesReport'
 import { parsePowerBiReport } from './parsePowerBiReport'
 import { buildBarChartTable, mergeTables } from './parseBarChartReport'
 import { buildParseResult, type BuildParseResultOptions } from './buildParseResult'
@@ -43,9 +44,23 @@ export async function parseGpsPdf(data: ArrayBuffer, opts: ParseOptions): Promis
   if (items.length === 0) return parseScannedPdf(data, opts)
 
   const rows = groupRows(items)
-  const table = (opts.presetPlayerName ? parsePowerBiReport(rows, opts.presetPlayerName) : null)
+  // Informe individual de temporada (UC): tarjeta del último partido + un gráfico por
+  // métrica. Va primero porque la tabla genérica toma la etiqueta "UC 1 vs U 0" como jugador.
+  const table = buildSeriesReportTable(rows, opts.presetPlayerName)
+    ?? (opts.presetPlayerName ? parsePowerBiReport(rows, opts.presetPlayerName) : null)
     ?? buildTable(rows)
     ?? (opts.presetPlayerName ? buildCardTable(rows, opts.presetPlayerName) : null)
+
+  // OpenField corta las tablas largas al exportar ("23 row(s) missing"): los
+  // jugadores que quedaron afuera no están en el archivo, no es un error de lectura.
+  const missingRows = countMissingRows(pageLines(rows))
+  const truncatedError = () => new GpsParseError(
+    `El informe viene cortado: el programa del GPS lo exportó incompleto y faltan ${missingRows} filas ` +
+    `(dice "${missingRows} row(s) missing"). Los jugadores que no se ven no están en el archivo. ` +
+    'Pedí el informe completo (o en Excel/CSV) y cargalo de nuevo.',
+  )
+  if (missingRows > 0 && !table) throw truncatedError()
+
   if (!table) {
     throw new GpsParseError(
       opts.presetPlayerName
@@ -54,7 +69,17 @@ export async function parseGpsPdf(data: ArrayBuffer, opts: ParseOptions): Promis
     )
   }
 
-  return buildParseResult(table, opts)
+  const result = buildParseResult(table, opts)
+  if (missingRows > 0 && result.players.every(p => p.candidates.length === 0)) throw truncatedError()
+  return result
+}
+
+/** Filas que OpenField dejó afuera al exportar, sumando todas las tablas cortadas. */
+function countMissingRows(lines: string[]): number {
+  return lines.reduce((sum, line) => {
+    const m = /(\d+)\s*row\s*\(\s*s\s*\)\s*missing/i.exec(line)
+    return m ? sum + Number(m[1]) : sum
+  }, 0)
 }
 
 /** Texto de una página como líneas, para inferir el contexto del partido (título, rival). */

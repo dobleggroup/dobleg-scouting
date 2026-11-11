@@ -121,4 +121,11 @@ describe('parseGpsPdf', () => {
     const idx = result.columns.findIndex(c => c.header === 'Distancia total (m) (PT)')
     expect(result.players[0].values[idx]).toBe(5334)
   })
+  it('avisa que el informe viene cortado cuando OpenField dejó filas afuera ("23 row(s) missing")', async () => {
+    for (const presetPlayerName of [undefined, 'Federico Paradela']) {
+      await expect(
+        parseGpsPdf(fixture('openfield-cortado-atlanta.pdf'), { roster: BASE_AGENCY_PLAYERS, lookup: {}, presetPlayerName }),
+      ).rejects.toThrow('faltan 23 filas')
+    }
+  })
 })

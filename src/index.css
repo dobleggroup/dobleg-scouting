@@ -296,3 +296,29 @@
     .above-bottomnav { bottom: calc(env(safe-area-inset-bottom) + 5rem); }
   }
 }
+
+/* Portfolio de Inicio: colores de los gráficos, validados contra cada fondo de tarjeta. */
+.pf-root {
+  --pf-c1: #15803D;
+  --pf-c2: #2563EB;
+  --pf-c3: #D97706;
+  --pf-c4: #7C3AED;
+  --pf-none: #A1A1AA;
+  --pf-grid: #EEEFF2;
+  --pf-muted: #6E6E73;
+  --pf-surface: #FFFFFF;
+  --pf-pill: #0E0E10;
+  --pf-pill-text: #FFFFFF;
+}
+.dark .pf-root {
+  --pf-c1: #16A34A;
+  --pf-c2: #3B82F6;
+  --pf-c3: #D97706;
+  --pf-c4: #A855F7;
+  --pf-none: #6E6E73;
+  --pf-grid: #28282C;
+  --pf-muted: #A1A1AA;
+  --pf-surface: #0E0E10;
+  --pf-pill: #FFFFFF;
+  --pf-pill-text: #0E0E10;
+}

@@ -87,6 +87,8 @@ function buildExplicitHeaderTable(rows: PdfRow[]): PdfTable | null {
   if (headerIndex < 0) return null
 
   const headerRow = rows[headerIndex]
+  const wrapped = wrappedHeader(rows, headerIndex)
+  if (wrapped) return wrapped
   const headers = headerRow.cells.map(c => c.text)
   const centers = headerRow.cells.map(c => c.center)
 
@@ -94,6 +96,46 @@ function buildExplicitHeaderTable(rows: PdfRow[]): PdfTable | null {
     headers,
     rows: collectDataRows(rows.slice(headerIndex + 1), headers.length, centers),
     preambleLines: preambleLinesBefore(rows, headerIndex),
+  }
+}
+
+/**
+ * Cabecera con títulos en dos o tres renglones ("DIST" / "REL/MIN"), típica de una
+ * foto: la fila "Futbolista" trae sólo parte de cada título y menos celdas que las
+ * columnas de datos. La grilla sale entonces de la primera fila de datos y cada
+ * título se arma con los renglones pegados a la fila "Futbolista" (arriba y abajo).
+ * Devuelve null si la cabecera ya cubre todas las columnas (caso normal).
+ */
+function wrappedHeader(rows: PdfRow[], headerIndex: number): PdfTable | null {
+  const dataIndex = rows.findIndex((r, i) => i > headerIndex && looksLikeDataRow(r))
+  if (dataIndex < 0) return null
+  const dataRow = rows[dataIndex]
+  if (dataRow.cells.length <= rows[headerIndex].cells.length) return null
+
+  // Distancia entre renglones de datos: los renglones de un mismo título están más juntos.
+  const pitch = dataIndex + 1 < rows.length ? rows[dataIndex].y - rows[dataIndex + 1].y : 0
+  const maxGap = pitch > 0 ? pitch * 0.75 : MAX_HEADER_LINE_GAP
+  let start = headerIndex
+  for (let i = headerIndex - 1; i >= 0; i--) {
+    if (rows[i].y - rows[i + 1].y > maxGap) break
+    start = i
+  }
+
+  const centers = dataRow.cells.map(c => c.center)
+  const headers: string[] = new Array(centers.length).fill('')
+  for (const row of rows.slice(start, dataIndex)) {
+    // Filas de promedio o de valores entre la cabecera y los jugadores no son títulos.
+    if (row.cells.filter(c => parseNumber(c.text) !== null).length >= MIN_NUMERIC_CELLS) continue
+    for (const cell of row.cells) {
+      const col = nearestColumn(centers, cell.center)
+      headers[col] = headers[col] ? `${headers[col]} ${cell.text}` : cell.text
+    }
+  }
+
+  return {
+    headers,
+    rows: collectDataRows(rows.slice(headerIndex + 1), headers.length, centers),
+    preambleLines: preambleLinesBefore(rows, start),
   }
 }
 

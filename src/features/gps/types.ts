@@ -100,6 +100,8 @@ export interface ParsedContext {
   rival: string | null
   matchDate: string | null      // 'YYYY-MM-DD'
   teamText: string | null
+  /** Desde el lado del equipo del jugador ("1-0"), si el informe lo trae. */
+  resultado?: string | null
 }
 
 export interface GpsParseResult {

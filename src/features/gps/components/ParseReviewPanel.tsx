@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import MatchContextForm from './MatchContextForm'
 import { MINUTES_KEY } from '../parser/mapColumns'
 import { saveGpsEntries } from '@/services/gpsService'
+import { suggestFixture } from '../fixtureLookup'
 import { EMPTY_MATCH_CONTEXT, type MatchContextValue, type GpsMetric, type GpsParseResult } from '../types'
 import type { AgencyPlayer } from '@/constants/agencyPlayers'
 import type { useGpsCatalog } from '../useGpsCatalog'
@@ -33,8 +34,29 @@ export default function ParseReviewPanel({
     ...EMPTY_MATCH_CONTEXT,
     matchDate: result.context.matchDate ?? '',
     rival: result.context.rival ?? '',
+    resultado: result.context.resultado ?? '',
     equipo: roster.find(p => p.fullName === firstPlayer)?.team ?? '',
   })
+
+  // El informe trae rival y resultado pero no la fecha: se busca el partido en el
+  // fixture del club del jugador y se completan fecha, competencia y minutos (sólo
+  // los campos que siguen vacíos).
+  useEffect(() => {
+    const player = roster.find(p => p.fullName === firstPlayer)
+    const { rival, resultado, matchDate } = result.context
+    if (matchDate || !rival || !resultado || !player?.apiTeamId) return
+    let alive = true
+    suggestFixture({ teamId: player.apiTeamId, rival, resultado, player }).then(s => {
+      if (!alive || !s) return
+      setContext(prev => ({
+        ...prev,
+        matchDate: prev.matchDate || s.matchDate,
+        competencia: prev.competencia || s.competencia || '',
+        minutos: prev.minutos || (s.minutos != null ? String(s.minutos) : ''),
+      }))
+    }).catch(() => { /* sin sugerencia: se completa a mano */ })
+    return () => { alive = false }
+  }, [result, roster, firstPlayer])
 
   // Mapeo por índice de columna: key de métrica, MINUTES_KEY o IGNORE.
   const [mapping, setMapping] = useState<Record<number, string>>(() =>

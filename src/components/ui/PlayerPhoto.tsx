@@ -49,10 +49,15 @@ export function PlayerPhoto({ src, name, size = 'md', className = '', rounded = 
   )
 }
 
-export function TeamLogo({ src, className = 'w-5 h-5' }: { src?: string | null; className?: string }) {
+export function TeamLogo({ src, className = 'w-5 h-5', fallback = null }: {
+  src?: string | null
+  className?: string
+  /** Qué mostrar si el escudo no carga (por defecto, nada). */
+  fallback?: React.ReactNode
+}) {
   const [failed, setFailed] = useState(false)
 
-  if (!src || failed) return null
+  if (!src || failed) return <>{fallback}</>
 
   return (
     <img
