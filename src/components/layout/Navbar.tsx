@@ -161,7 +161,10 @@ function DesktopDropdown({
   dropdownRef,
   location,
   t,
+  tour,
 }: {
+  /** Marca para el tutorial de actividad (data-tour). */
+  tour?: string
   group: NavGroup
   isOpen: boolean
   onToggle: () => void
@@ -177,6 +180,7 @@ function DesktopDropdown({
   return (
     <div className="relative" ref={dropdownRef}>
       <button
+        data-tour={tour}
         onClick={() => {
           if (group.to && !isOpen) {
             navigate(group.to)
@@ -336,6 +340,7 @@ export default function Navbar() {
 
             <DesktopDropdown
               group={mercadoGroup}
+              tour="mercado"
               isOpen={openDropdown === 'mercado'}
               onToggle={() => toggleDropdown('mercado')}
               dropdownRef={mercadoRef}
@@ -365,6 +370,7 @@ export default function Navbar() {
             {/* Seguimiento dropdown */}
             <DesktopDropdown
               group={seguimientoGroup}
+              tour="seguimiento"
               isOpen={openDropdown === 'seguimiento'}
               onToggle={() => toggleDropdown('seguimiento')}
               dropdownRef={seguimientoRef}
@@ -385,6 +391,7 @@ export default function Navbar() {
             {/* Cargar actividad */}
             <DesktopDropdown
               group={cargarGroup}
+              tour="cargar"
               isOpen={openDropdown === 'cargar'}
               onToggle={() => toggleDropdown('cargar')}
               dropdownRef={cargarRef}
@@ -473,6 +480,7 @@ export default function Navbar() {
 
             {/* Hamburger button */}
             <button
+              data-tour="menu"
               onClick={() => setIsOpen(!isOpen)}
               className="xl:hidden p-2 rounded-xl bg-apple-gray-100 dark:bg-apple-gray-800 text-apple-gray-600 dark:text-apple-gray-300 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-700 transition-colors"
               aria-label="Toggle menu"

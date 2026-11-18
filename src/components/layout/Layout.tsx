@@ -3,6 +3,7 @@ import { Suspense, useEffect } from 'react'
 import Navbar from './Navbar'
 import Footer from './Footer'
 import LiquidGlassBottomNav from './LiquidGlassBottomNav'
+import ActivityTutorial from '@/features/activityTutorial/ActivityTutorial'
 
 import { useAuth } from '@/context/AuthContext'
 import { useLanguage } from '@/context/LanguageContext'
@@ -251,6 +252,7 @@ export default function Layout() {
       </main>
       <Footer />
       <LiquidGlassBottomNav visible={bottomNavVisible} />
+      <ActivityTutorial />
     </div>
   )
 }

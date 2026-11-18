@@ -322,3 +322,20 @@
   --pf-pill: #FFFFFF;
   --pf-pill-text: #0E0E10;
 }
+
+/* Tutorial de actividad: la tarjeta entra suave y el borde del botón late. */
+@keyframes tutorialCardIn {
+  0% { opacity: 0; transform: translateY(12px) scale(0.96); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes tutorialPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(var(--color-brand-green) / 0.55); }
+  50% { box-shadow: 0 0 0 8px rgb(var(--color-brand-green) / 0); }
+}
+.tutorial-card { animation: tutorialCardIn 0.45s cubic-bezier(0.25, 0.1, 0.25, 1) both; animation-delay: 0.15s; }
+.tutorial-pulse { animation: tutorialPulse 1.8s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .tutorial-card, .tutorial-pulse { animation: none; }
+}
+.tutorial-hole { transition: x 0.5s cubic-bezier(0.25, 0.1, 0.25, 1), y 0.5s cubic-bezier(0.25, 0.1, 0.25, 1), width 0.5s cubic-bezier(0.25, 0.1, 0.25, 1), height 0.5s cubic-bezier(0.25, 0.1, 0.25, 1); }
+@media (prefers-reduced-motion: reduce) { .tutorial-hole { transition: none; } }

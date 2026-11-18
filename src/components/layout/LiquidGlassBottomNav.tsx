@@ -53,6 +53,7 @@ export default function LiquidGlassBottomNav({ visible }: { visible: boolean }) 
             <NavLink
               key={item.key}
               to={item.to}
+              data-tour={item.key === 'reporte' ? 'cargar' : item.key}
               className={`flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[10px] font-medium transition-colors ${
                 isActive
                   ? 'text-brand-green'
