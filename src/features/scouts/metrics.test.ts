@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { periodRange, rank } from './metrics'
+import { periodRange, rank, totalActivities } from './metrics'
 import { addDays, lastActiveLabel, type ScoutSummary } from '@/services/scoutsPanelService'
 
 const scout = (name: string, reports: number): ScoutSummary => ({
@@ -43,3 +43,13 @@ describe('fechas', () => {
   })
 })
 
+
+describe('totalActivities', () => {
+  it('suma todas las actividades, sin días que entró ni jugadores en seguimiento', () => {
+    const s = {
+      ...scout('A', 2), active_days: ['2026-11-01', '2026-11-02'], tracking_now: 8,
+      added: 3, matches: 1, matches_tv: 1, meetings: 2, trips: 1, searches: 9, negotiations: 1, contacts: 1, comments: 4,
+    }
+    expect(totalActivities(s)).toBe(25)
+  })
+})

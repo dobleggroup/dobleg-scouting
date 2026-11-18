@@ -28,8 +28,15 @@ export const METRICS: Metric[] = [
 
 export const METRIC_BY_KEY = Object.fromEntries(METRICS.map(m => [m.key, m])) as Record<MetricKey, Metric>
 
-/** Los números grandes de cada tarjeta. */
-export const CARD_METRICS: MetricKey[] = ['days', 'tracking_now', 'added', 'reports', 'matches', 'meetings', 'trips', 'searches', 'comments']
+/** Lo que cuenta como actividad registrada: todo menos los días que entró y los jugadores en seguimiento hoy. */
+export const ACTIVITY_METRICS: MetricKey[] = [
+  'added', 'reports', 'matches', 'matches_tv', 'meetings', 'trips', 'searches', 'negotiations', 'contacts', 'comments',
+]
+
+/** Total de actividades registradas en el período: el número de la tarjeta de cada scout. */
+export function totalActivities(s: ScoutSummary): number {
+  return ACTIVITY_METRICS.reduce((sum, k) => sum + METRIC_BY_KEY[k].value(s), 0)
+}
 
 export type PeriodKey = '30d' | 'month' | 'year' | 'all'
 

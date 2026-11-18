@@ -24,9 +24,9 @@ import {
   type ScoutSummary,
 } from '@/services/scoutsPanelService'
 import {
-  CARD_METRICS,
   initials,
   METRIC_BY_KEY,
+  totalActivities,
   METRICS,
   PERIODS,
   periodLabel,
@@ -119,6 +119,7 @@ const card = 'bg-white dark:bg-apple-gray-800 rounded-2xl border border-apple-gr
 // ─── Tarjeta de cada scout ───────────────────────────────────────────────────
 
 function ScoutCard({ s, onOpen }: { s: ScoutSummary; onOpen: () => void }) {
+  const total = totalActivities(s)
   return (
     <button type="button" onClick={onOpen} className={`${card} p-5 text-left hover:border-brand-green/60 hover:shadow-md transition-all`}>
       <div className="flex items-center gap-4">
@@ -130,8 +131,9 @@ function ScoutCard({ s, onOpen }: { s: ScoutSummary; onOpen: () => void }) {
         </div>
       </div>
       <div className="mt-4"><DaysStrip days={s.recent_days} /></div>
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        {CARD_METRICS.map(k => <Stat key={k} value={METRIC_BY_KEY[k].value(s)} label={METRIC_BY_KEY[k].label} />)}
+      <div className="mt-4 flex items-baseline justify-between gap-3 border-t border-apple-gray-100 dark:border-apple-gray-700/60 pt-4">
+        <span className="text-sm font-medium text-apple-gray-700 dark:text-apple-gray-200">Actividades registradas</span>
+        <span className={`text-3xl font-bold tabular-nums ${total ? 'text-apple-gray-900 dark:text-white' : 'text-apple-gray-400 dark:text-apple-gray-500'}`}>{total}</span>
       </div>
       <div className="mt-4 text-sm font-medium text-brand-green text-center">Ver detalle</div>
     </button>
