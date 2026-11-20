@@ -8,6 +8,7 @@ const FULL_TEAM_NAMES: Record<string, string> = {
   'Independ. Rivadavia': 'Independiente Rivadavia',
   'Club Sp. San Lorenzo': 'Sportivo San Lorenzo',
   'U.N.A.M. - Pumas': 'Pumas UNAM',
+  'Nublense': 'Ñublense',
 }
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()

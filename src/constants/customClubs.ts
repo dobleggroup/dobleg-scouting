@@ -17,6 +17,8 @@ const CUSTOM_CLUBS: CustomClub[] = [
   { contains: ['acassuso'], logo: '/clubs/acassuso.png' },
   { exact: ['belgrano', 'belgrano cordoba', 'belgrano de cordoba', 'ca belgrano', 'club atletico belgrano'], logo: '/clubs/belgrano.png' },
   { contains: ['independiente rivadavia', 'ind rivadavia', 'indep rivadavia'], logo: '/clubs/independiente-rivadavia.png' },
+  // También la reserva ("Rosario Central Res."): lleva el escudo del club.
+  { contains: ['rosario central'], logo: '/clubs/rosario-central.png' },
   { contains: ['roda'], logo: '/clubs/roda-jc.png', league: 'Segunda División de Holanda' },
   { contains: ['arabia'], logo: '/clubs/arabia-saudita.png', league: 'Primera División de Arabia Saudita' },
   { contains: ['corea', 'korea'], logo: '/clubs/corea-del-sur.png', league: 'Primera División de Corea del Sur' },
