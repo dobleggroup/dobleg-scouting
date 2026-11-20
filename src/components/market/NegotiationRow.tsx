@@ -144,7 +144,7 @@ export default function NegotiationRow({
     if (ok) onUpdated({ ...negotiation, next_followup_date: date })
   }
 
-  const handleReassign = async (id: number, name: string) => {
+  const handleReassign = async (id: number | null, name: string | null) => {
     const ok = await reassignNegotiation(negotiation.id, id, name, user?.id ?? null, userDisplayName || 'Usuario')
     if (ok) {
       onUpdated({ ...negotiation, assigned_to_id: id, assigned_to_name: name })
@@ -180,6 +180,24 @@ export default function NegotiationRow({
     }
   }
 
+  const hideButton = (display: string) => (
+    <button
+      type="button"
+      onClick={handleToggleHidden}
+      title={isHidden ? t('mercado.volverAMostrar') : t('mercado.ocultarNegociacion')}
+      aria-label={isHidden ? t('mercado.volverAMostrar') : t('mercado.ocultarNegociacion')}
+      className={`${display} w-7 h-7 flex-shrink-0 items-center justify-center rounded-lg transition-colors ${isHidden
+        ? 'text-brand-green hover:bg-brand-green/10'
+        : 'text-apple-gray-300 dark:text-apple-gray-600 hover:text-red-500 hover:bg-red-500/10'}`}
+    >
+      {isHidden ? (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+      ) : (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+      )}
+    </button>
+  )
+
   return (
     <div
       ref={rowRef}
@@ -193,41 +211,52 @@ export default function NegotiationRow({
         tabIndex={0}
         onClick={() => setExpanded(e => !e)}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(x => !x) } }}
-        className="w-full flex flex-col gap-2 sm:grid sm:grid-cols-[auto_minmax(0,2fr)_8rem_11rem_5.5rem_2rem] sm:items-center sm:gap-3 px-4 py-3 sm:py-3.5 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/40 transition-colors font-sans cursor-pointer"
+        className="w-full flex flex-col gap-2 lg:grid lg:grid-cols-[auto_minmax(0,1fr)_7rem_8.5rem_8.5rem_9.5rem_1.75rem] lg:items-center lg:gap-3 px-3 sm:px-4 py-2.5 text-left hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/40 transition-colors font-sans cursor-pointer"
       >
-        <div className="flex items-center gap-3 min-w-0 sm:contents">
-          <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Celular y tablet: arriba el jugador (escudos desde tablet), abajo
+            estado · responsable · recordatorio. Desde 1024px, una fila en columnas. */}
+        <div className="flex items-center gap-3 min-w-0 lg:contents">
+          <div className="hidden sm:flex items-center flex-shrink-0">
             <ClubTransferBadge
               currentLogo={negotiation.current_team_logo}
               currentName={negotiation.current_team_name}
               targetLogo={negotiation.team_logo}
               targetName={negotiation.team_name}
+              size="w-7 h-7"
             />
           </div>
 
-          <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-none">
+          <div className="flex items-center gap-2 min-w-0 flex-1 lg:flex-none">
             <PlayerPhoto src={photoUrl} name={negotiation.player_name} size="sm" />
             <div className="min-w-0">
-              <p className={`font-semibold text-[13px] truncate ${negotiation.status === 'cerrado_caido' ? 'text-apple-gray-400 line-through decoration-apple-gray-300' : 'text-apple-gray-800 dark:text-white'}`}>
+              <p className={`font-semibold text-xs truncate ${negotiation.status === 'cerrado_caido' ? 'text-apple-gray-400 line-through decoration-apple-gray-300' : 'text-apple-gray-800 dark:text-white'}`}>
                 {negotiation.player_name}
                 {age != null && <span className="font-normal text-apple-gray-400">, {age} {t('externo.anios')}</span>}
               </p>
               <p className="text-2xs text-apple-gray-400 truncate">
                 {[negotiation.current_team_name, negotiation.team_name].filter(Boolean).join(' → ')}
               </p>
+              {negotiation.created_by_name && (
+                <p className="lg:hidden text-2xs text-apple-gray-400 truncate">
+                  {t('mercado.cargadoPor')} {negotiation.created_by_name}
+                </p>
+              )}
             </div>
           </div>
+          {hideButton('flex lg:hidden')}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap pl-[3.25rem] sm:pl-0 sm:contents">
-          <StatusPill
-            value={negotiation.status}
-            options={NEGOTIATION_STATUS_ORDER}
-            labels={negotiationStatusLabels}
-            colors={NEGOTIATION_STATUS_COLOR}
-            onChange={handleStatusChange}
-            title={t('mercado.cambiarEstado')}
-          />
+        <div className="flex items-center gap-2 min-w-0 lg:contents">
+          <div className="flex-shrink-0">
+            <StatusPill
+              value={negotiation.status}
+              options={NEGOTIATION_STATUS_ORDER}
+              labels={negotiationStatusLabels}
+              colors={NEGOTIATION_STATUS_COLOR}
+              onChange={handleStatusChange}
+              title={t('mercado.cambiarEstado')}
+            />
+          </div>
           <div className="min-w-0">
             <AssigneePill
               valueId={negotiation.assigned_to_id}
@@ -236,24 +265,13 @@ export default function NegotiationRow({
               onChange={handleReassign}
             />
           </div>
-          <div className="ml-auto sm:ml-0 sm:text-right">
+          <p className="hidden lg:block text-xs text-apple-gray-500 dark:text-apple-gray-400 truncate">
+            {negotiation.created_by_name ?? '—'}
+          </p>
+          <div className="ml-auto lg:ml-0 lg:text-right flex-shrink-0">
             <FollowupDateField value={negotiation.next_followup_date} overdue={overdue} onChange={handleFollowupChange} />
           </div>
-          <button
-            type="button"
-            onClick={handleToggleHidden}
-            title={isHidden ? t('mercado.volverAMostrar') : t('mercado.ocultarNegociacion')}
-            aria-label={isHidden ? t('mercado.volverAMostrar') : t('mercado.ocultarNegociacion')}
-            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${isHidden
-              ? 'text-brand-green hover:bg-brand-green/10'
-              : 'text-apple-gray-300 dark:text-apple-gray-600 hover:text-red-500 hover:bg-red-500/10'}`}
-          >
-            {isHidden ? (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
-            ) : (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-            )}
-          </button>
+          {hideButton('hidden lg:flex')}
         </div>
       </div>
 

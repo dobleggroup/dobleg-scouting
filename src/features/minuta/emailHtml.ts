@@ -208,7 +208,8 @@ ${undervalued.length ? `${sub('Rinden más de lo que marca su valor')}<div style
 
 const STATUS: Record<string, string> = {
   contactado: 'Contactado', reunion: 'Reunión', oferta_enviada: 'Oferta enviada', en_espera: 'En espera',
-  cerrado_exitoso: 'Se cerró', cerrado_rechazado: 'Rechazada', cerrado_caido: 'Se cayó',
+  cerrado_exitoso: 'Se cerró', cerrado_rechazado: 'Rechazada', cerrado_caido: 'Sin acuerdo',
+  ofrecido: 'Ofrecido', pausado: 'Pausado', en_negociacion: 'Negociando', avanzado: 'Avanzado', cerrado_exito: 'Firmó',
 }
 
 function agenda(r: MinutaReport) {
@@ -223,7 +224,7 @@ function agenda(r: MinutaReport) {
   const negs = r.negotiations.map(n => {
     const name = r.players.find(p => p.name.toLowerCase().includes(n.player.toLowerCase().trim()) || n.player.toLowerCase().includes(p.name.toLowerCase()))?.name ?? n.player
     return `<tr><td style="padding:8px 0;border-top:1px solid ${C.soft};font:500 14px/1.4 ${FONT};color:${C.ink}">${esc(name)} → ${esc(n.team)}</td>
-<td style="padding:8px 0;border-top:1px solid ${C.soft};text-align:right">${pill(STATUS[n.status] ?? n.status, n.status === 'cerrado_exitoso' ? C.green : n.status.startsWith('cerrado') ? C.red : C.amber, n.status === 'cerrado_exitoso' ? C.greenBg : n.status.startsWith('cerrado') ? C.redBg : C.amberBg)}</td></tr>`
+<td style="padding:8px 0;border-top:1px solid ${C.soft};text-align:right">${pill(STATUS[n.status] ?? n.status, /^cerrado_exit/.test(n.status) ? C.green : n.status.startsWith('cerrado') ? C.red : C.amber, /^cerrado_exit/.test(n.status) ? C.greenBg : n.status.startsWith('cerrado') ? C.redBg : C.amberBg)}</td></tr>`
   }).join('')
   parts.push(card(`<div style="font:600 12px ${FONT};color:${C.muted};margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em">Mercado: negociaciones que se movieron en ${esc(monthName(r.month))}</div>
 ${negs ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${negs}</table>` : `<div style="font:400 14px ${FONT};color:${C.faint};padding-top:6px">No hubo movimientos cargados en Mercado.</div>`}`, '16px 18px', 'margin-top:8px'))

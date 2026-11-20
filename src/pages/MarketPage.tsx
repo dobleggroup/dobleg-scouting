@@ -244,7 +244,7 @@ export default function MarketPage() {
   )
 
   return (
-    <div className={`mx-auto px-4 sm:px-6 py-6 transition-[max-width] max-w-screen-xl`}>
+    <div className={`mx-auto px-4 sm:px-6 py-6 transition-[max-width] max-w-screen-2xl`}>
       <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-apple-gray-800 dark:text-white tracking-tight">{t('mercado.titulo')}</h1>
@@ -330,11 +330,12 @@ export default function MarketPage() {
           </div>
         ) : (
           <div className="space-y-2">
-            <div className="hidden sm:grid grid-cols-[auto_minmax(0,2fr)_8rem_11rem_5.5rem_2rem] items-center gap-3 px-4 text-2xs font-semibold uppercase tracking-wide text-apple-gray-400">
+            <div className="hidden lg:grid grid-cols-[auto_minmax(0,1fr)_7rem_8.5rem_8.5rem_9.5rem_1.75rem] items-center gap-3 px-4 text-2xs font-semibold uppercase tracking-wide text-apple-gray-400">
               <span />
               <span>{t('mercado.jugador')}</span>
               <span>{t('mercado.estado')}</span>
               <span>{t('mercado.responsable')}</span>
+              <span>{t('mercado.cargadoPor')}</span>
               <span className="text-right">{t('mercado.columnaSeguimiento')}</span>
               <span />
             </div>

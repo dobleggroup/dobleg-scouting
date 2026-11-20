@@ -1,9 +1,8 @@
 import type { NegotiationStatus, NeedStatus, CandidateStatus } from '@/types/market'
 
 export const NEGOTIATION_STATUS_ORDER: NegotiationStatus[] = [
-  // "Avanzado" y "Pausado" siguen existiendo en la base pero ya no se ofrecen:
-  // 4 estados con las mismas palabras que los ofrecidos de una búsqueda.
-  'ofrecido', 'en_negociacion', 'cerrado_exito', 'cerrado_caido',
+  // "Pausado" sigue existiendo en la base pero ya no se ofrece.
+  'ofrecido', 'en_negociacion', 'avanzado', 'cerrado_exito', 'cerrado_caido',
 ]
 
 export const NEGOTIATION_STATUS_LABEL_KEY: Record<NegotiationStatus, string> = {

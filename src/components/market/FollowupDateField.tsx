@@ -36,6 +36,7 @@ export default function FollowupDateField({
   const [pos, setPos] = useState({ top: 0, right: 0 })
   const btnRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   useLayoutEffect(() => {
     if (!open || !btnRef.current) return
@@ -43,6 +44,13 @@ export default function FollowupDateField({
     const r = btnRef.current.getBoundingClientRect()
     setPos({ top: r.bottom + 4, right: window.innerWidth - r.right })
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  // Al abrir, el calendario se despliega solo: se elige el día y listo.
+  useEffect(() => {
+    if (!open) return
+    const id = window.setTimeout(() => { try { inputRef.current?.showPicker?.() } catch { /* sin soporte: queda el campo */ } }, 0)
+    return () => window.clearTimeout(id)
   }, [open])
 
   useEffect(() => {
@@ -88,10 +96,12 @@ export default function FollowupDateField({
         className={`text-xs tabular-nums truncate transition-colors ${
           value
             ? overdue ? 'text-red-500 font-semibold hover:text-red-600' : 'text-apple-gray-500 dark:text-apple-gray-400 hover:text-apple-gray-800 dark:hover:text-white'
-            : 'text-apple-gray-300 dark:text-apple-gray-600 border border-dashed border-apple-gray-300 dark:border-apple-gray-600 rounded px-1.5 hover:border-brand-green hover:text-brand-green'
+            : 'text-apple-gray-400 dark:text-apple-gray-400 border border-dashed border-apple-gray-300 dark:border-apple-gray-600 rounded-full px-2 py-0.5 hover:border-brand-green hover:text-brand-green'
         }`}
       >
-        {value ? formatFollowup(value, LANGUAGE_LOCALES[language]) : `+ ${t('mercado.agregarFecha')}`}
+        {value ? formatFollowup(value, LANGUAGE_LOCALES[language]) : (
+          <>+ <span className="sm:hidden">{t('mercado.columnaSeguimiento')}</span><span className="hidden sm:inline">{t('mercado.agregarFecha')}</span></>
+        )}
       </button>
 
       {open && createPortal(
@@ -103,6 +113,7 @@ export default function FollowupDateField({
         >
           <p className="text-2xs font-medium text-apple-gray-400">{t('mercado.volverAHablar')}</p>
           <input
+            ref={inputRef}
             type="date"
             autoFocus
             value={draft}

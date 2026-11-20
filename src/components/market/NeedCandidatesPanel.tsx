@@ -19,7 +19,6 @@ import {
   updateFollowupDate,
   updateNegotiationTargetContacts,
   isMarketLinkAdmin,
-  findMe,
 } from '@/services/marketService'
 import type { ClubNeed, ClubContact, NeedCandidate, CandidateStatus, Negotiation, TeamMember } from '@/types/market'
 
@@ -134,21 +133,26 @@ function CandidateRow({
         <div className={discarded ? 'opacity-40 grayscale' : ''}>
           <PlayerPhoto src={findAgencyPlayerByName(candidate.player_name)?.image ?? buildPlayerPhotoUrl(candidate.player_api_id)} name={candidate.player_name} size="xs" />
         </div>
-        <span className="flex-1 min-w-0">
+        {/* El estado va pegado al nombre: en pantallas anchas, a la derecha
+            de todo quedaba lejos y no se veía. */}
+        <span className="min-w-0 flex-1 sm:flex-none sm:w-44">
           <span className={`block text-sm truncate ${discarded ? 'text-apple-gray-400 line-through decoration-apple-gray-300' : 'font-medium text-apple-gray-800 dark:text-apple-gray-100'}`}>
             {candidate.player_name}
             {age != null && <span className="font-normal text-apple-gray-400">, {age} {t('externo.anios')}</span>}
           </span>
         </span>
-        <StatusPill
-          value={candidate.status}
-          options={CANDIDATE_STATUS_ORDER}
-          labels={statusLabels}
-          colors={CANDIDATE_STATUS_COLOR}
-          onChange={onStatusChange}
-          title={t('mercado.cambiarEstado')}
-        />
-        <button onClick={() => setConfirmingRemove(c => !c)} className="text-apple-gray-300 hover:text-red-500 flex-shrink-0" title={t('mercado.quitar')}>
+        <div className="flex-shrink-0 sm:[&>button]:min-w-[7.5rem] sm:[&>button]:justify-between">
+          <StatusPill
+            value={candidate.status}
+            options={CANDIDATE_STATUS_ORDER}
+            labels={statusLabels}
+            colors={CANDIDATE_STATUS_COLOR}
+            onChange={onStatusChange}
+            title={t('mercado.cambiarEstado')}
+          />
+        </div>
+        <span className="hidden sm:block flex-1" />
+        <button onClick={() => setConfirmingRemove(c => !c)} className="w-6 h-6 flex items-center justify-center rounded-md text-apple-gray-300 dark:text-apple-gray-600 hover:text-red-500 hover:bg-red-500/10 transition-colors flex-shrink-0" title={t('mercado.quitar')}>
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -171,6 +175,7 @@ function CandidateRow({
           </button>
         </div>
       )}
+
 
       {/* Los descartados no necesitan seguimiento: sin chips, para que se lean como "terminado". */}
       {!discarded && (
@@ -267,7 +272,6 @@ export default function NeedCandidatesPanel({
   candidates,
   negotiationsById,
   overdueNegotiationIds,
-  members,
   onCandidatesChange,
   onNegotiationUpserted,
   onNegotiationRemoved,
@@ -298,12 +302,9 @@ export default function NeedCandidatesPanel({
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState(false)
 
-  // Lo ofrecido por uno queda a su nombre; si quien carga no está en la lista
-  // de responsables, hereda el responsable de la búsqueda.
-  const me = findMe(members, user?.id, userDisplayName)
-  const defaultAssignee = me
-    ? { id: me.id, name: me.name }
-    : need.assigned_to_id != null && need.assigned_to_name ? { id: need.assigned_to_id, name: need.assigned_to_name } : null
+  // Responsable: ninguno hasta que alguien lo asigne; quien lo carga queda en
+  // "Cargado por".
+  const defaultAssignee = null
 
   const active = candidates.filter(c => c.status !== 'descartado')
   const discarded = candidates.filter(c => c.status === 'descartado')
@@ -366,19 +367,60 @@ export default function NeedCandidatesPanel({
     )
   }
 
-  return (
-    <div className={compact
-      ? 'rounded-xl border border-brand-green/20 bg-brand-green/[0.05] dark:bg-brand-green/[0.07] p-3 space-y-2.5'
-      : 'rounded-xl border border-brand-green/15 bg-brand-green/[0.04] dark:bg-brand-green/[0.06] p-3 space-y-3'}>
-      {compact ? (
-        <div className="flex items-center gap-2">
-          <span className="w-6 h-6 rounded-md bg-brand-green/15 text-brand-green flex items-center justify-center flex-shrink-0">
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.36-1.86M17 20H7m10 0v-2c0-.66-.13-1.28-.36-1.86M7 20H2v-2a3 3 0 015.36-1.86M7 20v-2c0-.66.13-1.28.36-1.86m0 0a5 5 0 019.28 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-          </span>
-          <p className="text-sm font-semibold text-apple-gray-800 dark:text-white">{t('mercado.jugadoresPropuestos')}</p>
-          <span className="px-1.5 py-px rounded-full text-2xs font-semibold tabular-nums bg-brand-green/15 text-brand-green">{active.length}</span>
+  const addRow = !readOnly && (
+    <div className="flex items-center gap-2">
+      <input
+        type="text"
+        value={newName}
+        onChange={e => setNewName(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') handleAdd() }}
+        placeholder={t('mercado.nombreJugadorPlaceholder')}
+        className={`input-apple text-sm flex-1 min-w-0 ${compact ? '!py-1.5' : ''}`}
+      />
+      <button
+        onClick={handleAdd}
+        disabled={!newName.trim() || adding}
+        className={`${compact ? 'w-[4.5rem] py-1.5' : 'px-3 py-2'} rounded-lg text-xs font-semibold text-white bg-brand-green hover:bg-emerald-600 disabled:opacity-50 flex-shrink-0`}
+      >
+        {t('mercado.ofrecer')}
+      </button>
+    </div>
+  )
+  const list = candidates.length > 0 && (
+    <div className="space-y-2">
+      {active.map(renderRow)}
+      {discarded.length > 0 && (
+        <>
+          <p className="pt-1 text-2xs font-semibold text-apple-gray-400 uppercase tracking-wider">
+            {t('mercado.descartadosTitulo')} ({discarded.length})
+          </p>
+          {discarded.map(renderRow)}
+        </>
+      )}
+    </div>
+  )
+  const errorRow = addError && <p className="text-xs text-red-600 dark:text-red-400 bg-red-500/10 px-3 py-2 rounded-lg">{t('mercado.errorGuardar')}</p>
+
+  // Dentro de una posición: mismo renglón que "Características" (etiqueta a la
+  // izquierda), sin caja ni ícono.
+  if (compact) {
+    return (
+      <div className="grid gap-1.5 sm:grid-cols-[7rem_minmax(0,1fr)] sm:gap-3">
+        <p className="text-2xs font-semibold uppercase tracking-wide text-apple-gray-400 sm:pt-2">
+          {t('mercado.ofrecidos')}{active.length > 0 && <span className="ml-1 text-brand-green">{active.length}</span>}
+        </p>
+        <div className="space-y-2 min-w-0">
+          {list}
+          {addRow}
+          {errorRow}
         </div>
-      ) : <div className="flex items-start gap-2.5">
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-xl border border-brand-green/15 bg-brand-green/[0.04] dark:bg-brand-green/[0.06] p-3 space-y-3">
+      <div className="flex items-start gap-2.5">
         <span className="w-7 h-7 rounded-lg bg-brand-green/10 text-brand-green flex items-center justify-center flex-shrink-0">
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.36-1.86M17 20H7m10 0v-2c0-.66-.13-1.28-.36-1.86M7 20H2v-2a3 3 0 015.36-1.86M7 20v-2c0-.66.13-1.28.36-1.86m0 0a5 5 0 019.28 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
         </span>
@@ -389,40 +431,11 @@ export default function NeedCandidatesPanel({
           </p>
           {!readOnly && <p className="text-xs text-apple-gray-600 dark:text-apple-gray-300 mt-0.5">{t('mercado.ofrecidosAyuda')}</p>}
         </div>
-      </div>}
+      </div>
 
-      {!readOnly && <div className="flex items-center gap-2">
-        <input
-          type="text"
-          value={newName}
-          onChange={e => setNewName(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') handleAdd() }}
-          placeholder={t('mercado.nombreJugadorPlaceholder')}
-          className="input-apple text-sm flex-1"
-        />
-        <button
-          onClick={handleAdd}
-          disabled={!newName.trim() || adding}
-          className="px-3 py-2 rounded-lg text-xs font-semibold text-white bg-brand-green hover:bg-emerald-600 disabled:opacity-50 flex-shrink-0"
-        >
-          {t('mercado.ofrecer')}
-        </button>
-      </div>}
-      {addError && <p className="text-xs text-red-600 dark:text-red-400 bg-red-500/10 px-3 py-2 rounded-lg">{t('mercado.errorGuardar')}</p>}
-
-      {candidates.length > 0 && (
-        <div className="space-y-2">
-          {active.map(renderRow)}
-          {discarded.length > 0 && (
-            <>
-              <p className="pt-1 text-2xs font-semibold text-apple-gray-400 uppercase tracking-wider">
-                {t('mercado.descartadosTitulo')} ({discarded.length})
-              </p>
-              {discarded.map(renderRow)}
-            </>
-          )}
-        </div>
-      )}
+      {addRow}
+      {errorRow}
+      {list}
     </div>
   )
 }

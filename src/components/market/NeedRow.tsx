@@ -63,21 +63,16 @@ function PositionDetails({ need, readOnly, onSaved }: { need: ClubNeed; readOnly
 
   if (readOnly && items.length === 0) return null
 
-  // Lo que pide el club va en gris neutro y sin caja; lo verde queda para
-  // "Jugadores ofrecidos", que es lo que hacemos nosotros.
+  // Renglón "Características": etiqueta chica a la izquierda (arriba en
+  // celular), etiquetas cargadas y un campo para sumar otra.
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <span className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 bg-apple-gray-100 text-apple-gray-500 dark:bg-apple-gray-700 dark:text-apple-gray-300">
-          {/* planilla con tildes */}
-          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
-        </span>
-        <p className="text-sm font-semibold text-apple-gray-800 dark:text-white">{t('mercado.comoLoBuscan')}</p>
-      </div>
+    <div className="grid gap-1.5 sm:grid-cols-[7rem_minmax(0,1fr)] sm:gap-3">
+      <p className="text-2xs font-semibold uppercase tracking-wide text-apple-gray-400 sm:pt-2">{t('mercado.comoLoBuscan')}</p>
+      <div className="space-y-1.5 min-w-0">
       {items.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 pl-8">
+        <div className="flex flex-wrap gap-1.5">
           {items.map(item => (
-            <span key={item} className={`inline-flex items-center gap-1 ${readOnly ? 'px-2.5' : 'pl-2.5 pr-1'} py-1 rounded-md text-sm font-medium bg-apple-gray-100 text-apple-gray-700 border border-apple-gray-200 dark:bg-apple-gray-700/60 dark:text-apple-gray-100 dark:border-apple-gray-600`}>
+            <span key={item} className={`inline-flex items-center gap-1 ${readOnly ? 'px-2.5' : 'pl-2.5 pr-1'} py-0.5 rounded-full text-xs font-medium bg-apple-gray-100 text-apple-gray-700 dark:bg-apple-gray-700/60 dark:text-apple-gray-100`}>
               {item}
               {!readOnly && (
                 <button
@@ -95,7 +90,7 @@ function PositionDetails({ need, readOnly, onSaved }: { need: ClubNeed; readOnly
           ))}
         </div>
       )}
-      {!readOnly && <div className="flex gap-2 pl-8">
+      {!readOnly && <div className="flex gap-2">
         <input
           type="text"
           value={draft}
@@ -103,19 +98,20 @@ function PositionDetails({ need, readOnly, onSaved }: { need: ClubNeed; readOnly
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
           onBlur={add}
           placeholder={items.length ? t('mercado.otraCaracteristica') : t('mercado.detallePosicionPlaceholder')}
-          className="input-apple text-sm flex-1 min-w-0"
+          className="input-apple !py-1.5 text-sm flex-1 min-w-0"
         />
         <button
           type="button"
           onMouseDown={e => e.preventDefault()}
           onClick={add}
           disabled={!draft.trim() || saving}
-          className="px-4 rounded-apple text-sm font-semibold text-apple-gray-700 dark:text-apple-gray-200 border border-apple-gray-300 dark:border-apple-gray-600 hover:border-apple-gray-400 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/60 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+          className="w-[4.5rem] py-1.5 rounded-lg text-xs font-semibold text-apple-gray-700 dark:text-apple-gray-200 border border-apple-gray-300 dark:border-apple-gray-600 hover:bg-apple-gray-50 dark:hover:bg-apple-gray-700/60 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
         >
-          {saving ? t('mercado.guardando') : `+ ${t('mercado.agregar')}`}
+          {saving ? '…' : t('mercado.agregar')}
         </button>
       </div>}
-      {error && <p className="text-xs text-red-600 dark:text-red-400 pl-8">{t('mercado.errorGuardar')}</p>}
+      {error && <p className="text-xs text-red-600 dark:text-red-400">{t('mercado.errorGuardar')}</p>}
+      </div>
     </div>
   )
 }
@@ -439,26 +435,20 @@ export default function NeedRow({
             )}
 
             {positions.map(need => (
-              <div key={need.id} className={`rounded-xl border border-l-4 bg-white dark:bg-apple-gray-900/40 p-3.5 space-y-3 ${closed
+              <div key={need.id} className={`rounded-xl border border-l-4 bg-white dark:bg-apple-gray-900/40 px-3.5 py-3 space-y-2.5 ${closed
                 ? 'border-apple-gray-200 dark:border-apple-gray-700 border-l-apple-gray-300 dark:border-l-apple-gray-600'
                 : 'border-apple-gray-200 dark:border-apple-gray-700 border-l-emerald-500 dark:border-l-emerald-500'}`}>
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${closed
-                      ? 'bg-apple-gray-100 text-apple-gray-500 dark:bg-apple-gray-700 dark:text-apple-gray-300'
-                      : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'}`}>
-                      {/* camiseta */}
-                      <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round"><path d="M8 3l-5 3 2 4 2-1v12h10V9l2 1 2-4-5-3c-.5 1.5-2 2.5-4 2.5S8.5 4.5 8 3z" /></svg>
-                    </span>
-                    <p className="text-base font-bold text-apple-gray-900 dark:text-white leading-tight truncate">{need.position_label}</p>
-                  </div>
+                  <p className="text-sm font-bold text-apple-gray-900 dark:text-white leading-tight truncate">{need.position_label}</p>
                   {!closed && positions.length > 1 && (
                     <button
                       type="button"
                       onClick={() => handleRemovePosition(need)}
-                      className="text-xs text-apple-gray-500 hover:text-red-600 dark:text-apple-gray-400 dark:hover:text-red-400"
+                      title={t('mercado.quitarPosicion')}
+                      aria-label={t('mercado.quitarPosicion')}
+                      className="w-7 h-7 flex items-center justify-center rounded-lg text-apple-gray-300 dark:text-apple-gray-600 hover:text-red-500 hover:bg-red-500/10 transition-colors flex-shrink-0"
                     >
-                      {t('mercado.quitarPosicion')}
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                   )}
                 </div>

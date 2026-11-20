@@ -621,7 +621,7 @@ export async function reassignNeed(id: number, newAssigneeId: number, newAssigne
   return true
 }
 
-export async function reassignNegotiation(id: number, newAssigneeId: number, newAssigneeName: string, actingUserId: string | null, actingUserName: string): Promise<boolean> {
+export async function reassignNegotiation(id: number, newAssigneeId: number | null, newAssigneeName: string | null, actingUserId: string | null, actingUserName: string): Promise<boolean> {
   const { data: current } = await supabase.from('market_negotiations').select('assigned_to_id, assigned_to_name').eq('id', id).single()
   const { error } = await supabase
     .from('market_negotiations')
@@ -631,7 +631,7 @@ export async function reassignNegotiation(id: number, newAssigneeId: number, new
   const fromName = current?.assigned_to_name ?? 'sin responsable'
   const { error: noteError } = await supabase.from('market_negotiation_notes').insert({
     negotiation_id: id,
-    body: `${actingUserName} reasignó de ${fromName} a ${newAssigneeName}.`,
+    body: `${actingUserName} reasignó de ${fromName} a ${newAssigneeName ?? 'sin responsable'}.`,
     is_system: true,
     author_id: actingUserId,
     author_name: actingUserName,
@@ -821,7 +821,7 @@ export async function ensureCandidateNegotiation(
     need,
     candidate.player_name,
     CANDIDATE_TO_NEGOTIATION_STATUS[candidate.status],
-    need.assigned_to_id != null && need.assigned_to_name ? { id: need.assigned_to_id, name: need.assigned_to_name } : null,
+    null, // responsable: ninguno hasta que alguien lo asigne
     createdById,
     createdByName,
   )
